@@ -1,5 +1,6 @@
-# Hermetic checks: no codegraph build, no SCIP tools, no corpus. Syntax of every script, every
-# fixture's expect.json, and the oracle self-tests with the rule-mutation pass (`bin/graph-assay check`).
+# Hermetic checks: no codegraph build, no SCIP tools, no corpus. Syntax of every script, the type check
+# of lib/ (tsc, a dev dependency: hence `npm ci`), every fixture's expect.json, and the oracle self-tests
+# with the rule-mutation pass (`bin/graph-assay check`).
 name: ci
 on:
   push:
