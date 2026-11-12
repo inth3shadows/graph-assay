@@ -1,0 +1,7 @@
+{"issue": 2967,
+ "wrong": [{"from": "use", "kind": "calls", "to": "mod.ts:a::helper"},
+           {"from": "Shell", "kind": "calls", "to": "page.tsx:Layout::Home"},
+           {"from": "runIt", "kind": "calls", "to": "mod.js:setup::build"}],
+ "right": [{"from": "use", "kind": "calls", "to": "mod.ts:helper", "toLine": 5},
+           {"from": "Shell", "kind": "calls", "to": "page.tsx:Home", "toLine": 5},
+           {"from": "runIt", "kind": "calls", "to": "mod.js:build", "toLine": 5}]}

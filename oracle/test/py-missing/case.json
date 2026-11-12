@@ -1,0 +1,41 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "expect": [
+  {
+   "at": "base.py:16",
+   "name": "run",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "base.py:24",
+   "name": "fn",
+   "key": "missing|target-not-a-node|py|term"
+  },
+  {
+   "at": "base.py:30",
+   "name": "run",
+   "key": "missing|found|py|method"
+  },
+  {
+   "at": "base.py:30",
+   "name": "Base",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "base.py:36",
+   "name": "call",
+   "key": "missing|found-other-line|py|method"
+  },
+  {
+   "at": "base.py:28",
+   "name": "deco_factory",
+   "key": "decorator|found|py"
+  },
+  {
+   "at": "base.py:27",
+   "name": "deco",
+   "key": "decorator|found|py"
+  }
+ ]
+}

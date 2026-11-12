@@ -1,0 +1,1 @@
+{"issue": 2948, "wrong": [{"from": "Scene::a", "kind": "calls", "to": "heap.ts:BinaryHeap::push"}, {"from": "Scene::b", "kind": "calls", "to": "heap.ts:Conf::includes"}], "right": []}

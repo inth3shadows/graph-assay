@@ -1,0 +1,286 @@
+{
+ "schema": "graph-assay/snapshot@1",
+ "subject": {
+  "name": "code-graph-rag",
+  "adapterSha256": "<hash>",
+  "version": "<version>",
+  "config": {
+   "extras": "treesitter-full",
+   "embeddings": false
+  }
+ },
+ "capabilities": {
+  "siteLines": true,
+  "siteColumns": true,
+  "columnEncoding": "unknown",
+  "unresolved": false,
+  "provenance": true,
+  "edgeKinds": [
+   "calls",
+   "contains",
+   "instantiates",
+   "references"
+  ]
+ },
+ "files": [
+  {
+   "path": "app.py",
+   "language": "python"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "3",
+   "kind": "file",
+   "name": "app.py",
+   "qname": "app.py",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 24
+  },
+  {
+   "id": "4",
+   "kind": "function",
+   "name": "echo",
+   "qname": "echo",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 2
+  },
+  {
+   "id": "5",
+   "kind": "function",
+   "name": "version_option",
+   "qname": "version_option",
+   "file": "app.py",
+   "language": "python",
+   "start": 14,
+   "end": 18
+  },
+  {
+   "id": "6",
+   "kind": "function",
+   "name": "callback",
+   "qname": "version_option::callback",
+   "file": "app.py",
+   "language": "python",
+   "start": 15,
+   "end": 16
+  },
+  {
+   "id": "7",
+   "kind": "function",
+   "name": "main",
+   "qname": "main",
+   "file": "app.py",
+   "language": "python",
+   "start": 21,
+   "end": 23
+  },
+  {
+   "id": "8",
+   "kind": "class",
+   "name": "Greeter",
+   "qname": "Greeter",
+   "file": "app.py",
+   "language": "python",
+   "start": 5,
+   "end": 11
+  },
+  {
+   "id": "9",
+   "kind": "method",
+   "name": "greet",
+   "qname": "Greeter::greet",
+   "file": "app.py",
+   "language": "python",
+   "start": 6,
+   "end": 8
+  },
+  {
+   "id": "10",
+   "kind": "method",
+   "name": "loud",
+   "qname": "Greeter::loud",
+   "file": "app.py",
+   "language": "python",
+   "start": 10,
+   "end": 11
+  }
+ ],
+ "edges": [
+  {
+   "kind": "contains",
+   "src": "3",
+   "dst": "4",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "3",
+   "dst": "5",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "3",
+   "dst": "7",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "3",
+   "dst": "8",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "5",
+   "dst": "4",
+   "line": 16,
+   "col": 8,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "5",
+   "dst": "6",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "5",
+   "dst": "6",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "references",
+   "src": "5",
+   "dst": "6",
+   "line": 18,
+   "col": 11,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "6",
+   "dst": "4",
+   "line": 16,
+   "col": 8,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "7",
+   "dst": "5",
+   "line": 23,
+   "col": 4,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "7",
+   "dst": "6",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "7",
+   "dst": "9",
+   "line": 22,
+   "col": 14,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "instantiates",
+   "src": "7",
+   "dst": "8",
+   "line": 22,
+   "col": 4,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "8",
+   "dst": "9",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "8",
+   "dst": "10",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "9",
+   "dst": "4",
+   "line": 7,
+   "col": 8,
+   "ref": null,
+   "resolvedBy": "exact",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "9",
+   "dst": "10",
+   "line": 8,
+   "col": 20,
+   "ref": null,
+   "resolvedBy": "heuristic",
+   "provenance": "heuristic"
+  }
+ ],
+ "unresolved": []
+}

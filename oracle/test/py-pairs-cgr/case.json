@@ -1,0 +1,60 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "subject": "code-graph-rag",
+ "patch": [
+  {
+   "op": "drop",
+   "at": "main.py:15",
+   "kind": "instantiates"
+  },
+  {
+   "op": "drop",
+   "at": "main.py:24"
+  },
+  {
+   "op": "drop",
+   "at": "main.py:25"
+  },
+  {
+   "op": "add",
+   "from": {
+    "name": "twice"
+   },
+   "to": {
+    "name": "helper"
+   },
+   "line": 24,
+   "provenance": "heuristic"
+  },
+  {
+   "op": "add",
+   "from": {
+    "name": "dynamic"
+   },
+   "to": {
+    "name": "get",
+    "kind": "method"
+   },
+   "line": 20,
+   "provenance": "heuristic"
+  }
+ ],
+ "expect": [],
+ "pairs": {
+  "matched": [
+   "decorated -> Box",
+   "!twice -> helper"
+  ],
+  "subject": [
+   "!dynamic -> get",
+   "!twice -> helper"
+  ],
+  "decorators": [
+   "file:main.py -> deco"
+  ]
+ },
+ "pairCounts": {
+  "guessOnly": 1
+ }
+}

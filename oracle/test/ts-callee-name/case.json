@@ -1,0 +1,26 @@
+{
+ "lang": "ts",
+ "mode": "forward",
+ "expect": [
+  {
+   "at": "keys.ts:13",
+   "name": "Store",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "keys.ts:14",
+   "name": "get",
+   "key": "ok|calls"
+  },
+  {
+   "at": "keys.ts:14",
+   "name": "attendance",
+   "key": "ok|calls"
+  },
+  {
+   "at": "keys.ts:14",
+   "name": "roster",
+   "key": "ok|calls"
+  }
+ ]
+}

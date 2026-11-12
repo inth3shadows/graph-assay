@@ -1,0 +1,1 @@
+{"issue": 0, "note": "calls through an instance whose declared type is an object type (ky: ky.get() through KyInstance) link the receiver constant", "wrong": [{"from": "loadUser", "kind": "calls", "to": "index.ts:client"}], "right": [{"from": "loadUser", "kind": "calls", "to": "types.ts:ClientInstance::get"}]}

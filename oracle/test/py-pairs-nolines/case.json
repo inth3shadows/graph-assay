@@ -1,0 +1,11 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "inputs": "py-pairs",
+ "dropLines": true,
+ "expect": [],
+ "pairs": {
+  "matched": ["file:main.py -> helper", "outer -> inner", "outer -> helper", "inner -> helper", "__init__ -> helper", "get -> helper", "decorated -> Box", "decorated -> get", "twice -> helper"]
+ },
+ "pairCounts": { "oracle": 9, "subject": 9, "matched": 9 }
+}

@@ -1,0 +1,56 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "expect": [
+  {
+   "at": "main.py:6",
+   "name": "Req",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:6",
+   "name": "prepare",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:10",
+   "name": "name",
+   "key": "missing|found|py|method"
+  },
+  {
+   "at": "main.py:10",
+   "name": "name",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:14",
+   "name": "prepare",
+   "key": "missing|found|py|method"
+  },
+  {
+   "at": "main.py:15",
+   "name": "prepare",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:19",
+   "name": "prepare",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:19",
+   "name": "Req",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:23",
+   "name": "prepare",
+   "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:24",
+   "name": "prepare",
+   "key": "missing|found|py|method"
+  }
+ ]
+}

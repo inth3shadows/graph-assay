@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "graph-assay/expect@1",
+  "title": "Fixture expectation v1",
+  "description": "fixtures/oracle-candidates/<name>/expect.json. `wrong` edges must be absent and `right` edges present for the fixture to count as FIXED; a fixture with no `wrong` edges is BROKEN while a `right` edge is missing. Validated by lib/expect.mjs.",
+  "type": "object",
+  "required": ["issue", "wrong", "right"],
+  "additionalProperties": false,
+  "properties": {
+    "issue": { "type": ["integer", "null"], "description": "upstream issue or PR number" },
+    "note": { "type": "string" },
+    "wrong": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "right": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+  },
+  "$defs": {
+    "edge": {
+      "type": "object",
+      "required": ["from", "kind", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string", "description": "the caller's qualified name, as the subject writes it" },
+        "fromFile": { "type": "string", "description": "the caller's file, when its qualified name is not unique" },
+        "kind": { "type": "string" },
+        "to": { "type": "string", "pattern": "^[^:]+:.+", "description": "<target file>:<target qualified name>" },
+        "toLine": { "type": "integer", "description": "the target's start line, to pick one of several same-named targets" }
+      }
+    }
+  }
+}

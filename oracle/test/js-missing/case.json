@@ -1,0 +1,21 @@
+{
+ "lang": "ts",
+ "mode": "missing",
+ "expect": [
+  {
+   "at": "use.js:5",
+   "name": "request",
+   "absent": true
+  },
+  {
+   "at": "use.js:16",
+   "name": "basename",
+   "absent": true
+  },
+  {
+   "at": "use.js:17",
+   "name": "get",
+   "absent": true
+  }
+ ]
+}

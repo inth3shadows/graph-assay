@@ -1,0 +1,51 @@
+{
+ "lang": "ts",
+ "mode": "forward",
+ "expect": [
+  {
+   "at": "outside.ts:4",
+   "name": "helper",
+   "key": "noise:external-target-outside-scip"
+  },
+  {
+   "at": "scene.ts:5",
+   "name": "push",
+   "key": "external|"
+  },
+  {
+   "at": "api.ts:10",
+   "name": "buildMember",
+   "key": "noise:scip-shorthand-property"
+  },
+  {
+   "at": "store.ts:4",
+   "name": "set",
+   "key": "receiver-fallback|"
+  },
+  {
+   "at": "dyn.ts:5",
+   "name": "go",
+   "key": "local-module-alias|"
+  },
+  {
+   "at": "widget.ts:9",
+   "name": "m",
+   "key": "ok-other-column|"
+  },
+  {
+   "at": "widget.ts:9",
+   "name": "m",
+   "key": "ok|"
+  },
+  {
+   "at": "db.ts:1",
+   "name": "Map",
+   "absent": true
+  },
+  {
+   "at": "app/page.tsx:1",
+   "name": "Home",
+   "absent": true
+  }
+ ]
+}

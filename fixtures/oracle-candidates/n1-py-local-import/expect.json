@@ -1,0 +1,1 @@
+{"issue": 3229, "wrong": [{"from": "test_one", "kind": "calls", "to": "pkg/core.py:reverts"}], "right": [{"from": "test_one", "kind": "calls", "to": "t_local_import.py:reverts"}]}

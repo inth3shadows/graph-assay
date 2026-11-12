@@ -1,0 +1,96 @@
+{
+ "name": "codegraph-qa labelling protocol 1",
+ "consensus": "truth is an answer given by at least 2 of opus, sol and astra; astra is asked only where opus and sol both answered and disagree; cannot-tell never counts; a site with no consensus is reported with its rate, never imputed",
+ "blinding": "one call site per question, candidates shuffled per item by sha256 and unattributed (no subject or oracle named), fixed answers W (other in repo), X (outside the repo), Y (local binding), Z (cannot tell); the repository copy hides .git, .codegraph, node_modules, expectations and agent instruction files",
+ "prompt": {
+  "source": "labels/questions.mjs question()",
+  "templateSha256": "9ba53ad3a8a604f3b443cd8a73be161f4648e891959a3117d453b56457e00591",
+  "hashed": "the prompt rendered for the fixed item {id: 'protocol', site: site.ext:1 NAME, candidates: [c.ext:1]} with no repository, so the hash changes exactly when the template does; identical at every commit from 660d8ff (qualification) to the samples"
+ },
+ "labellers": {
+  "opus": {
+   "model": "claude-opus-5-5",
+   "effort": "high",
+   "family": "Anthropic",
+   "runtime": "Claude Code CLI -p, tools Read/Grep/Glob only, empty HOME (no instructions, hooks or MCP servers)",
+   "role": "labeller"
+  },
+  "sol": {
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "family": "OpenAI",
+   "runtime": "Codex CLI exec, read-only sandbox; MCP servers, apps, web search, image generation and AGENTS.md off",
+   "role": "labeller"
+  },
+  "astra": {
+   "model": "gpt-6-astra",
+   "effort": "high",
+   "family": "OpenAI",
+   "runtime": "as sol",
+   "role": "tie-breaker on opus/sol disagreements (same family as sol: tables report which side it takes)"
+  },
+  "kimi-k3": {
+   "model": "kimi-k3",
+   "effort": "default",
+   "family": "Moonshot",
+   "runtime": "harness runtime, read-only repo tools, LiteLLM gateway; serving deployment recorded per turn",
+   "role": "qualified, not used"
+  },
+  "glm-5.3": {
+   "model": "glm-5.3",
+   "effort": "default",
+   "family": "Zhipu",
+   "runtime": "as kimi-k3",
+   "role": "qualified, not used"
+  }
+ },
+ "probe": "every run first asks the labeller for its tool list and refuses it if any tool reaches beyond read-only repository access (labels/run.mjs)",
+ "qualification": {
+  "dir": "labels/qualification",
+  "items": "known-answer items from fixtures/oracle-candidates (labels/qualify-items.mjs): a fixture's right edge is the truth, its wrong targets and same-named definitions are the distractors"
+ },
+ "labelled": {
+  "note": "UTC last-write time of each answer file in the run's working directory; answers carry no timestamp of their own",
+  "qualification": {
+   "kimi-k3": "2026-11-05T13:37Z",
+   "opus": "2026-11-05T13:38Z",
+   "glm-5.3": "2026-11-05T13:39Z",
+   "sol": "2026-11-05T13:41Z",
+   "astra": "2026-11-06T21:32Z"
+  },
+  "v1": {
+   "opus": "2026-11-05T13:52Z",
+   "sol": "2026-11-06T21:19Z",
+   "astra": "2026-11-06T21:27Z"
+  },
+  "v2-tsjs": {
+   "sol": "2026-11-07T02:53Z",
+   "opus": "2026-11-07T03:08Z",
+   "astra": "2026-11-07T03:09Z"
+  },
+  "v3-js": {
+   "opus": "2026-11-07T16:05Z",
+   "sol": "2026-11-07T16:13Z"
+  }
+ },
+ "files": {
+  "labels/qualification/astra.jsonl": "9c934208a6241f792d49339d37bbf892557a498c053e8a9172aed7438d31a62f",
+  "labels/qualification/glm-5.3.jsonl": "b4a2cce6800b4533475ee008ef17464d5dcc67c3e2625121006aff71fa00d795",
+  "labels/qualification/items.jsonl": "0b29e52fadf6d641b40c9f69226f1d4f55b372e9f709d877c12c72dac1a6f0da",
+  "labels/qualification/kimi-k3.jsonl": "e314766d0cf790ab3e9a39c892f2b6997603a9a240caeb3813cceb8bf8776a6c",
+  "labels/qualification/opus.jsonl": "aed0d4782afdd5571960d7a90a5a8dd2b3d753480c3709e954de7676fb122372",
+  "labels/qualification/sol.jsonl": "3336cf7cd0d5c391d0df1e5694eba0d6b7e16c54cdd16ce44f0909f5a39000a9",
+  "labels/data/v1/astra.jsonl": "c3de7023579d576955543f90d1a54bac475b59eb71d69da04aa3e458b081cbc4",
+  "labels/data/v1/items.jsonl": "e8f29c0ec040c0c2aace147af3fa6bf20f172073c1dfbe2c4ee0cb6e00cfaba1",
+  "labels/data/v1/opus.jsonl": "ad8863348919ebd834e3d2534638d2bc625b8092d162cdb5ed2885b1da5d64c3",
+  "labels/data/v1/sol.jsonl": "c13f803f65b04311764ebf6f2a12117151cfa1c4c79d2d3b04b1baebea96056c",
+  "labels/data/v2-tsjs/astra.jsonl": "885b80232b38c2314ea077a0b8c8fb2af5842b94d4eb04f29c6e4ab6aa360c4e",
+  "labels/data/v2-tsjs/items.jsonl": "25f64055c61b0595c236aebd3bb727e8008636a28e129d7b9280209696fc37b5",
+  "labels/data/v2-tsjs/opus.jsonl": "c9be74e80a5399a01ffba0c8f9ddfb0789a3f755c7aed10405a6bd3a7a1c12ad",
+  "labels/data/v2-tsjs/sol.jsonl": "95adb88a98988e28aadde42c34c577a7dd0b46df64a05ff71aaae669ebedccae",
+  "labels/data/v3-js/items.jsonl": "e7a1905342ceaf4fb517b774e906761a4bd198e97535b43503b230dc0401873a",
+  "labels/data/v3-js/meta.json": "b95c2a8de8a52bd43935cf9c9b2c8a31a10badab3d2a1a11e8cd141d75db5c0a",
+  "labels/data/v3-js/opus.jsonl": "872c36aebba7fe0ec65ee693fc51c921bc33ab66d14b048345b2038663931cc5",
+  "labels/data/v3-js/sol.jsonl": "dd8afb1a39a841a0a7c687702d6c6b6db02551eed67ae0c9ad7862a8d1711cc5"
+ }
+}

@@ -1,0 +1,1 @@
+{"issue": 2953, "wrong": [{"from": "handlerC", "kind": "calls", "to": "streaming.ts:stream"}, {"from": "localConst", "kind": "calls", "to": "streaming.ts:stream"}], "right": []}

@@ -1,0 +1,35 @@
+{
+ "lang": "ts",
+ "mode": "missing",
+ "expect": [],
+ "pairs": {
+  "matched": [
+   "greet -> helper",
+   "list -> helper",
+   "file:app.js -> helper",
+   "file:app.js -> User",
+   "file:app.js -> greet",
+   "file:app.js -> track",
+   "file:app.js -> configure",
+   "say -> shout"
+  ],
+  "subject": [
+   "file:app.js -> logger"
+  ],
+  "oracle": [
+   "!file:app.js -> logger",
+   "!delay -> track",
+   "!delay -> configure",
+   "!file:app.js -> shout",
+   "render -> Item",
+   "!file:view.jsx -> Item",
+   "!delay -> ping"
+  ],
+  "silent": [
+   "run -> check"
+  ]
+ },
+ "pairCounts": {
+  "skipped": 1
+ }
+}

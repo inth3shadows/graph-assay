@@ -1,0 +1,1 @@
+{"issue": 2947, "wrong": [{"from": "a", "kind": "calls", "to": "app.ts:App::render"}, {"from": "b", "kind": "calls", "to": "app.ts:App::close"}, {"from": "c", "kind": "calls", "to": "app.ts:App::close"}, {"from": "d", "kind": "calls", "to": "app.ts:App::translate"}], "right": []}

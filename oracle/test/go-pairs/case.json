@@ -1,0 +1,23 @@
+{
+ "lang": "go",
+ "mode": "missing",
+ "expect": [],
+ "pairs": {
+  "matched": [
+   "Get -> helper",
+   "Rows -> helper",
+   "Put -> helper",
+   "Path -> helper",
+   "Cmd -> helper"
+  ],
+  "oracle": [
+   "!file:store.go -> helper",
+   "Path -> helper",
+   "Cmd -> helper"
+  ]
+ },
+ "pairCounts": {
+  "oracle": 5,
+  "matched": 5
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "issue": 3237,
+ "wrong": [
+  {
+   "from": "viaNew",
+   "kind": "calls",
+   "to": "a_router.go:Router::Host"
+  }
+ ],
+ "right": [
+  {
+   "from": "viaNew",
+   "kind": "calls",
+   "to": "b_route.go:Route::Host"
+  }
+ ]
+}

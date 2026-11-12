@@ -1,0 +1,3 @@
+{"issue": 2974,
+ "wrong": [{"from": "loadGithubProfile", "kind": "calls", "to": "src/server.js:src/server.js::GET:/users/:id"}],
+ "right": [{"from": "loadOwn", "kind": "calls", "to": "src/server.js:src/server.js::GET:/users/:id"}]}

@@ -1,0 +1,15 @@
+{
+ "issue": 3603,
+ "note": "code-graph-rag triage #1 (ky, 881 sites): only an interface's method_signature becomes a member node; property signatures and every type-alias member get none, so calls typed through them bind heuristic to another type's same-named member (draft issues/issue-K1-cgr-ts-type-member-node.md).",
+ "wrong": [
+  { "from": "useAliasProp", "kind": "calls", "to": "types.ts:IfaceMethod::get" },
+  { "from": "useAliasMethod", "kind": "calls", "to": "types.ts:IfaceMethod::get" },
+  { "from": "useIfaceProp", "kind": "calls", "to": "types.ts:IfaceMethod::get" }
+ ],
+ "right": [
+  { "from": "useAliasProp", "kind": "calls", "to": "types.ts:AliasProp::get" },
+  { "from": "useAliasMethod", "kind": "calls", "to": "types.ts:AliasMethod::get" },
+  { "from": "useIfaceProp", "kind": "calls", "to": "types.ts:IfaceProp::get" },
+  { "from": "useIfaceMethod", "kind": "calls", "to": "types.ts:IfaceMethod::get" }
+ ]
+}

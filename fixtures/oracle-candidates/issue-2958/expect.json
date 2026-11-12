@@ -1,0 +1,1 @@
+{"issue": 2958, "note": "body repro only; the comment's shapes (module-level variable target, tuple-unpacked attribute) are covered by p4 (#3039, closed dup)", "wrong": [{"from": "ScriptInfo::load_app", "kind": "calls", "to": "examples/factory.py:create_app"}], "right": []}

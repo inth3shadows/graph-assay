@@ -1,0 +1,18 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "exclude": ["vendor/"],
+ "waterfall": { "filesInCorpus": 3, "excluded": 3, "supportedLanguage": 2, "indexedBySubject": 2, "indexedByOracle": 2 },
+ "expect": [
+  {
+   "at": "app/main.py:9",
+   "name": "own",
+   "key": "missing|found|py|method"
+  },
+  {
+   "at": "app/main.py:9",
+   "name": "vendored",
+   "absent": true
+  }
+ ]
+}

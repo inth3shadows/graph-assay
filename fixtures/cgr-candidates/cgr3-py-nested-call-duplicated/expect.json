@@ -1,0 +1,6 @@
+{
+ "issue": 2688,
+ "note": "code-graph-rag pair track (click version_option -> echo): a call inside a nested function is also recorded on the enclosing function.",
+ "wrong": [{ "from": "version_option", "kind": "calls", "to": "decorators.py:echo" }],
+ "right": [{ "from": "version_option::callback", "kind": "calls", "to": "decorators.py:echo" }]
+}

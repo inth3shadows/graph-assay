@@ -1,0 +1,22 @@
+{
+ "lang": "python",
+ "mode": "forward",
+ "subject": "code-graph-rag",
+ "expect": [
+  {
+   "at": "use.py:5",
+   "name": "current",
+   "key": "ok-overload-set|"
+  },
+  {
+   "at": "use.py:6",
+   "name": "plain",
+   "key": "ok|"
+  },
+  {
+   "at": "use.py:7",
+   "name": "__init__",
+   "key": "ok|"
+  }
+ ]
+}

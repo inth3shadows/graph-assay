@@ -1,0 +1,101 @@
+# Build edge diff: build two codegraph commits (from colbymchenry/codegraph, or the `repo` input), index the
+# corpus's dev repos (corpus/v1.txt) with each, and diff the graphs
+# (differential/builds.mjs). The result goes to the job summary and an artifact; nothing is posted.
+# Run it by hand with a PR number of that repo (its merge base vs its head) or two commits. On a PR that
+# touches this pipeline it runs once on the known pair 60b0d7a9 -> f72c9d2e as a self-test.
+name: edgediff
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: codegraph repository (owner/name) to build from
+        required: false
+        default: colbymchenry/codegraph
+      pr:
+        description: PR number in that repository (merge base vs head); leave empty to use old/new
+        required: false
+        default: ''
+      old:
+        description: old codegraph commit (used when pr is empty)
+        required: false
+        default: 60b0d7a92dc001de1be37943ef3cd1cc955d693d
+      new:
+        description: new codegraph commit (used when pr is empty)
+        required: false
+        default: f72c9d2efb14454ff4f9fd7b8460abd82f19a287
+  pull_request:
+    paths:
+      - .github/workflows/edgediff.yml
+      - differential/builds.mjs
+      - differential/modes.mjs
+      - corpus/v1.txt
+      - lib/subjects/codegraph.mjs
+      - tools/build-codegraph.sh
+permissions:
+  contents: read
+jobs:
+  edgediff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      REPO: ${{ inputs.repo || 'colbymchenry/codegraph' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '22.23.2'
+      - name: Resolve commits
+        id: shas
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          OLD: ${{ inputs.old || '60b0d7a92dc001de1be37943ef3cd1cc955d693d' }}
+          NEW: ${{ inputs.new || 'f72c9d2efb14454ff4f9fd7b8460abd82f19a287' }}
+        run: |
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "repo must be owner/name" >&2; exit 1; }
+          echo "CODEGRAPH_REPO=https://github.com/$REPO.git" >> "$GITHUB_ENV"
+          if [ -n "$PR" ]; then
+            [[ "$PR" =~ ^[0-9]+$ ]] || { echo "pr must be a number" >&2; exit 1; }
+            head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+            base=$(gh api "repos/$REPO/pulls/$PR" --jq .base.sha)
+            OLD=$(gh api "repos/$REPO/compare/$base...$head" --jq .merge_base_commit.sha)
+            NEW=$head
+          fi
+          for s in "$OLD" "$NEW"; do [[ "$s" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full sha: $s" >&2; exit 1; }; done
+          echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+      - name: Cache old build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/graph-assay-builds/${{ steps.shas.outputs.old }}
+          key: codegraph-build-${{ steps.shas.outputs.old }}-node22.23.2
+      - name: Cache new build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/graph-assay-builds/${{ steps.shas.outputs.new }}
+          key: codegraph-build-${{ steps.shas.outputs.new }}-node22.23.2
+      - name: Build both commits
+        env:
+          OLD: ${{ steps.shas.outputs.old }}
+          NEW: ${{ steps.shas.outputs.new }}
+        run: |
+          echo "OLD_JS=$(tools/build-codegraph.sh "$OLD" ~/graph-assay-builds/"$OLD" | tail -1)" >> "$GITHUB_ENV"
+          echo "NEW_JS=$(tools/build-codegraph.sh "$NEW" ~/graph-assay-builds/"$NEW" | tail -1)" >> "$GITHUB_ENV"
+      - name: Fetch pinned public repos
+        run: node differential/builds.mjs --fetch ~/graph-assay-repos
+      - name: Diff
+        run: |
+          node differential/builds.mjs "$OLD_JS" "$NEW_JS" ~/graph-assay-repos/* --md edgediff.md --json edgediff.json || true
+          cat edgediff.md >> "$GITHUB_STEP_SUMMARY"
+          # DIFFER is the answer, not a failure; a repo that failed to index fails the job
+          node -e 'const r=require("./edgediff.json").results.filter(x=>x.verdict==="FAILED");for(const x of r)console.error(x.repo, x.error);process.exit(r.length?1:0)'
+      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        if: always()
+        with:
+          name: edgediff-${{ steps.shas.outputs.old }}-${{ steps.shas.outputs.new }}
+          path: |
+            edgediff.md
+            edgediff.json
+          if-no-files-found: ignore

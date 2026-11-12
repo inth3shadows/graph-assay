@@ -1,0 +1,7 @@
+.codegraph/
+node_modules/
+*.scip
+*.log
+out*.json
+oracle/targets.txt
+!lib/test/adapters/codegraph/.codegraph/

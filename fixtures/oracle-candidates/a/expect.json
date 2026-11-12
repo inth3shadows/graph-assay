@@ -1,0 +1,1 @@
+{"issue": 3034, "note": "closed as duplicate of #2954", "wrong": [{"from": "Handler::run", "kind": "calls", "to": "lib.ts:find"}], "right": [{"from": "Handler::run", "kind": "calls", "to": "handler.ts:Handler::find"}]}

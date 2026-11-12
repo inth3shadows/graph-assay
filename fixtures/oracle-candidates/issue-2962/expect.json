@@ -1,0 +1,1 @@
+{"issue": 2962, "wrong": [{"from": "objSpread", "kind": "calls", "to": "auth.ts:register"}, {"from": "jsxSpread", "kind": "calls", "to": "auth.ts:register"}, {"from": "jsxSpreadNested", "kind": "calls", "to": "auth.ts:register"}], "right": []}

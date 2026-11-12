@@ -1,0 +1,36 @@
+{
+ "lang": "ts",
+ "mode": "missing",
+ "expect": [
+  {
+   "at": "shapes.ts:20",
+   "name": "run",
+   "key": "missing|found|ts|method@decl"
+  },
+  {
+   "at": "shapes.ts:28",
+   "name": "run",
+   "key": "missing|wrong-edge|ts|method@decl"
+  },
+  {
+   "at": "shapes.ts:28",
+   "name": "viaIface",
+   "key": "missing|found|ts|method"
+  },
+  {
+   "at": "shapes.ts:14",
+   "name": "run",
+   "absent": true
+  },
+  {
+   "at": "shapes.ts:23",
+   "name": "Box",
+   "absent": true
+  },
+  {
+   "at": "shapes.ts:23",
+   "name": "Inner",
+   "absent": true
+  }
+ ]
+}

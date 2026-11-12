@@ -1,0 +1,28 @@
+{
+ "lang": "python",
+ "mode": "forward",
+ "subject": "code-graph-rag",
+ "expect": [
+  {
+   "at": "main.py:6",
+   "name": "__init__",
+   "key": "ok|calls"
+  },
+  {
+   "at": "main.py:7",
+   "name": "__init__",
+   "key": "ok|calls"
+  },
+  {
+   "at": "pkg/m.py:9",
+   "name": "__init__",
+   "key": "ok|calls"
+  },
+  {
+   "at": "pkg/m.py:19",
+   "name": "__init__",
+   "key": "ok|calls",
+   "all": true
+  }
+ ]
+}

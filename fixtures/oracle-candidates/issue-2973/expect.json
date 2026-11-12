@@ -1,0 +1,4 @@
+{"issue": 2973,
+ "wrong": [{"from": "saveProfile", "kind": "calls", "to": "src/a_cart.js:handleSave"}],
+ "right": [{"from": "saveCart", "kind": "calls", "to": "src/a_cart.js:handleSave"},
+           {"from": "saveProfile", "kind": "calls", "to": "src/b_profile.js:handleSave"}]}

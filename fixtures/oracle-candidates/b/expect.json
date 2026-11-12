@@ -1,0 +1,1 @@
+{"issue": 3035, "wrong": [{"from": "take", "kind": "calls", "to": "session.ts:Session::snapshot"}], "right": []}

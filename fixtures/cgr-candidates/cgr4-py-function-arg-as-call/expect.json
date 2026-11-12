@@ -1,0 +1,6 @@
+{
+ "issue": 2689,
+ "note": "code-graph-rag pair track (click `runner.invoke(cli, [])`, 184 disagreeing `-> cli` pairs): a function passed as an argument to a method on an untyped receiver is recorded as called. With a resolvable callee (`invoke(cli, [])`) there is no such edge.",
+ "wrong": [{ "from": "test_invoke", "kind": "calls", "to": "test_cli.py:test_invoke::cli" }],
+ "right": []
+}

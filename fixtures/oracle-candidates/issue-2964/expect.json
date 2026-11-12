@@ -1,0 +1,1 @@
+{"issue": 2964, "wrong": [{"from": "t", "kind": "calls", "to": "test/a.test.js:Srv"}, {"from": "t", "kind": "calls", "to": "test/a.test.js:Srv2"}, {"from": "u", "kind": "calls", "to": "b.js:inner"}], "right": [{"from": "t", "kind": "calls", "to": "srv.js:srv"}, {"from": "u", "kind": "calls", "to": "lib/inner/entry.js:inner"}]}

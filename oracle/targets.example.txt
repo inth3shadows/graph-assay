@@ -1,0 +1,5 @@
+# Copy to oracle/targets.txt (git-ignored) and point the paths at your clones.
+# name        src repo                          lang    ts project dirs
+mux           ~/src/mux                         go
+click         ~/src/click                       python
+ky            ~/src/ky                          ts      .

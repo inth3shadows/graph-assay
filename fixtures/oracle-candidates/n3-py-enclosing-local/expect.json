@@ -1,0 +1,1 @@
+{"issue": 3231, "wrong": [{"from": "closure::inner", "kind": "calls", "to": "other/far.py:evaluate"}], "right": []}

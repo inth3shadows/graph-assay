@@ -1,0 +1,73 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "patch": [
+  {
+   "op": "retarget",
+   "at": "main.py:16",
+   "to": {
+    "name": "get",
+    "kind": "function"
+   }
+  },
+  {
+   "op": "add",
+   "from": {
+    "name": "dynamic"
+   },
+   "to": {
+    "name": "get",
+    "kind": "method"
+   },
+   "line": 20
+  },
+  {
+   "op": "add",
+   "from": {
+    "name": "main.py",
+    "kind": "file"
+   },
+   "to": {
+    "name": "outer"
+   },
+   "line": 6
+  }
+ ],
+ "expect": [],
+ "pairs": {
+  "matched": [
+   "file:main.py -> helper",
+   "outer -> inner",
+   "outer -> helper",
+   "inner -> helper",
+   "__init__ -> helper",
+   "get -> helper",
+   "decorated -> Box",
+   "twice -> helper"
+  ],
+  "oracle": [
+   "!decorated -> deco",
+   "!outer -> deco"
+  ],
+  "decorators": [
+   "file:main.py -> deco"
+  ],
+  "disagrees": [
+   "decorated -> get"
+  ],
+  "silent": [
+   "dynamic -> get"
+  ],
+  "subject": [
+   "!file:main.py -> outer"
+  ]
+ },
+ "pairCounts": {
+  "oracle": 9,
+  "subject": 10,
+  "matched": 8,
+  "skippedEdges": {
+   "skip-framework-self-site": 1
+  }
+ }
+}

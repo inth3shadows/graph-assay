@@ -1,0 +1,56 @@
+{
+ "lang": "python",
+ "mode": "forward",
+ "expect": [
+  {
+   "at": "test_fix.py:10",
+   "name": "client",
+   "key": "noise:pytest-fixture-param"
+  },
+  {
+   "at": "test_fix.py:18",
+   "name": "helper",
+   "key": "wrong-target|"
+  },
+  {
+   "at": "shadow.py:2",
+   "name": "ReferenceError",
+   "key": "noise:scip-builtin-shadowed"
+  },
+  {
+   "at": "shadow.py:10",
+   "name": "ReferenceError",
+   "key": "noise:scip-builtin-shadowed"
+  },
+  {
+   "at": "raiser.py:2",
+   "name": "TimeoutError",
+   "key": "cross-file-unimported|"
+  },
+  {
+   "at": "ex/tsp/evaluator.py:5",
+   "name": "read_file",
+   "key": "noise:scip-unresolved-module"
+  },
+  {
+   "at": "closure.py:9",
+   "name": "evaluate",
+   "key": "cross-file-unimported|"
+  },
+  {
+   "at": "closure.py:15",
+   "name": "p",
+   "key": "cross-file-unimported|"
+  },
+  {
+   "at": "imported.py:5",
+   "name": "evaluate",
+   "key": "ok|"
+  },
+  {
+   "at": "closure.py:6",
+   "name": "make",
+   "key": "ok|"
+  }
+ ]
+}

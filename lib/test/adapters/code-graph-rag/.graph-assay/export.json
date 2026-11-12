@@ -1,0 +1,469 @@
+{
+  "nodes": [
+    {
+      "node_id": 1,
+      "labels": [
+        "Project"
+      ],
+      "properties": {
+        "name": "code-graph-rag__f16ec52f",
+        "root_path": "/repo",
+        "captured_relationships": [
+          "ACCEPTS",
+          "CALLS",
+          "CONTAINS_FILE",
+          "CONTAINS_FOLDER",
+          "CONTAINS_MODULE",
+          "CONTAINS_PACKAGE",
+          "CONTAINS_SECTION",
+          "DEFINES",
+          "DEFINES_METHOD",
+          "DEPENDS_ON_EXTERNAL",
+          "EXPORTS",
+          "EXPORTS_MODULE",
+          "IMPLEMENTS",
+          "IMPLEMENTS_MODULE",
+          "IMPORTS",
+          "INHERITS",
+          "INSTANTIATES",
+          "LINKS_TO",
+          "OVERRIDES",
+          "REFERENCES",
+          "RETURNS"
+        ],
+        "last_synced_at": "2026-11-12T13:58:52.586434+00:00"
+      }
+    },
+    {
+      "node_id": 3,
+      "labels": [
+        "Module"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app",
+        "name": "app.py",
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "flow_covered": false,
+        "interface_fingerprint": "1094511cf4752440fadc434da9917a97ab19149b2fe84691f0ed72ed425f6b55",
+        "unresolved_references": []
+      }
+    },
+    {
+      "node_id": 11,
+      "labels": [
+        "File"
+      ],
+      "properties": {
+        "absolute_path": "/repo/app.py",
+        "path": "app.py",
+        "name": "app.py",
+        "extension": ".py"
+      }
+    },
+    {
+      "node_id": 4,
+      "labels": [
+        "Function"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.echo",
+        "name": "echo",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 1,
+        "start_col": 0,
+        "name_start_line": 1,
+        "name_start_col": 4,
+        "end_line": 2,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [
+          "message"
+        ],
+        "param_types": [
+          ""
+        ],
+        "ast_fingerprint": "dc87e57d0c1afb4e",
+        "ast_fingerprint_nodes": 6,
+        "ast_branch_fingerprints": [
+          "cff730a60793adcc"
+        ],
+        "anchor_hash": "ah1:98aad5d61ecf6e7bfe9ce33cdea340d8ef3488970e71caca23aded2385b3c098"
+      }
+    },
+    {
+      "node_id": 5,
+      "labels": [
+        "Function"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.version_option",
+        "name": "version_option",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 14,
+        "start_col": 0,
+        "name_start_line": 14,
+        "name_start_col": 4,
+        "end_line": 18,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [
+          "version"
+        ],
+        "param_types": [
+          ""
+        ],
+        "ast_fingerprint": "9f3d49b72531e9f2",
+        "ast_fingerprint_nodes": 15,
+        "ast_branch_fingerprints": [
+          "821b6a2cd50d9081",
+          "cff730a60793adcc"
+        ],
+        "anchor_hash": "ah1:c62b5a58c943df58b6b0cf8ed4f048fd43e13c0448337aa61adde176b056ab72"
+      }
+    },
+    {
+      "node_id": 6,
+      "labels": [
+        "Function"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.version_option.callback",
+        "name": "callback",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 15,
+        "start_col": 4,
+        "name_start_line": 15,
+        "name_start_col": 8,
+        "end_line": 16,
+        "is_exported": false,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [
+          "ctx"
+        ],
+        "param_types": [
+          ""
+        ],
+        "ast_fingerprint": "dc87e57d0c1afb4e",
+        "ast_fingerprint_nodes": 6,
+        "ast_branch_fingerprints": [
+          "cff730a60793adcc"
+        ],
+        "anchor_hash": "ah1:8fe2b8162a4553de3bd81fdb8217a1a050e841df82e526a9180451f74ee34157"
+      }
+    },
+    {
+      "node_id": 7,
+      "labels": [
+        "Function"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.main",
+        "name": "main",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 21,
+        "start_col": 0,
+        "name_start_line": 21,
+        "name_start_col": 4,
+        "end_line": 23,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [],
+        "param_types": [],
+        "ast_fingerprint": "19c14420ecd17888",
+        "ast_fingerprint_nodes": 18,
+        "ast_branch_fingerprints": [
+          "b5ec0c53bfe37f52",
+          "b6bf9ddadc461f88"
+        ],
+        "anchor_hash": "ah1:c3a0ad1bcb9462fdaf612b61526138c7c90134f1dae99e24d66d21e73e9e3f3a"
+      }
+    },
+    {
+      "node_id": 8,
+      "labels": [
+        "Class"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.Greeter",
+        "name": "Greeter",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 5,
+        "start_col": 0,
+        "end_line": 11,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "anchor_hash": "ah1:262b3b4e8864a84615789eda465f8c32800a873c5e76f59cc61fefb7f3132c81"
+      }
+    },
+    {
+      "node_id": 9,
+      "labels": [
+        "Method"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.Greeter.greet",
+        "name": "greet",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 6,
+        "start_col": 4,
+        "name_start_line": 6,
+        "name_start_col": 8,
+        "end_line": 8,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [
+          "self",
+          "name"
+        ],
+        "param_types": [
+          "",
+          ""
+        ],
+        "ast_fingerprint": "7dd9b11dc42f58d2",
+        "ast_fingerprint_nodes": 14,
+        "ast_branch_fingerprints": [
+          "cff730a60793adcc",
+          "dc8800b936b84b96"
+        ],
+        "anchor_hash": "ah1:71f5a9aba7b490ea418693ba2606e5c6bf725b96366c1ad08e74cdf3763bff7a"
+      }
+    },
+    {
+      "node_id": 10,
+      "labels": [
+        "Method"
+      ],
+      "properties": {
+        "qualified_name": "code-graph-rag__f16ec52f.app.Greeter.loud",
+        "name": "loud",
+        "modifiers": [],
+        "decorators": [],
+        "start_line": 10,
+        "start_col": 4,
+        "name_start_line": 10,
+        "name_start_col": 8,
+        "end_line": 11,
+        "is_exported": true,
+        "path": "app.py",
+        "absolute_path": "/repo/app.py",
+        "positional_params": [
+          "self",
+          "name"
+        ],
+        "param_types": [
+          "",
+          ""
+        ],
+        "ast_fingerprint": "bad63943745f9b4c",
+        "ast_fingerprint_nodes": 8,
+        "ast_branch_fingerprints": [
+          "f929b3d1b979d6a5"
+        ],
+        "anchor_hash": "ah1:30d7d4700fd06a1e08b4693d7e3966fa42355e6d84c1408d77ee14ebe9f5aea7"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "from_id": 1,
+      "to_id": 11,
+      "type": "CONTAINS_FILE",
+      "properties": {}
+    },
+    {
+      "from_id": 1,
+      "to_id": 3,
+      "type": "CONTAINS_MODULE",
+      "properties": {}
+    },
+    {
+      "from_id": 3,
+      "to_id": 4,
+      "type": "DEFINES",
+      "properties": {}
+    },
+    {
+      "from_id": 3,
+      "to_id": 5,
+      "type": "DEFINES",
+      "properties": {}
+    },
+    {
+      "from_id": 3,
+      "to_id": 7,
+      "type": "DEFINES",
+      "properties": {}
+    },
+    {
+      "from_id": 3,
+      "to_id": 8,
+      "type": "DEFINES",
+      "properties": {}
+    },
+    {
+      "from_id": 5,
+      "to_id": 4,
+      "type": "CALLS",
+      "properties": {
+        "line": 16,
+        "col": 8,
+        "end_line": 16,
+        "end_col": 21,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 5,
+      "to_id": 6,
+      "type": "CALLS",
+      "properties": {
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 5,
+      "to_id": 6,
+      "type": "DEFINES",
+      "properties": {}
+    },
+    {
+      "from_id": 5,
+      "to_id": 6,
+      "type": "REFERENCES",
+      "properties": {
+        "line": 18,
+        "col": 11,
+        "end_line": 18,
+        "end_col": 19,
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 6,
+      "to_id": 4,
+      "type": "CALLS",
+      "properties": {
+        "line": 16,
+        "col": 8,
+        "end_line": 16,
+        "end_col": 21,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 7,
+      "to_id": 5,
+      "type": "CALLS",
+      "properties": {
+        "line": 23,
+        "col": 4,
+        "end_line": 23,
+        "end_col": 23,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 7,
+      "to_id": 6,
+      "type": "CALLS",
+      "properties": {
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 7,
+      "to_id": 9,
+      "type": "CALLS",
+      "properties": {
+        "line": 22,
+        "col": 14,
+        "end_line": 22,
+        "end_col": 24,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 7,
+      "to_id": 8,
+      "type": "INSTANTIATES",
+      "properties": {
+        "line": 22,
+        "col": 4,
+        "end_line": 22,
+        "end_col": 13,
+        "arg_count": 0,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 8,
+      "to_id": 9,
+      "type": "DEFINES_METHOD",
+      "properties": {}
+    },
+    {
+      "from_id": 8,
+      "to_id": 10,
+      "type": "DEFINES_METHOD",
+      "properties": {}
+    },
+    {
+      "from_id": 9,
+      "to_id": 4,
+      "type": "CALLS",
+      "properties": {
+        "line": 7,
+        "col": 8,
+        "end_line": 7,
+        "end_col": 18,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "exact"
+      }
+    },
+    {
+      "from_id": 9,
+      "to_id": 10,
+      "type": "CALLS",
+      "properties": {
+        "line": 8,
+        "col": 20,
+        "end_line": 8,
+        "end_col": 30,
+        "arg_count": 1,
+        "kwarg_names": [],
+        "resolution": "heuristic"
+      }
+    }
+  ],
+  "metadata": {
+    "total_nodes": 10,
+    "total_relationships": 19,
+    "exported_at": "2026-11-12T13:58:52.890490+00:00",
+    "projects": [
+      "code-graph-rag__f16ec52f"
+    ]
+  }
+}

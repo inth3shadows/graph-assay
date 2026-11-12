@@ -1,0 +1,16 @@
+{
+ "issue": 3240,
+ "wrong": [],
+ "right": [
+  {
+   "from": "via_method",
+   "kind": "calls",
+   "to": "t.py:Stager::add"
+  },
+  {
+   "from": "via_param_method",
+   "kind": "calls",
+   "to": "t.py:Stager::add"
+  }
+ ]
+}

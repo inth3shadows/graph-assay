@@ -1,0 +1,1 @@
+{"issue": 3033, "wrong": [{"from": "b::App::run", "kind": "calls", "to": "lib/src/commonMain/kotlin/a/Util.kt:a::Util::go"}], "right": [{"from": "b::App::run", "kind": "calls", "to": "lib/src/androidMain/kotlin/a/Util.kt:a::Util::go"}]}

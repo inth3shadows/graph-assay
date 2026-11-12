@@ -1,0 +1,1 @@
+{"issue": 3232, "wrong": [{"from": "run", "kind": "instantiates", "to": "other/far.py:TimeoutError"}], "right": []}

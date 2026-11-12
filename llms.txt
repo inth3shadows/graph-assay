@@ -1,0 +1,24 @@
+# graph-assay
+
+> Accuracy testing for the code graphs AI agents query: finds wrong and missing call edges in a code-graph tool by checking its graph against the compiler (SCIP indexes from tsc, pyright, go and javac), turns each finding into a minimal repro, and scores tools on a versioned spec. Measures codegraph and code-graph-rag; TypeScript/JavaScript, Python, Go and the JVM.
+
+## Docs
+
+- [README](README.md): what it is, status, intent, quick start
+- [Usage guide](USAGE.md): the workflows (replay known bugs, find new ones, review a change, reproduce tables)
+- [Technical reference](TECHNICAL.md): architecture, every file, configuration, adapter contract, limits
+- [SPEC](SPEC.md): scoring semantics (call-site and function-pair tracks, equivalences, verdicts, failure policy)
+- [Security](SECURITY.md): threat model for indexing untrusted code
+
+## Key files
+
+- [bin/graph-assay](bin/graph-assay): the command-line entry point
+- [lib/subjects/index.mjs](lib/subjects/index.mjs): the subject registry and adapter contract
+- [schema/snapshot.v1.json](schema/snapshot.v1.json): the graph snapshot every scorer reads
+- [schema/expect.v1.json](schema/expect.v1.json): fixture expectations
+- [oracle/oracle.mjs](oracle/oracle.mjs): the compiler oracle
+
+## Optional
+
+- [CHANGELOG](CHANGELOG.md)
+- [Agent notes](AGENTS.md)

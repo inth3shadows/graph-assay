@@ -1,0 +1,16 @@
+{
+ "issue": 3238,
+ "wrong": [
+  {
+   "from": "parse",
+   "kind": "calls",
+   "to": "lib/other.ts:parseInt"
+  },
+  {
+   "from": "reply",
+   "kind": "instantiates",
+   "to": "lib/other.ts:Response"
+  }
+ ],
+ "right": []
+}

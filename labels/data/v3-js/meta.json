@@ -1,0 +1,1 @@
+{"supersedes": {"v2-tsjs": ["javascript"]}, "why": "drawn after the skip-module-member-alias oracle rule (#15), excluding every v2 site; a rule change is validated on a fresh sample (SPEC §5)"}

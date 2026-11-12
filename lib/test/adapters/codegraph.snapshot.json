@@ -1,0 +1,280 @@
+{
+ "schema": "graph-assay/snapshot@1",
+ "subject": {
+  "name": "codegraph",
+  "adapterSha256": "<hash>",
+  "version": "<version>",
+  "config": {
+   "kernel": "wasm"
+  }
+ },
+ "capabilities": {
+  "siteLines": true,
+  "siteColumns": true,
+  "columnEncoding": "utf16",
+  "unresolved": true,
+  "provenance": true,
+  "edgeKinds": [
+   "calls",
+   "contains",
+   "instantiates",
+   "references"
+  ]
+ },
+ "files": [
+  {
+   "path": "app.py",
+   "language": "python"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "file:app.py",
+   "kind": "file",
+   "name": "app.py",
+   "qname": "app.py",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 24
+  },
+  {
+   "id": "function:8c0d3f7471e3400e5a64ba372ae8d5c5",
+   "kind": "function",
+   "name": "echo",
+   "qname": "echo",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 2
+  },
+  {
+   "id": "class:f2107734120242ca02771f07c37c465a",
+   "kind": "class",
+   "name": "Greeter",
+   "qname": "Greeter",
+   "file": "app.py",
+   "language": "python",
+   "start": 5,
+   "end": 11
+  },
+  {
+   "id": "method:dab9ad6a0f8f440b7fb0a134f3739c14",
+   "kind": "method",
+   "name": "greet",
+   "qname": "Greeter::greet",
+   "file": "app.py",
+   "language": "python",
+   "start": 6,
+   "end": 8
+  },
+  {
+   "id": "method:75e621ced5d82f84699ad3bbb0681dcb",
+   "kind": "method",
+   "name": "loud",
+   "qname": "Greeter::loud",
+   "file": "app.py",
+   "language": "python",
+   "start": 10,
+   "end": 11
+  },
+  {
+   "id": "function:01bf06b0aa765d7be5891aed5bdde6b6",
+   "kind": "function",
+   "name": "version_option",
+   "qname": "version_option",
+   "file": "app.py",
+   "language": "python",
+   "start": 14,
+   "end": 18
+  },
+  {
+   "id": "function:81e9f6a0990092037051347bb0335785",
+   "kind": "function",
+   "name": "callback",
+   "qname": "version_option::callback",
+   "file": "app.py",
+   "language": "python",
+   "start": 15,
+   "end": 16
+  },
+  {
+   "id": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "kind": "function",
+   "name": "main",
+   "qname": "main",
+   "file": "app.py",
+   "language": "python",
+   "start": 21,
+   "end": 23
+  }
+ ],
+ "edges": [
+  {
+   "kind": "contains",
+   "src": "file:app.py",
+   "dst": "function:8c0d3f7471e3400e5a64ba372ae8d5c5",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "file:app.py",
+   "dst": "class:f2107734120242ca02771f07c37c465a",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "class:f2107734120242ca02771f07c37c465a",
+   "dst": "method:dab9ad6a0f8f440b7fb0a134f3739c14",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "class:f2107734120242ca02771f07c37c465a",
+   "dst": "method:75e621ced5d82f84699ad3bbb0681dcb",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "file:app.py",
+   "dst": "function:01bf06b0aa765d7be5891aed5bdde6b6",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "function:01bf06b0aa765d7be5891aed5bdde6b6",
+   "dst": "function:81e9f6a0990092037051347bb0335785",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "contains",
+   "src": "file:app.py",
+   "dst": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "line": null,
+   "col": null,
+   "provenance": null,
+   "ref": null,
+   "resolvedBy": null
+  },
+  {
+   "kind": "calls",
+   "src": "method:dab9ad6a0f8f440b7fb0a134f3739c14",
+   "dst": "function:8c0d3f7471e3400e5a64ba372ae8d5c5",
+   "line": 7,
+   "col": 8,
+   "provenance": null,
+   "ref": "echo",
+   "resolvedBy": "exact-match"
+  },
+  {
+   "kind": "calls",
+   "src": "method:dab9ad6a0f8f440b7fb0a134f3739c14",
+   "dst": "method:75e621ced5d82f84699ad3bbb0681dcb",
+   "line": 8,
+   "col": 15,
+   "provenance": null,
+   "ref": "loud",
+   "resolvedBy": "exact-match"
+  },
+  {
+   "kind": "calls",
+   "src": "function:81e9f6a0990092037051347bb0335785",
+   "dst": "function:8c0d3f7471e3400e5a64ba372ae8d5c5",
+   "line": 16,
+   "col": 8,
+   "provenance": null,
+   "ref": "echo",
+   "resolvedBy": "exact-match"
+  },
+  {
+   "kind": "calls",
+   "src": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "dst": "method:dab9ad6a0f8f440b7fb0a134f3739c14",
+   "line": 22,
+   "col": 4,
+   "provenance": null,
+   "ref": "Greeter().greet",
+   "resolvedBy": "instance-method"
+  },
+  {
+   "kind": "instantiates",
+   "src": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "dst": "class:f2107734120242ca02771f07c37c465a",
+   "line": 22,
+   "col": 4,
+   "provenance": null,
+   "ref": "Greeter",
+   "resolvedBy": "exact-match"
+  },
+  {
+   "kind": "calls",
+   "src": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "dst": "function:01bf06b0aa765d7be5891aed5bdde6b6",
+   "line": 23,
+   "col": 4,
+   "provenance": null,
+   "ref": "version_option",
+   "resolvedBy": "exact-match"
+  },
+  {
+   "kind": "references",
+   "src": "function:01bf06b0aa765d7be5891aed5bdde6b6",
+   "dst": "function:81e9f6a0990092037051347bb0335785",
+   "line": 18,
+   "col": 11,
+   "provenance": null,
+   "ref": "callback",
+   "resolvedBy": "function-ref"
+  }
+ ],
+ "unresolved": [
+  {
+   "src": "function:8c0d3f7471e3400e5a64ba372ae8d5c5",
+   "file": "app.py",
+   "line": 2,
+   "col": 4,
+   "name": "print",
+   "kind": "calls"
+  },
+  {
+   "src": "method:75e621ced5d82f84699ad3bbb0681dcb",
+   "file": "app.py",
+   "line": 11,
+   "col": 15,
+   "name": "name.upper",
+   "kind": "calls"
+  },
+  {
+   "src": "function:81e652c8b0e022ff1a9af10a68ad9fa2",
+   "file": "app.py",
+   "line": 23,
+   "col": 4,
+   "name": "version_option(\"1\")",
+   "kind": "calls"
+  }
+ ]
+}

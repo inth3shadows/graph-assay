@@ -1,0 +1,16 @@
+{
+ "note": "Pinned agent-facing questions for differential/shadow.mjs. repo: an oracle/targets.txt name or a path relative to the qa root. q: codegraph CLI arguments (the CLI prints what the MCP tools return).",
+ "questions": [
+  { "repo": "mux", "q": ["explore", "Router ServeHTTP", "--max-files", "2"] },
+  { "repo": "mux", "q": ["explore", "Route Match regexp", "--max-files", "2"] },
+  { "repo": "mux", "q": ["callers", "HandleFunc"] },
+  { "repo": "mux", "q": ["callees", "ServeHTTP"] },
+  { "repo": "mux", "q": ["node", "ServeHTTP"] },
+  { "repo": "fixtures/oracle-candidates/issue-2952", "q": ["callers", "normalizeType"] },
+  { "repo": "fixtures/oracle-candidates/issue-2952", "q": ["callees", "t"] },
+  { "repo": "fixtures/oracle-candidates/j1-java-overload", "q": ["callers", "load"] },
+  { "repo": "fixtures/oracle-candidates/g1-go-new-receiver", "q": ["callers", "Host"] },
+  { "repo": "fixtures/oracle-candidates/m2-py-method-return-local", "q": ["callers", "add"] },
+  { "repo": "fixtures/oracle-candidates/t1-ts-global-builtin", "q": ["callers", "parseInt"] }
+ ]
+}

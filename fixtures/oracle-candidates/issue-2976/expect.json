@@ -1,0 +1,4 @@
+{"issue": 2976,
+ "wrong": [{"from": "com.x.m::Main::go", "kind": "calls", "to": "src/com/x/a/Util.java:com.x.a::Util::log"}],
+ "right": [{"from": "com.x.m::Main::go", "kind": "calls", "to": "src/com/x/b/Util.java:com.x.b::Util::log"},
+           {"from": "com.x.m::Main::go", "kind": "calls", "to": "src/com/x/b/Util.java:com.x.b::Util::run"}]}

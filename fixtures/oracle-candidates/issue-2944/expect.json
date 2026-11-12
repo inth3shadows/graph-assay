@@ -1,0 +1,1 @@
+{"issue": 2944, "note": "second describe does not call setup, so an edge to setup@26 is only the wrong one; verbatim repro is in issue-2944-verbatim", "wrong": [{"from": "a.test.ts", "kind": "calls", "to": "a.test.ts:setup", "toLine": 26}], "right": [{"from": "a.test.ts", "kind": "calls", "to": "a.test.ts:setup", "toLine": 2}]}

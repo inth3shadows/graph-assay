@@ -1,0 +1,21 @@
+# codegraph-qa corpus v1 (preregistered 2026-11-05, before any held-out repo was indexed or read).
+# Selection rule: public repos under OSI-permissive licenses, one widely used library or framework
+# per role per language, small to medium (under ~15 MB), default branch HEAD pinned on 2026-11-05.
+# `dev` repos may be used to write and tune oracle rules, fixtures and the sample; `heldout` repos
+# are indexed only for published tables, and a rule change prompted by a held-out result must be
+# re-validated on dev before it ships (SPEC §9).
+# setup: `-` none; `npm` = `npm install --ignore-scripts` (no lockfile is committed upstream; the
+# installed tree's `npm ls --all --json` hash goes in each run's manifest).
+# exclude: comma-separated path prefixes of vendored or generated code, left out of every
+# denominator and counted in the coverage waterfall (SPEC §1, §7); `-` none. Added 2026-11-11:
+# the dev repos were checked by path name (no vendor/, third_party/, dist/, generated or .min.js
+# files); held-out rows were not inspected and must be checked by path name before their first run.
+# name     clone url                                      sha                                       language    license       split    category        setup  exclude
+requests   https://github.com/psf/requests.git            3c7baaa05ab4aa49cc819ce3a819d260de19c157  python      Apache-2.0    dev      http-client     -  -
+click      https://github.com/pallets/click.git           2247b35ea1c47c727d7a06e51fa280e12a863ff6  python      BSD-3-Clause  dev      cli-framework   -  -
+mux        https://github.com/gorilla/mux.git             db9d1d0073d27a0a2d9a8c1bc52aa0af4374d265  go          BSD-3-Clause  dev      router          -  -
+ky         https://github.com/sindresorhus/ky.git         3541888878c4d303a8bc2ad61815f4e048f55a5d  typescript  MIT           dev      http-client     npm  -
+express    https://github.com/expressjs/express.git       43fca52d28a422c8be48fd489cbd4f2d6152bab6  javascript  MIT           dev      web-framework   -  -
+httpx      https://github.com/encode/httpx.git            b5addb64f0161ff6bfe94c124ef76f6a1fba5254  python      BSD-3-Clause  heldout  http-client     -  -
+cobra      https://github.com/spf13/cobra.git             adbc8813901bba65827259daa8e22ff94ec1f30e  go          Apache-2.0    heldout  cli-framework   -  -
+got        https://github.com/sindresorhus/got.git        6b5aafc1cd538998728be6f45c65b0f80bae01b2  typescript  MIT           heldout  http-client     npm  -

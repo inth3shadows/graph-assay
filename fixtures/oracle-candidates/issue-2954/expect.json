@@ -1,0 +1,1 @@
+{"issue": 2954, "wrong": [{"from": "Tools::run", "kind": "calls", "to": "lib.ts:findAll"}, {"from": "Tools::size", "kind": "calls", "to": "lib.ts:getFactor"}], "right": [{"from": "Tools::run", "kind": "calls", "to": "tools.ts:Tools::findAll"}, {"from": "Tools::size", "kind": "calls", "to": "tools.ts:Tools::getFactor"}]}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "graph-assay/snapshot@1",
+  "title": "Code-graph snapshot v1",
+  "description": "What a subject tool's index holds, in a tool-neutral shape: every scorer reads this, never a tool's own store. Lines are 1-based. See SPEC.md §2 for coordinates. Validated by lib/snapshot.mjs (validateSnapshot), which implements these constraints without a schema library.",
+  "type": "object",
+  "required": ["schema", "subject", "capabilities", "files", "nodes", "edges", "unresolved"],
+  "properties": {
+    "schema": { "const": "graph-assay/snapshot@1" },
+    "subject": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "description": "e.g. codegraph, code-graph-rag" },
+        "version": { "type": ["string", "null"], "description": "build sha or release" },
+        "adapterSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "adapter and shared snapshot-contract implementation hash; absent on legacy snapshots" },
+        "config": { "type": "object", "description": "settings that change results (engine, extras)" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["siteLines", "siteColumns", "unresolved", "provenance"],
+      "properties": {
+        "siteLines": { "type": "boolean", "description": "edges carry the call site's line" },
+        "siteColumns": { "type": "boolean" },
+        "columnEncoding": { "type": ["string", "null"], "description": "utf16 | utf8 | codepoint | unknown" },
+        "unresolved": { "type": "boolean", "description": "unresolved references are exported" },
+        "provenance": { "type": "boolean", "description": "edges say whether they are guessed / synthesized" },
+        "edgeKinds": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": { "path": { "type": "string" }, "language": { "type": ["string", "null"] } }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "name", "file", "start", "end"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string", "description": "the subject's own kind (file, function, method, class, ...)" },
+          "name": { "type": "string" },
+          "qname": { "type": ["string", "null"], "description": "the subject's own qualified name; scorers must not depend on its format" },
+          "file": { "type": "string" },
+          "language": { "type": ["string", "null"] },
+          "start": { "type": "integer", "minimum": 0 },
+          "end": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "src", "dst"],
+        "properties": {
+          "kind": { "type": "string", "description": "calls, instantiates, imports, references, extends, decorates, contains, ..." },
+          "src": { "type": "string", "description": "node id" },
+          "dst": { "type": "string", "description": "node id" },
+          "line": { "type": ["integer", "null"], "description": "call site line" },
+          "col": { "type": ["integer", "null"] },
+          "ref": { "type": ["string", "null"], "description": "the reference as written at the site (a.b.m)" },
+          "resolvedBy": { "type": ["string", "null"], "description": "the subject's resolution strategy, if it says" },
+          "provenance": { "type": ["string", "null"], "description": "null = extracted / resolved; heuristic = guessed or synthesized" }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "line", "name", "kind"],
+        "properties": {
+          "src": { "type": ["string", "null"] },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "col": { "type": ["integer", "null"] },
+          "name": { "type": "string" },
+          "kind": { "type": "string" }
+        }
+      }
+    }
+  }
+}

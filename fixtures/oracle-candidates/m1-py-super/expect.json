@@ -1,0 +1,21 @@
+{
+ "issue": 3218,
+ "wrong": [],
+ "right": [
+  {
+   "from": "Child::__init__",
+   "kind": "calls",
+   "to": "base.py:Base::__init__"
+  },
+  {
+   "from": "Child::greet",
+   "kind": "calls",
+   "to": "base.py:Base::greet"
+  },
+  {
+   "from": "LocalChild::run",
+   "kind": "calls",
+   "to": "child.py:Local::run"
+  }
+ ]
+}

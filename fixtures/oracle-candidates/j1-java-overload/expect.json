@@ -1,0 +1,1 @@
+{"issue": 3040, "wrong": [{"from": "p::App::run", "kind": "calls", "to": "src/p/Util.java:p::Util::load", "toLine": 7}], "right": [{"from": "p::App::run", "kind": "calls", "to": "src/p/Util.java:p::Util::load", "toLine": 8}]}

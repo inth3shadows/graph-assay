@@ -1,0 +1,3 @@
+{"issue": 2975,
+ "wrong": [{"from": "routes/api.php::route:/admin/users/{id}", "kind": "references", "to": "app/Http/Controllers/UserController.php:App\\Http\\Controllers::UserController::show"}],
+ "right": [{"from": "routes/api.php::route:/admin/users/{id}", "kind": "references", "to": "app/Http/Controllers/Admin/UserController.php:App\\Http\\Controllers\\Admin::UserController::show"}]}

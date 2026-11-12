@@ -1,0 +1,288 @@
+{
+ "build": "f72c9d2efb14454ff4f9fd7b8460abd82f19a287",
+ "generated": "2026-11-12",
+ "fixtures": {
+  "a": {
+   "issue": 3034,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|import|function>method": 1,
+    "missing|wrong-edge|ts|method>method": 1
+   }
+  },
+  "b": {
+   "issue": 3035,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>term": 1,
+    "missing|wrong-edge|ts|term@decl>property": 1
+   }
+  },
+  "c": {
+   "issue": 3036,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|exact-match|method>method": 1
+   }
+  },
+  "g1-go-new-receiver": {
+   "issue": 3237,
+   "lang": "go",
+   "shapes": {
+    "wrong-target|calls|exact-match|method>method": 1,
+    "missing|wrong-edge|go|method>method": 1
+   }
+  },
+  "issue-2944": {
+   "issue": 2944,
+   "lang": "ts",
+   "shapes": {
+    "local-shadow|calls|exact-match|function>local": 1
+   }
+  },
+  "issue-2946": {
+   "issue": 2946,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 1,
+    "missing|unresolved-ref|ts|method>method": 2,
+    "missing|wrong-edge|ts|method>method": 1
+   }
+  },
+  "issue-2947": {
+   "issue": 2947,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|instance-method|method>method": 1
+   }
+  },
+  "issue-2948": {
+   "issue": 2948,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|exact-match|method>method": 1,
+    "external|calls|exact-match|property>method": 1
+   }
+  },
+  "issue-2949": {
+   "issue": 2949,
+   "lang": "ts",
+   "shapes": {
+    "local-shadow|calls|import|function>local": 2
+   }
+  },
+  "issue-2951": {
+   "issue": 2951,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 3,
+    "missing|wrong-edge|ts|method>function": 3
+   }
+  },
+  "issue-2952": {
+   "issue": 2952,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "issue-2953": {
+   "issue": 2953,
+   "lang": "ts",
+   "shapes": {
+    "receiver-fallback|calls|import|function>method": 3,
+    "receiver-fallback|calls|import|function>local": 1,
+    "missing|receiver-fallback|ts|method>method": 2,
+    "missing|receiver-fallback|ts|method@decl": 1
+   }
+  },
+  "issue-2954": {
+   "issue": 2954,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|import|function>method": 1,
+    "wrong-target|calls|import|function>term": 1,
+    "missing|wrong-edge|ts|method>method": 1,
+    "missing|wrong-edge|ts|term>method": 1
+   }
+  },
+  "issue-2957": {
+   "issue": 2957,
+   "lang": "python",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 1,
+    "missing|wrong-edge|py|method>method": 1,
+    "missing|unresolved-ref|py|method>method": 1
+   }
+  },
+  "issue-2958": {
+   "issue": 2958,
+   "lang": "python",
+   "shapes": {
+    "wrong-target|calls|exact-match|function>term": 1,
+    "missing|wrong-edge|py|term": 1
+   }
+  },
+  "issue-2962": {
+   "issue": 2962,
+   "lang": "ts",
+   "shapes": {
+    "local-shadow|calls|exact-match|function>local": 3
+   }
+  },
+  "issue-2963": {
+   "issue": 2963,
+   "lang": "python",
+   "shapes": {
+    "missing|no-ref|py|method>function": 2,
+    "missing|no-ref|py|method>method": 2
+   }
+  },
+  "issue-2964": {
+   "issue": 2964,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|exact-match|constant>method": 3,
+    "missing|wrong-edge|js|method>function": 1,
+    "missing|wrong-edge|js|method": 1,
+    "missing|target-not-a-node|js|method": 1
+   }
+  },
+  "issue-2966": {
+   "issue": 2966,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "issue-2967": {
+   "issue": 2967,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "issue-2973": {
+   "issue": 2973,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "issue-2974": {
+   "issue": 2974,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "issue-2975": {
+   "issue": 2975,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "issue-2976": {
+   "issue": 2976,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "j1-java-overload": {
+   "issue": 3040,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "kmp-22": {
+   "issue": 3033,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "m1-py-super": {
+   "issue": 3218,
+   "lang": "python",
+   "shapes": {
+    "missing|unresolved-ref|py|method>method": 3
+   }
+  },
+  "m2-py-method-return-local": {
+   "issue": 3240,
+   "lang": "python",
+   "shapes": {
+    "missing|unresolved-ref|py|method>method": 2
+   }
+  },
+  "n1-py-local-import": {
+   "issue": 3229,
+   "lang": "python",
+   "shapes": {
+    "wrong-target|calls|import|function>method": 1,
+    "missing|wrong-edge|py|method>function": 1
+   }
+  },
+  "n2-py-comprehension": {
+   "issue": 3230,
+   "lang": "python",
+   "shapes": {
+    "cross-file-unimported|calls|exact-match|variable>local": 1
+   }
+  },
+  "n3-py-enclosing-local": {
+   "issue": 3231,
+   "lang": "python",
+   "shapes": {
+    "cross-file-unimported|calls|exact-match|function>local": 1
+   }
+  },
+  "n4-py-builtin": {
+   "issue": 3232,
+   "lang": "python",
+   "shapes": {
+    "cross-file-unimported|instantiates|exact-match|class>type": 1
+   }
+  },
+  "n5-ts-barrel-member": {
+   "issue": 3233,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|import|function>term": 2,
+    "missing|wrong-edge|ts|term>function": 2
+   }
+  },
+  "p1": {
+   "issue": 3037,
+   "lang": "python",
+   "shapes": {
+    "local-shadow|calls|exact-match|function>local": 1
+   }
+  },
+  "p3": {
+   "issue": 3038,
+   "lang": "python",
+   "shapes": {
+    "external|calls|instance-method|method>method": 1
+   }
+  },
+  "p4": {
+   "issue": 3039,
+   "lang": "python",
+   "shapes": {
+    "wrong-target|calls|exact-match|function>term": 1,
+    "missing|wrong-edge|py|term": 1
+   }
+  },
+  "p5-py-stdlib-import": {
+   "issue": 3239,
+   "lang": "python",
+   "shapes": {}
+  },
+  "t1-ts-global-builtin": {
+   "issue": 3238,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|exact-match|function>method": 1,
+    "external|instantiates|exact-match|class>type": 1
+   }
+  },
+  "t2-ts-typed-instance-member": {
+   "issue": null,
+   "lang": "ts",
+   "shapes": {
+    "receiver-fallback|calls|import|constant>term": 1,
+    "missing|receiver-fallback|ts|term@decl>method": 1
+   }
+  }
+ }
+}

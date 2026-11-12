@@ -1,0 +1,1 @@
+{"issue": 3038, "wrong": [{"from": "size_of_made", "kind": "calls", "to": "arm.py:Arm::stat"}], "right": []}

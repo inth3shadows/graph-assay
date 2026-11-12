@@ -1,0 +1,24 @@
+# codegraph-qa corpus v2 (2026-11-06). v1 unchanged (every v1 row below, same pins and splits), plus
+# a `regression` split. corpus/v1.txt stays the preregistered benchmark corpus; v2 adds no dev or
+# held-out repo.
+# `regression` repos are large TypeScript code bases where codegraph's TS grammar has known gaps.
+# They feed build-vs-build graph diffs (`differential/builds.mjs --fetch <dest> corpus/v2.txt
+# regression`), never the benchmark tables: they break v1's size rule (~15 MB), would dominate a
+# micro average, and the codegraph grammar fork (inth3shadows/tree-sitter-typescript) is tuned on
+# them (its tsc differential pins the same commits, scripts/ts-differential.corpora.json), so they
+# are not neutral evidence. setup `-`: graph diffs need no dependencies; the oracle is not run on them.
+# exclude: comma-separated path prefixes of vendored or generated code, left out of every
+# denominator and counted in the coverage waterfall (SPEC §1, §7); `-` none. Added 2026-11-11:
+# the dev repos were checked by path name (no vendor/, third_party/, dist/, generated or .min.js
+# files); held-out rows were not inspected and must be checked by path name before their first run.
+# name     clone url                                      sha                                       language    license       split    category        setup  exclude
+requests   https://github.com/psf/requests.git            3c7baaa05ab4aa49cc819ce3a819d260de19c157  python      Apache-2.0    dev      http-client     -  -
+click      https://github.com/pallets/click.git           2247b35ea1c47c727d7a06e51fa280e12a863ff6  python      BSD-3-Clause  dev      cli-framework   -  -
+mux        https://github.com/gorilla/mux.git             db9d1d0073d27a0a2d9a8c1bc52aa0af4374d265  go          BSD-3-Clause  dev      router          -  -
+ky         https://github.com/sindresorhus/ky.git         3541888878c4d303a8bc2ad61815f4e048f55a5d  typescript  MIT           dev      http-client     npm  -
+express    https://github.com/expressjs/express.git       43fca52d28a422c8be48fd489cbd4f2d6152bab6  javascript  MIT           dev      web-framework   -  -
+httpx      https://github.com/encode/httpx.git            b5addb64f0161ff6bfe94c124ef76f6a1fba5254  python      BSD-3-Clause  heldout  http-client     -  -
+cobra      https://github.com/spf13/cobra.git             adbc8813901bba65827259daa8e22ff94ec1f30e  go          Apache-2.0    heldout  cli-framework   -  -
+got        https://github.com/sindresorhus/got.git        6b5aafc1cd538998728be6f45c65b0f80bae01b2  typescript  MIT           heldout  http-client     npm  -
+effect     https://github.com/Effect-TS/effect.git        7a87ff9b88b1a570995b1b5570559c1b4dd5367b  typescript  MIT           regression effect-system   -  -
+vscode     https://github.com/microsoft/vscode.git        ca43fc94a6cc0a20cb4deefc90e63693d15063e8  typescript  MIT           regression editor          -  -

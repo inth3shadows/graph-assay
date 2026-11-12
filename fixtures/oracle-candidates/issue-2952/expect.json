@@ -1,0 +1,1 @@
+{"issue": 2952, "note": "fixed on f72c9d2e by #3162; wrong edge was t -> normalizeType", "wrong": [{"from": "t", "kind": "calls", "to": "lib/utils.js:normalizeType"}], "right": [{"from": "t", "kind": "calls", "to": "lib/utils.js:compileTrust"}]}

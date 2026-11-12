@@ -1,0 +1,1 @@
+{"issue": 2966, "wrong": [{"from": "lib/hooks.js", "kind": "calls", "to": "lib/validation.js:validate"}, {"from": "lib/reply.js", "kind": "calls", "to": "lib/types.d.ts:FastifyReply::getHeader"}, {"from": "lib/context.js", "kind": "calls", "to": "lib/application.js:Application::toJSON"}, {"from": "init", "kind": "calls", "to": "lib/other.js:Cast::insertMany"}], "right": []}

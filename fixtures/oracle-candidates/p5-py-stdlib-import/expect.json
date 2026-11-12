@@ -1,0 +1,11 @@
+{
+ "issue": 3239,
+ "wrong": [
+  {
+   "from": "use.py",
+   "kind": "imports",
+   "to": "clock.py:time"
+  }
+ ],
+ "right": []
+}

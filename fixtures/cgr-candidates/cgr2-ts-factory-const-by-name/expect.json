@@ -1,0 +1,6 @@
+{
+ "issue": 3604,
+ "note": "code-graph-rag triage #2 (ky, 697 sites): a call through a module-level constant holding a factory result binds heuristic by name to a same-named nested function, not to what the factory returns. callReturned (ky's shape) lands on the returned body by coincidence; callRenamed gets no edge. Draft issues/issue-K2-cgr-ts-factory-const-by-name.md.",
+ "wrong": [{ "from": "callNotReturned", "kind": "calls", "to": "notreturned.ts:makeB::go" }],
+ "right": []
+}

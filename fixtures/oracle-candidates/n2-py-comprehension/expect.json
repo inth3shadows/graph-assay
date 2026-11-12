@@ -1,0 +1,1 @@
+{"issue": 3230, "wrong": [{"from": "comp", "kind": "calls", "to": "other/far.py:p"}], "right": []}
