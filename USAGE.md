@@ -60,8 +60,8 @@ every input. The exact commands are in the Technical Reference under "Docker rep
   project at a time.
 - **"The Java indexer failed or was refused"**: it builds the project, which runs that project's own
   code, so it only runs inside its Docker container. Check that Docker is installed and running.
-- **"The check itself fails"**: run the self-check. It needs no tool build, and it names the
-  failing test.
+- **"The check itself fails"**: run the self-check. It needs no tool build, only the type checker
+  (`npm ci --ignore-scripts` once per checkout), and it names the failing test.
 
 ## FAQ
 
