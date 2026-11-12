@@ -7,10 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-- Fixtures `issue-3271` (an import of a package the manifest doesn't list but `node_modules` holds,
-  linked to an unrelated project export) and `issue-3271-copied-sibling` (its control: a sibling
-  package copied into `node_modules` keeps its edge). Both carry their own `node_modules`, which
-  `.gitignore` now lets these two fixtures commit.
+- Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
+  doesn't list but `node_modules` holds links to an unrelated project export of the same name.
+- A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy
+  a subject indexes (replay, metamorphic, `builds`, `modes`, `shadow`, labeller qualification,
+  tag-fixtures) puts it in place as `node_modules`, so ignore files and copy filters that drop
+  `node_modules` leave it alone. The labeller's own copy still hides installed packages.
 - Type checking of `lib/` as JavaScript (`tsc --noEmit` with `allowJs` + `checkJs`), run by
   `graph-assay check`, which now needs `npm ci --ignore-scripts` first and fails without it. Dev
   dependencies only, pinned: `typescript` 6.0.3 (Apache-2.0) and `@types/node` 22.20.5 (MIT); the

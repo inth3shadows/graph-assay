@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.mjs';
+import { copySeed } from '../lib/fixture-install.mjs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.mjs';
@@ -53,7 +54,7 @@ export function fetchRepos(dest, repos) {
 function graph(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-builds-'));
   try {
-    fs.cpSync(src, work, { recursive: true, filter: (p) => !SKIP.has(path.basename(p)) });
+    copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
     const r = codegraph.index(work, build);
     if (!r.ok) return { error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-2).join(' | ')}`, ms: r.ms };
     const s = codegraph.snapshot(work);

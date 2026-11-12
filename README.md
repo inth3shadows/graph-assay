@@ -14,7 +14,7 @@ built on it confidently wrong, and these defects rarely show up in the tool's ow
 **Status.** SPEC v1.0 is frozen. Two tools are measured:
 [codegraph](https://github.com/colbymchenry/codegraph) and
 [code-graph-rag](https://github.com/vitali87/code-graph-rag). The compiler oracle covers
-TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 44 codegraph
+TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 43 codegraph
 repros, 39 of which reproduce an issue filed upstream, plus 4 for code-graph-rag. Benchmark tables
 are not published yet: each tool's maintainers see their results first.
 

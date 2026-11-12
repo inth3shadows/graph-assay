@@ -7,10 +7,11 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { config } from '../lib/config.mjs';
+import { FIXTURE_INSTALL } from '../lib/fixture-install.mjs';
 
 export const FIXED = { W: 'other-in-repo', X: 'external', Y: 'local', Z: 'cannot-tell' };
 // Never shown to a labeller: subject outputs, answer keys, and agent instructions or tool configs.
-const HIDE = new Set(['.git', '.codegraph', '.graph-assay', 'node_modules', 'expect.json', 'case.json', 'snapshot.json', 'index.scip.json',
+const HIDE = new Set(['.git', '.codegraph', '.graph-assay', 'node_modules', FIXTURE_INSTALL, 'expect.json', 'case.json', 'snapshot.json', 'index.scip.json',
   'CLAUDE.md', 'AGENTS.md', '.mcp.json', '.claude', '.codex', '.cursor']);
 
 const key = (c) => `${c.file}:${c.line}`;

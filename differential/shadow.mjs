@@ -12,6 +12,7 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.mjs';
+import { copySeed } from '../lib/fixture-install.mjs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.mjs';
@@ -66,7 +67,7 @@ function open(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-shadow-'));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
   const done = () => { for (const d of [work, home]) fs.rmSync(d, { recursive: true, force: true }); };
-  fs.cpSync(src, work, { recursive: true, filter: (p) => !SKIP.has(path.basename(p)) });
+  copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
   const r = codegraph.index(work, build, { home, env: QUERY_ENV });
   if (!r.ok) { done(); return { error: `index failed (status ${r.status}): ${r.output.trim().split('\n').slice(-2).join(' | ')}` }; }
   const ask = (q) => {
