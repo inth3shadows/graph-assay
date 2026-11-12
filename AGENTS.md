@@ -5,7 +5,7 @@ Read [README.md](README.md) for what graph-assay is and [TECHNICAL.md](TECHNICAL
 
 ## Verify
 
-- `node bin/graph-assay check` is what CI runs: syntax checks, fixture validation, oracle self-tests
+- `node bin/graph-assay check` is what CI runs (after `npm ci --ignore-scripts`): syntax checks, `tsc` over `lib/`, fixture validation, oracle self-tests
   with the rule-mutation pass, and every hermetic test. It needs no tool build. Run it before
   every commit and quote its last line.
 - A change to an oracle rule needs a self-test case under `oracle/test/` that fails without it.
