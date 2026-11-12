@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { correct } from './questions.mjs';
-import { isMain } from '../lib/main.mjs';
+import { isMain } from '../lib/main.ts';
 
 /** Wilson score interval for k of n at 95%. */
 export function wilson(k, n, z = 1.96) {

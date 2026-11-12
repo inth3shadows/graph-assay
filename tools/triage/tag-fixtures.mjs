@@ -6,16 +6,16 @@
 //
 // Usage: node tools/triage/tag-fixtures.mjs <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
 //   Named fixtures are updated in the existing file (same build only); with none, every fixture is re-tagged.
-// Needs the SCIP tools (lib/config.mjs `tools`). Java, Kotlin and PHP fixtures are listed as not tagged:
+// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures are listed as not tagged:
 // the oracle has no indexer wired for them here.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { config } from '../../lib/config.mjs';
-import { copySeed } from '../../lib/fixture-install.mjs';
-import * as codegraph from '../../lib/subjects/codegraph.mjs';
+import { config } from '../../lib/config.ts';
+import { copySeed } from '../../lib/fixture-install.ts';
+import * as codegraph from '../../lib/subjects/codegraph.ts';
 import { coverPath, coverTsconfig } from '../../oracle/ts-cover.mjs';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

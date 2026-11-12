@@ -3,10 +3,10 @@
 #   scip-typescript 0.5.2 and scip-python 0.6.8 (npm), and the scip CLI v0.10.0
 #   (sourcegraph/scip release, sha256-checked) as $ORACLE_TOOLS/scip, and scip-go v0.2.8
 #   (go install, when `go` is on PATH) as $ORACLE_TOOLS/scip-go. scip-java runs from its Docker image.
-# Usage: tools/setup-oracle-tools.sh      Env: ORACLE_TOOLS (default: lib/config.mjs tools)
+# Usage: tools/setup-oracle-tools.sh      Env: ORACLE_TOOLS (default: lib/config.ts tools)
 set -euo pipefail
 qa=$(cd "$(dirname "$0")/.." && pwd)
-tools=$(node "$qa/lib/config.mjs" tools)
+tools=$(node "$qa/lib/config.ts" tools)
 # The same pins the Docker reproduction uses (docker/package-lock.json, Dockerfile checksums).
 SCIP_LINUX_AMD64_SHA256=eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0
 TS=0.5.2 PY=0.6.8 SCIP=v0.10.0 GO=v0.2.8

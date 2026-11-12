@@ -20,10 +20,10 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
+import { config } from '../lib/config.ts';
 import { CORPUS, readRepos } from '../differential/builds.mjs';
-import { forward, missing } from '../lib/scores.mjs';
-import { isMain } from '../lib/main.mjs';
+import { forward, missing } from '../lib/scores.ts';
+import { isMain } from '../lib/main.ts';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };

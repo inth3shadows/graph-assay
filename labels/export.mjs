@@ -8,7 +8,7 @@
 // Usage: node labels/export.mjs <sample.jsonl> <answers dir> <dest dir> [--labellers opus,sol,astra]
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
+import { config } from '../lib/config.ts';
 import { unstub } from './questions.mjs';
 
 const args = process.argv.slice(2);

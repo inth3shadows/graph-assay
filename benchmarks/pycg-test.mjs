@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ADAPTER_SHARED } from '../lib/provenance.mjs';
+import { ADAPTER_SHARED } from '../lib/provenance.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let n = 0;
@@ -18,8 +18,8 @@ const write = (f, text) => { fs.mkdirSync(path.dirname(f), { recursive: true });
 
 try {
   const fake = path.join(tmp, 'qa');
-  for (const f of [...ADAPTER_SHARED, 'lib/spec.mjs', 'benchmarks/pycg.mjs']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
-  write(path.join(fake, 'lib/subjects/codegraph.mjs'), '// stub\n');
+  for (const f of [...ADAPTER_SHARED, 'lib/spec.ts', 'benchmarks/pycg.mjs']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
+  write(path.join(fake, 'lib/subjects/codegraph.ts'), '// stub\n');
   // main.py: f (lines 1-2) calls g (lines 3-4); the module calls f.
   const src = 'def f():\n    g()\ndef g():\n    pass\nf()\n';
   const node = (id, kind, name, start, end) => ({ id, kind, name, qname: name, file: 'main.py', language: 'python', start, end });
@@ -30,7 +30,7 @@ try {
     guess: [{ kind: 'calls', src: 'm', dst: 'f', line: 5 }, { kind: 'calls', src: 'f', dst: 'g', line: 2, provenance: 'heuristic' }],
     extra: [{ kind: 'calls', src: 'm', dst: 'f', line: 5 }, { kind: 'calls', src: 'f', dst: 'g', line: 2 }, { kind: 'calls', src: 'g', dst: 'f', line: 4 }],
   };
-  write(path.join(fake, 'lib/subjects/index.mjs'), `import * as path from 'node:path';
+  write(path.join(fake, 'lib/subjects/index.ts'), `import * as path from 'node:path';
 const SNAPS = ${JSON.stringify(snaps)}; const NODES = ${JSON.stringify(nodes)};
 const which = (dir) => path.basename(dir).split('__').pop();
 export const buildFor = (s, b) => b;

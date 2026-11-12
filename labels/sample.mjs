@@ -15,10 +15,10 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
-import { loadScip } from '../lib/scip.mjs';
-import { loadSnapshot } from '../lib/snapshot.mjs';
-import * as codegraph from '../lib/subjects/codegraph.mjs';
+import { config } from '../lib/config.ts';
+import { loadScip } from '../lib/scip.ts';
+import { loadSnapshot } from '../lib/snapshot.ts';
+import * as codegraph from '../lib/subjects/codegraph.ts';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };

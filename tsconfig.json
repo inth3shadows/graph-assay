@@ -1,7 +1,5 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "noEmit": true,
     "strict": false,
     "module": "nodenext",
@@ -9,7 +7,10 @@
     "target": "es2024",
     "lib": ["es2024"],
     "types": ["node"],
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
   },
-  "include": ["lib/**/*.mjs"]
+  "include": ["lib/**/*.ts"]
 }

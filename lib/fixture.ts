@@ -2,11 +2,11 @@
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { joinedEdges } from './snapshot.mjs';
-import { definedNames, present as hasEdge } from './expect.mjs';
-import { placeFixtureInstall } from './fixture-install.mjs';
+import { joinedEdges } from './snapshot.ts';
+import { definedNames, present as hasEdge } from './expect.ts';
+import { placeFixtureInstall } from './fixture-install.ts';
 
-export { FIXTURE_INSTALL, placeFixtureInstall } from './fixture-install.mjs';
+export { FIXTURE_INSTALL, placeFixtureInstall } from './fixture-install.ts';
 
 const HIDDEN = new Set(['expect.json', '.git', '.claude', '.codex', '.agents', 'AGENTS.md', 'CLAUDE.md', '.mcp.json']);
 const comment = (file) => /\.pyi?$/.test(file) ? '#' : /\.(?:[cm]?[jt]sx?|go|java|rs|c|h|cpp|hpp|cs|php)$/.test(file) ? '//' : null;

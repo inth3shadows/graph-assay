@@ -4,15 +4,15 @@
 //      plus codegraph's .codegraph DB or code-graph-rag's export) equals the committed golden
 //      snapshot. A change to how an adapter maps a tool's output shows up as a diff here.
 //   2. sandbox: what a codegraph index process can see (environment, HOME, network).
-//   node lib/adapter-test.mjs --update   rewrites the golden snapshots (after a deliberate change)
+//   node lib/adapter-test.ts --update   rewrites the golden snapshots (after a deliberate change)
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as codegraph from './subjects/codegraph.mjs';
-import * as cgr from './subjects/code-graph-rag.mjs';
-import { validateSnapshot } from './snapshot.mjs';
+import * as codegraph from './subjects/codegraph.ts';
+import * as cgr from './subjects/code-graph-rag.ts';
+import { validateSnapshot } from './snapshot.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const update = process.argv.includes('--update');
@@ -21,7 +21,7 @@ const check = (name, fn) => { n++; try { fn(); } catch (e) { console.error(`FAIL
 
 // Fields that name the adapter build or the machine, not the mapping.
 const normalize = (s) => JSON.parse(JSON.stringify({ ...s, subject: { ...s.subject, adapterSha256: '<hash>', version: '<version>' } }));
-for (const [name, adapter] of /** @type {const} */ ([['codegraph', codegraph], ['code-graph-rag', cgr]])) {
+for (const [name, adapter] of [['codegraph', codegraph], ['code-graph-rag', cgr]] as const) {
   const dir = path.join(here, 'test', 'adapters', name);
   const golden = path.join(here, 'test', 'adapters', `${name}.snapshot.json`);
   check(`${name}: snapshot of the frozen index matches the golden snapshot`, () => {

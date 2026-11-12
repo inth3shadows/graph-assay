@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command setup: the oracle's SCIP tools and a build of each subject, where lib/config.mjs looks.
+# One-command setup: the oracle's SCIP tools and a build of each subject, where lib/config.ts looks.
 # Usage: tools/setup.sh [--codegraph <commit>] [--no-codegraph] [--no-cgr] [--no-scip] [--unlocked] [--dry-run]
 #   --codegraph  codegraph commit to build (default: the Docker reproduction's pin)
 #   --no-*       skip that part; --dry-run prints the steps and changes nothing
@@ -21,12 +21,12 @@ while [ $# -gt 0 ]; do
     *) sed -n '3,7p' "$0"; exit 2;;
   esac
 done
-subjects=$(node "$qa/lib/config.mjs" subjects)
+subjects=$(node "$qa/lib/config.ts" subjects)
 step() { echo "setup: $*"; }
 run() { if [ "$dry" = 1 ]; then echo "  would run: $*"; else "$@"; fi; }
 
 if [ "$do_scip" = 1 ]; then
-  step "SCIP tools -> $(node "$qa/lib/config.mjs" tools)"
+  step "SCIP tools -> $(node "$qa/lib/config.ts" tools)"
   run "$qa/tools/setup-oracle-tools.sh"
 fi
 if [ "$do_cg" = 1 ]; then

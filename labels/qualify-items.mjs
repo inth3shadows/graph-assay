@@ -12,9 +12,9 @@ import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { chainMatch, definedNames } from '../lib/expect.mjs';
-import { copySeed } from '../lib/fixture-install.mjs';
-import * as codegraph from '../lib/subjects/codegraph.mjs';
+import { chainMatch, definedNames } from '../lib/expect.ts';
+import { copySeed } from '../lib/fixture-install.ts';
+import * as codegraph from '../lib/subjects/codegraph.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.join(qa, 'fixtures/oracle-candidates');

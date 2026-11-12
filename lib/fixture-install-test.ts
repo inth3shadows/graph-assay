@@ -7,8 +7,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { copyFixture } from './fixture.mjs';
-import { copySeed, placeFixtureInstall, FIXTURE_INSTALL } from './fixture-install.mjs';
+import { copyFixture } from './fixture.ts';
+import { copySeed, placeFixtureInstall, FIXTURE_INSTALL } from './fixture-install.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-install-'));
@@ -58,10 +58,10 @@ try {
 
   // No script copies a tree with fs.cpSync except these: every other copy goes through copySeed.
   const exempt = {
-    'lib/fixture-install.mjs': 'copySeed itself',
-    'lib/fixture.mjs': 'copyFixture, which places the install',
+    'lib/fixture-install.ts': 'copySeed itself',
+    'lib/fixture.ts': 'copyFixture, which places the install',
     'labels/questions.mjs': "the labeller's copy, which hides installs as labels/protocol.json says",
-    'lib/conformance.mjs': "conformance's own sources, not fixtures",
+    'lib/conformance.ts': "conformance's own sources, not fixtures",
     'benchmarks/pycg.mjs': 'PyCG snippets, not fixtures',
     'oracle/test/run.mjs': 'oracle self-test cases, not fixtures',
     'oracle/test/regen.mjs': 'oracle self-test cases, not fixtures',
@@ -71,13 +71,13 @@ try {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
       if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if (e.name.endsWith('.mjs') && !e.name.endsWith('-test.mjs') && e.name !== 'test.mjs') scripts.push(rel);
+      if (e.isDirectory()) visit(rel); else if (/\.(mjs|ts)$/.test(e.name) && !/-test\.(mjs|ts)$/.test(e.name) && e.name !== 'test.mjs') scripts.push(rel);
     }
   };
   visit('');
   for (const rel of scripts) {
     if (!/\bcpSync\s*\(/.test(fs.readFileSync(path.join(qa, rel), 'utf8'))) continue;
-    n++; assert.ok(rel in exempt, `${rel} copies with fs.cpSync: use copySeed (lib/fixture-install.mjs) so a fixture's install is placed`);
+    n++; assert.ok(rel in exempt, `${rel} copies with fs.cpSync: use copySeed (lib/fixture-install.ts) so a fixture's install is placed`);
   }
   n++; assert.match(fs.readFileSync(path.join(qa, 'labels/questions.mjs'), 'utf8'), /HIDE = new Set\([^)]*FIXTURE_INSTALL/, "labels must hide a fixture's install");
 } finally {

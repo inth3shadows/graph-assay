@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "graph-assay/snapshot@1",
   "title": "Code-graph snapshot v1",
-  "description": "What a subject tool's index holds, in a tool-neutral shape: every scorer reads this, never a tool's own store. Lines are 1-based. See SPEC.md §2 for coordinates. Validated by lib/snapshot.mjs (validateSnapshot), which implements these constraints without a schema library.",
+  "description": "What a subject tool's index holds, in a tool-neutral shape: every scorer reads this, never a tool's own store. Lines are 1-based. See SPEC.md §2 for coordinates. Validated by lib/snapshot.ts (validateSnapshot), which implements these constraints without a schema library.",
   "type": "object",
   "required": ["schema", "subject", "capabilities", "files", "nodes", "edges", "unresolved"],
   "properties": {

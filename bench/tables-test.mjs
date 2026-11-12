@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { readRepos } from '../differential/builds.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { SPEC_VERSION } from '../lib/spec.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-tables-'));

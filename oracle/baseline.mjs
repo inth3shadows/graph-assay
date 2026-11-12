@@ -15,8 +15,8 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { gate } from '../lib/scores.mjs';
-import { recordedAdapterHash } from '../lib/provenance.mjs';
+import { gate } from '../lib/scores.ts';
+import { recordedAdapterHash } from '../lib/provenance.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 const [a, b] = args;

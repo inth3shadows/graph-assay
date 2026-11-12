@@ -11,7 +11,7 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { isMain } from '../lib/main.mjs';
+import { isMain } from '../lib/main.ts';
 
 export const TS_JS = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 /** Where the covering project goes: the repo root, under a name no repo uses. */

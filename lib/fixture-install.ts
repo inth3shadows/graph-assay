@@ -9,10 +9,10 @@ import * as path from 'node:path';
  */
 export const FIXTURE_INSTALL = 'node_modules.fixture';
 
-export const isFixture = (dir) => fs.existsSync(path.join(dir, 'expect.json'));
+export const isFixture = (dir: string): boolean => fs.existsSync(path.join(dir, 'expect.json'));
 
 /** Rename `<dir>/node_modules.fixture` to `<dir>/node_modules`. Only call it on a copy of a fixture. */
-export function placeFixtureInstall(dir) {
+export function placeFixtureInstall(dir: string): void {
   const from = path.join(dir, FIXTURE_INSTALL);
   if (!fs.existsSync(from)) return;
   const to = path.join(dir, 'node_modules');
@@ -24,11 +24,9 @@ export function placeFixtureInstall(dir) {
  * Every script that copies a fixture or a seed for a subject to index copies it with this. A fixture
  * loses any stray `node_modules/` of its own (an `npm i` run in it, a checkout from before installs
  * were renamed) and gets its install in place.
- * @param {string} src
- * @param {string} dst
- * @param {(p: string) => boolean} [filter] keeps a path when true, as fs.cpSync's filter
+ * `filter` keeps a path when true, as fs.cpSync's filter.
  */
-export function copySeed(src, dst, filter = () => true) {
+export function copySeed(src: string, dst: string, filter: (p: string) => boolean = () => true): void {
   // cpSync copies a linked root as the link, and placing the install in that "copy" would rename inside
   // the source. Refuse it, as copyFixture refuses any link: pass the tree's real path.
   if (fs.lstatSync(src).isSymbolicLink()) throw new Error(`${src} is a symlink; pass the directory it names (${fs.readlinkSync(src)})`);

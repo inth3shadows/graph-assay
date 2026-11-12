@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import { LABELLERS } from './labellers.mjs';
 import { correct, question } from './questions.mjs';
 import { wilson } from './score.mjs';
-import { isMain } from '../lib/main.mjs';
+import { isMain } from '../lib/main.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PROTOCOL = path.join(qa, 'labels', 'protocol.json');

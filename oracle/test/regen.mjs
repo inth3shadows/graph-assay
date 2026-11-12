@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Rebuild an oracle self-test case's frozen inputs from its sources: snapshot.json (a fresh
-// codegraph index, exported by lib/subjects/codegraph.mjs) and index.scip.json (scip-python /
+// codegraph index, exported by lib/subjects/codegraph.ts) and index.scip.json (scip-python /
 // scip-typescript, decoded). Run it after editing a case's sources, then re-check the case's
 // expectations with run.mjs --dump.
 //
@@ -13,10 +13,10 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { config } from '../../lib/config.mjs';
-import { loadScip } from '../../lib/scip.mjs';
-import { writeSnapshot } from '../../lib/snapshot.mjs';
-import { subject } from '../../lib/subjects/index.mjs';
+import { config } from '../../lib/config.ts';
+import { loadScip } from '../../lib/scip.ts';
+import { writeSnapshot } from '../../lib/snapshot.ts';
+import { subject } from '../../lib/subjects/index.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [build, ...only] = process.argv.slice(2);

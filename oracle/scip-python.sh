@@ -7,7 +7,7 @@
 set -euo pipefail
 repo=$(cd "$1" && pwd)
 out=$2
-tools=$(node "$(cd "$(dirname "$0")/.." && pwd)/lib/config.mjs" tools)
+tools=$(node "$(cd "$(dirname "$0")/.." && pwd)/lib/config.ts" tools)
 work=$(mktemp -d -p "${TMPDIR:-/tmp}" scip-py.XXXXXX)
 trap 'rm -rf "${work:?}"' EXIT
 (cd "$repo" && git ls-files -z) | rsync -a --from0 --files-from=- "$repo/" "$work/"

@@ -1,5 +1,5 @@
 // T3 seed-run evidence is separate from accuracy. Errors stay in the eligible denominator.
-import { recordedAdapterHash } from '../lib/provenance.mjs';
+import { recordedAdapterHash } from '../lib/provenance.ts';
 
 export const T3_RELATIONS = ['decoy', 'shift', 'repeat'];
 const empty = () => ({ total: 0, clean: 0, changed: 0, errors: 0, notApplicable: 0, unverified: 0, eligible: 0,

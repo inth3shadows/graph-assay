@@ -11,12 +11,12 @@
 // FAILED. Exit 0 = all SAME, 1 = anything else, 2 = usage.
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { copySeed } from '../lib/fixture-install.mjs';
+import { adapterHash } from '../lib/provenance.ts';
+import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as codegraph from '../lib/subjects/codegraph.mjs';
-import { isMain } from '../lib/main.mjs';
+import * as codegraph from '../lib/subjects/codegraph.ts';
+import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const qa = path.join(here, '..');

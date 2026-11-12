@@ -7,8 +7,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scoreFixture } from './fixture.mjs';
-import { gate } from './scores.mjs';
+import { scoreFixture } from './fixture.ts';
+import { gate } from './scores.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let n = 0;
@@ -20,8 +20,8 @@ try {
   check('a CLI runs from a checkout path with a space in it', () => {
     const dir = path.join(tmp, 'path with space', 'lib');
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['config.mjs', 'main.mjs']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
-    const r = run(process.execPath, [path.join(dir, 'config.mjs'), 'tools']);
+    for (const f of ['config.ts', 'main.ts']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
+    const r = run(process.execPath, [path.join(dir, 'config.ts'), 'tools']);
     assert.equal(r.status, 0, r.stderr); assert.notEqual(r.stdout.trim(), '', 'the main guard did not fire');
   });
 

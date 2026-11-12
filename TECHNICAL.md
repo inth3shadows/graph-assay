@@ -19,14 +19,14 @@ The differentials follow the same shape without a compiler: one tool's graph aga
 The rule throughout is that a tool is never scored against itself, only compared with itself.
 
 Design decisions:
-- **Scorers read snapshots, never a tool's store.** `lib/subjects/codegraph.mjs` is the only code
+- **Scorers read snapshots, never a tool's store.** `lib/subjects/codegraph.ts` is the only code
   that knows codegraph's SQLite schema: it indexes in a sandboxed HOME and exports a snapshot v1
   (nodes, files, edges with site line/column and the reference as written, unresolved references,
   capabilities). A second tool needs one more adapter, not changes to the scorers:
-  `lib/subjects/code-graph-rag.mjs` is that adapter for code-graph-rag 0.5.0 (`cgr start
+  `lib/subjects/code-graph-rag.ts` is that adapter for code-graph-rag 0.5.0 (`cgr start
   --update-graph -o`, offline under `unshare -rn`, sandboxed HOME; its `exact` / `heuristic` /
   `overload` resolution becomes `resolvedBy`, and anything but `exact` becomes provenance; Module
-  nodes become file nodes; nodes without a path in the repo are dropped). `lib/subjects/index.mjs`
+  nodes become file nodes; nodes without a path in the repo are dropped). `lib/subjects/index.ts`
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
   faithfully (counts, site lines, endpoints) and reports how the subject handles the awkward cases;
@@ -44,19 +44,19 @@ Design decisions:
 
 ## Adding a subject
 
-A tool under test is one module in `lib/subjects/`, registered in `lib/subjects/index.mjs`. It exports:
+A tool under test is one module in `lib/subjects/`, registered in `lib/subjects/index.ts`. It exports:
 
 | Export | Contract |
 |---|---|
 | `name` | The subject name scorers take with `--subject` |
 | `defaultBuild()` | The build used when a command is given `default` (a path under the configured `subjects` dir) |
 | `index(dir, build, opts)` | Index `dir` in a sandbox (temp HOME, no network where the tool allows it); returns `{ok, status, signal, output, stdout, ms}` |
-| `snapshot(dir, {build})` | Export the graph as snapshot v1 (`schema/snapshot.v1.json`): nodes, files, edges with the call site's line and column and the reference as written, unresolved references, capabilities. Guessed edges carry `provenance` (SPEC §4) |
+| `snapshot(dir, {build})` | Export the graph as snapshot v1 (`schema/snapshot.v1.json`, typed as `Snapshot` in `lib/types.ts`): nodes, files, edges with the call site's line and column and the reference as written, unresolved references, capabilities. Guessed edges carry `provenance` (SPEC §4) |
 | `version(build)` | The tool's version string, recorded in every manifest |
 
 Then replay the fixtures with `--subject <name>`, run the oracle with `CGQA_SUBJECT=<name>`, and check
-that the adapter's hash appears in results (`lib/provenance.mjs`). The adapter conformance check
-(`lib/conformance.mjs`) is written against the codegraph adapter only; a new subject needs its own
+that the adapter's hash appears in results (`lib/provenance.ts`). The adapter conformance check
+(`lib/conformance.ts`) is written against the codegraph adapter only; a new subject needs its own
 counts-and-sites comparison there.
 
 ## File Descriptions
@@ -67,17 +67,18 @@ counts-and-sites comparison there.
 | `oracle/scip-python.sh` | Indexes a Python repo with scip-python (see above). Needs `--project-version`, without which scip-python crashes on some modules. |
 | `oracle/oracle.mjs` (`ORACLE_MODE=missing`) | The inverse check: every SCIP reference at a call site (`name(`, `new name`) to a project symbol needs a `calls`/`instantiates` edge from that line to a node holding the definition. Buckets are `missing\|cause\|language\|SCIP kind[@decl][>target node kind]`; see "Missing-edge causes". |
 | `oracle/site.mjs` (`graph-assay site`) | `<name \| work dir> <file:line> [called name] [--subject s\|all] [--no-scip]`: one call site from a finished work dir (`ORACLE_ALLSITES=1`), per subject: the forward and missing records with each bucket's meaning (`MEANING`), the subject's `calls`/`instantiates` edges on the line, SCIP's definition(s) with their source lines (from the cached index), the skip counts when there is no record, and the `run.sh` command that re-runs the repo. Runs nothing. `oracle/site-test.mjs` pins the core (part of `graph-assay check`). |
-| `package.json`, `package-lock.json`, `tsconfig.json` | Development tooling only (the runtime has no npm dependencies): `typescript` and `@types/node`, pinned exactly. `tsconfig.json` type-checks `lib/**/*.mjs` as JavaScript (`allowJs` + `checkJs`, `noEmit`, not yet `strict`); `graph-assay check` runs it through `lib/typecheck.mjs` and fails when `node_modules` is missing or does not match the lockfile. Not part of the Docker context. First step of the TypeScript migration (#14). |
-| `lib/typecheck.mjs`, `lib/typecheck-test.mjs` | The type check `check` runs last: refuses a missing or stale install (versions against `package-lock.json`), runs `tsc -p . --noEmit` and prints every diagnostic, then one verdict line (type and config errors counted apart; a failure with no diagnostics, or a run cut short, says so). `npm run typecheck` runs it alone, guards included. |
-| `lib/main.mjs` | `isMain(import.meta.url)`: the main-module check every CLI uses, robust to spaces, `%` and symlinks in the checkout path. |
-| `lib/adapter-test.mjs`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB and a code-graph-rag export of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus a sandbox probe: an index process sees no caller variables, a private HOME and, where `unshare` works, no network interface. |
-| `lib/snapshot-test.mjs`, `benchmarks/pycg-test.mjs` | The validator enforces every field the snapshot schema requires (mutation: delete each, expect a problem); the PyCG scorer against fabricated snippets and a stub subject (hits, guess-only, extras, failed index). |
-| `lib/cli-test.mjs`, `metamorphic/relations-test.mjs`, `labels/data-scan-test.mjs` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs`. |
+| `package.json`, `package-lock.json`, `tsconfig.json` | Development tooling only (the runtime has no npm dependencies): `typescript` and `@types/node`, pinned exactly. `tsconfig.json` type-checks `lib/**/*.ts` (`noEmit`, not yet `strict`; `erasableSyntaxOnly`, so nothing Node's type stripping cannot run, such as `enum`; `verbatimModuleSyntax`, so type-only imports say `import type`). `graph-assay check` runs it through `lib/typecheck.ts` and fails when `node_modules` is missing or does not match the lockfile. Not part of the Docker context. `lib/` runs as TypeScript with no build step: Node strips the types (#14). |
+| `lib/types.ts`, `lib/package.json` | The snapshot and expectation contracts (`schema/snapshot.v1.json`, `schema/expect.v1.json`) as TypeScript types, written once; `lib/snapshot.ts`, `lib/expect.ts` and both adapters import them, and the validators check the same shapes at runtime. `lib/package.json` marks `lib/` as ES modules for Node and tsc, scoped to `lib/` so `.js` test sources elsewhere keep their module type. |
+| `lib/typecheck.ts`, `lib/typecheck-test.ts` | The type check `check` runs last: refuses a missing or stale install (versions against `package-lock.json`), runs `tsc -p . --noEmit` and prints every diagnostic, then one verdict line (type and config errors counted apart; a failure with no diagnostics, or a run cut short, says so). `npm run typecheck` runs it alone, guards included. |
+| `lib/main.ts` | `isMain(import.meta.url)`: the main-module check every CLI uses, robust to spaces, `%` and symlinks in the checkout path. |
+| `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB and a code-graph-rag export of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus a sandbox probe: an index process sees no caller variables, a private HOME and, where `unshare` works, no network interface. |
+| `lib/snapshot-test.ts`, `benchmarks/pycg-test.mjs` | The validator enforces every field the snapshot schema requires (mutation: delete each, expect a problem); the PyCG scorer against fabricated snippets and a stub subject (hits, guess-only, extras, failed index). |
+| `lib/cli-test.ts`, `metamorphic/relations-test.mjs`, `labels/data-scan-test.mjs` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and `*-test.ts`. |
 | `oracle/baseline.mjs` | `save` collects one build's results (oracle forward + missing buckets and group signatures per repo, fixture verdicts, PyCG, metamorphic) into `baseline.json`; `diff` prints every change and an effect-size verdict (SPEC §9). `--fail-on-regression` exits 1 for regression, 2 on diff errors; `--fail-on-incomplete` also exits 1 when something measured on the old build errored or is missing on the new one (`incomplete` in the gate result); `--json gate.json` saves the gate result. |
-| `lib/scores.mjs`, `lib/scores-test.mjs` | Shared T2 bucket counts and pure `gate(old, next)`; hermetic threshold and baseline CLI tests in `graph-assay check`. |
-| `lib/provenance.mjs` | `adapterHash` hashes adapter/shared implementation bytes without Git or installation paths. `recordedAdapterHash` preserves legacy unknown provenance. Snapshots, measurement JSON and manifests carry `adapterSha256`; baseline/table inputs retain their original hashes. |
-| `lib/fixture-install.mjs`, `lib/fixture-install-test.mjs` | A fixture whose bug depends on installed packages commits them as `node_modules.fixture/` at its root (no ignore file or copy filter drops that name). `copySeed` is how every script copies a fixture or seed for a subject to index: for a fixture (a dir holding `expect.json`) it skips a stray `node_modules/` and renames `node_modules.fixture/` to `node_modules/`; any other tree is copied as it is. The labeller's copy (`labels/questions.mjs`) hides both, as `labels/protocol.json` says. The test fails if a script copies with `fs.cpSync` outside a short exempt list. |
-| `lib/fixture.mjs`, `lib/anti-gaming-test.mjs` | Isolated source copies, unchanged fixture scoring and marker-leak detection. Replay `--canary` repeats under an anonymous directory with appended marker comments; `canaries` records PASS/FAIL/ERROR separately. Hermetic hash, isolation, CLI and propagation checks run in `graph-assay check` (SPEC §11). |
+| `lib/scores.ts`, `lib/scores-test.ts` | Shared T2 bucket counts and pure `gate(old, next)`; hermetic threshold and baseline CLI tests in `graph-assay check`. |
+| `lib/provenance.ts` | `adapterHash` hashes adapter/shared implementation bytes without Git or installation paths. `recordedAdapterHash` preserves legacy unknown provenance. Snapshots, measurement JSON and manifests carry `adapterSha256`; baseline/table inputs retain their original hashes. |
+| `lib/fixture-install.ts`, `lib/fixture-install-test.ts` | A fixture whose bug depends on installed packages commits them as `node_modules.fixture/` at its root (no ignore file or copy filter drops that name). `copySeed` is how every script copies a fixture or seed for a subject to index: for a fixture (a dir holding `expect.json`) it skips a stray `node_modules/` and renames `node_modules.fixture/` to `node_modules/`; any other tree is copied as it is. The labeller's copy (`labels/questions.mjs`) hides both, as `labels/protocol.json` says. The test fails if a script copies with `fs.cpSync` outside a short exempt list. |
+| `lib/fixture.ts`, `lib/anti-gaming-test.ts` | Isolated source copies, unchanged fixture scoring and marker-leak detection. Replay `--canary` repeats under an anonymous directory with appended marker comments; `canaries` records PASS/FAIL/ERROR separately. Hermetic hash, isolation, CLI and propagation checks run in `graph-assay check` (SPEC §11). |
 | `oracle/test/run.mjs` | Oracle self-tests: each case under `oracle/test/` holds sources, `case.json` (per-site expected bucket, or `absent` for a skipped site; `pairs` / `pairCounts` for the function-pair track) and frozen inputs (`snapshot.json` = the subject's graph as snapshot v1, `index.scip.json` = decoded SCIP), so the tests pin the oracle rather than codegraph's current behavior. `--mutate` disables each `on('<rule>')` in `oracle.mjs` in turn and fails if any rule's removal breaks no test; `--dump` prints every site's bucket. `ORACLE_DISABLE` and `ORACLE_ALLSITES=1` are the oracle switches it uses. |
 | `oracle/ts-cover.mjs` | Writes the TS/JS oracle's covering project for a repo with a root `tsconfig.json`: it sits at the repo root (so the repo's `types` resolve), extends that tsconfig and lists every tracked TS/JS file, so the oracle indexes test folders the repo's include leaves out (SPEC §7). `oracle/ts-cover-test.mjs` pins it. |
 | `oracle/test/regen.mjs` | Rebuilds a case's `snapshot.json` and `index.scip.json` from its sources with a given codegraph build and the SCIP tools. Run it after editing a case, then re-check the expectations. |
@@ -228,7 +229,7 @@ None. Everything runs locally; code-graph-rag indexes with the network unshared.
 
 | Variable | Read by | Purpose | Default |
 |---|---|---|---|
-| (all paths) | `lib/config.mjs` | Every path below resolves there: environment variable, then `~/.config/graph-assay/config.json` (same key names as `bin/graph-assay config` prints), then the defaults below | |
+| (all paths) | `lib/config.ts` | Every path below resolves there: environment variable, then `~/.config/graph-assay/config.json` (same key names as `bin/graph-assay config` prints), then the defaults below | |
 | `CGQA_SUBJECT` | `oracle/run.sh` | Subject to index with (`code-graph-rag` uses work dir `w-<name>-code-graph-rag` and hands the oracle a snapshot; SCIP indexes are shared) | `codegraph` |
 | `ORACLE_SNAPSHOT` | `oracle/oracle.mjs` | Read the subject's graph from this snapshot file instead of exporting one from `<repo>/.codegraph` | unset |
 | `ORACLE_ALLSITES=1` | `oracle/oracle.mjs` | List every compared site, with its bucket and target, in `out.json` (`run.sh` sets it; baselines keep them) | unset |
@@ -267,7 +268,7 @@ supplies the adapter's existing `unshare` isolation.
 | Debian additions | `20251118T000000Z`, bookworm/main | [Debian snapshot](https://snapshot.debian.org/archive/debian/20251118T000000Z/) freezes the apt index and complete dependency resolution; other OS files are fixed by image digests. |
 | scip-python / scip-typescript | `0.6.8` / `0.5.2` | Versions and transitive tree from the machine's existing oracle npm lock; `docker/package-lock.json` retains registry integrity hashes, with exact root versions in `docker/package.json`. Installed with `npm ci --ignore-scripts`. |
 | scip-go | `0.2.8`; archive SHA256 `22d6d55b85341c650e92fc278a62cc4c57dc5800c386e199c2b999f8605dd32a` | Existing benchmark version; checksum from the [public release asset API](https://api.github.com/repos/scip-code/scip-go/releases/tags/v0.2.8), verified before extraction. |
-| SCIP decoder | `0.10.0`; archive SHA256 `eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0` | Existing machine's `scip --version`; checksum from the [public release asset API](https://api.github.com/repos/scip-code/scip/releases/tags/v0.10.0). Required by `lib/scip.mjs` for `scip print --json`. |
+| SCIP decoder | `0.10.0`; archive SHA256 `eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0` | Existing machine's `scip --version`; checksum from the [public release asset API](https://api.github.com/repos/scip-code/scip/releases/tags/v0.10.0). Required by `lib/scip.ts` for `scip print --json`. |
 | codegraph | upstream commit `f72c9d2efb14454ff4f9fd7b8460abd82f19a287` | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph/commit/f72c9d2efb14454ff4f9fd7b8460abd82f19a287), CI's known build pair. `npm ci` uses that commit's lock, then `npm run build`; WASM extraction (`CODEGRAPH_KERNEL=0`). |
 | code-graph-rag | `0.5.0`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.5.0/), matching SPEC's subject spike. `docker/requirements.lock` freezes the existing benchmark venv's transitive versions and PyPI wheel SHA256s (pip report, CPython 3.12/amd64). `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
 | Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's upstream has no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata). Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Other dev entries need no setup. |
@@ -314,10 +315,10 @@ policy blocks; hence `seccomp=unconfined`. No host credentials or Docker socket 
 
 ## Maintenance Commands
 
-- Type check: `npm ci --ignore-scripts` once per checkout (dev dependencies only), then `node bin/graph-assay check` includes `tsc -p .` over `lib/`; `npm run typecheck` runs it alone. Keep `lib/` at zero errors; fix with JSDoc annotations that leave runtime behaviour unchanged.
+- Type check: `npm ci --ignore-scripts` once per checkout (dev dependencies only), then `node bin/graph-assay check` includes `tsc -p .` over `lib/`; `npm run typecheck` runs it alone. Keep `lib/` at zero errors; fix with TypeScript annotations that leave runtime behaviour unchanged (erasable syntax only: Node strips the types, it does not compile them). `node --check` parses a `.ts` file as plain JavaScript, so `check` syntax-checks `.mjs` files with it and leaves `lib/**/*.ts` to tsc.
 - Oracle on every repo in a targets file (copy `oracle/targets.example.txt` to `oracle/targets.txt`; clone, subject index, cached SCIP index, oracle):
   `CODEGRAPH_BUILD=<codegraph.js> oracle/run-all.sh [targets file]`; one repo: `oracle/run.sh <name> <src> <ts|python|go|jvm> [ts project dirs...]`. `go` runs scip-go at the repo root (needs `go.mod` there and `go` on PATH); `jvm` runs `oracle/scip-java.sh`, which builds the project with Maven/Gradle inside Docker.
-- Filed-bug fixtures against a build: `node fixtures/replay.mjs <codegraph.js>`; another subject: `node fixtures/replay.mjs --subject code-graph-rag default` (`default` = the subject's configured build). Endpoints match tool-neutrally (`lib/expect.mjs` `present`): same last name, and container chains equal after dropping, from the longer one, leading segments that name no definition in that file (so `p::App::run` matches `App::run`, but `a::helper` never matches a top-level `helper`). `GUESSED` = a wrong edge is present only as edges the subject marks guessed (SPEC §4).
+- Filed-bug fixtures against a build: `node fixtures/replay.mjs <codegraph.js>`; another subject: `node fixtures/replay.mjs --subject code-graph-rag default` (`default` = the subject's configured build). Endpoints match tool-neutrally (`lib/expect.ts` `present`): same last name, and container chains equal after dropping, from the longer one, leading segments that name no definition in that file (so `p::App::run` matches `App::run`, but `a::helper` never matches a top-level `helper`). `GUESSED` = a wrong edge is present only as edges the subject marks guessed (SPEC §4).
   Add `CODEGRAPH_KERNEL=1` to replay on the native kernel.
   Add `--canary --json replay.json` to compare each fixture with an anonymous copy carrying fresh
   marker comments; exit nonzero on changed verdicts, graph-identifier leaks or index errors.
@@ -341,7 +342,7 @@ Indexing large repos is memory-hungry. Run one index at a time; `oracle/run.sh` 
   and `test-d/`, are compiled with the root config's options. A repo without a root tsconfig still
   needs its nested tsconfigs passed in, and project dirs given on the command line are indexed as given.
 - **f-string and template-literal calls often land in `no-scip-ref`,** because the columns don't line up.
-- **Adapter conformance covers codegraph only.** `lib/conformance.mjs` imports the codegraph adapter directly.
+- **Adapter conformance covers codegraph only.** `lib/conformance.ts` imports the codegraph adapter directly.
 - **`scip-java` builds the project.** That runs the project's own build plugins, so it only runs inside
   the pinned container.
 
@@ -411,7 +412,7 @@ identical (P1b), so the floor controls materiality rather than sampling noise. T
 keeps a small repo's break visible when large repos dominate micro averages; three sites suppress
 single-site per-repo alerts. The micro rule catches smaller shifts spread across repos. Inputs
 are assumed pinned as in the upstream loop; full corpus/scorer identity gating and peer-subject
-gating are deferred. `lib/scores-test.mjs` pins the boundaries and CLI behavior in `graph-assay check`.
+gating are deferred. `lib/scores-test.ts` pins the boundaries and CLI behavior in `graph-assay check`.
 
 ### Oracle-noise labelling and history
 
@@ -443,7 +444,7 @@ says little about SCIP on wrong-target sites. Python 89%, Go 92%, TypeScript 86%
 ### Adapter provenance, canonical runs and determinism
 
 **Adapter provenance:** fresh snapshots record `subject.adapterSha256`; fixture, PyCG, metamorphic,
-oracle and differential JSON results record `adapterSha256`. `lib/provenance.mjs` hashes the subject
+oracle and differential JSON results record `adapterSha256`. `lib/provenance.ts` hashes the subject
 adapter and shared registry, configuration implementation, snapshot implementation/schema and hash
 helper, using relative paths and file bytes. The hash is independent of installation path and Git
 metadata; a local edit changes it. It identifies adapter code, not the subject build or runtime
@@ -523,8 +524,8 @@ ORACLE_LANG -> oracle/oracle.mjs
 ORACLE_SCIP_CACHE -> oracle/run.sh
 ORACLE_SHOW -> oracle/oracle.mjs
 ORACLE_TARGETS -> differential/shadow.mjs
-SCIP_BIN -> lib/config.mjs
-adapterSha256 -> lib/provenance.mjs
+SCIP_BIN -> lib/config.ts
+adapterSha256 -> lib/provenance.ts
 challengeSha256 -> metamorphic/relations.mjs
 outside-scip -> oracle/oracle.mjs
 receiver-fallback -> oracle/oracle.mjs

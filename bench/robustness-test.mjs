@@ -8,8 +8,8 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.mjs';
 import { applyRelation } from '../metamorphic/relations.mjs';
-import { ADAPTER_SHARED } from '../lib/provenance.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { ADAPTER_SHARED } from '../lib/provenance.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-t3-'));
@@ -82,10 +82,10 @@ try {
 
   // The actual runner sees deliberately different subject graphs; challenge files must still match.
   const fake=path.join(tmp,'qa');
-  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.mjs','lib/subjects/code-graph-rag.mjs','differential/modes.mjs','metamorphic/run.mjs','metamorphic/relations.mjs','lib/spec.mjs','lib/fixture-install.mjs'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
+  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.ts','lib/subjects/code-graph-rag.ts','differential/modes.mjs','metamorphic/run.mjs','metamorphic/relations.mjs','lib/spec.ts','lib/fixture-install.ts'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
   const fixture=path.join(fake,'fixtures/oracle-candidates/shared');fs.cpSync(seed,fixture,{recursive:true});write(path.join(fixture,'expect.json'),{secret:'EVALUATOR_ONLY'});
   const trace=path.join(tmp,'trace.jsonl');
-  write(path.join(fake,'lib/subjects/index.mjs'),`import * as fs from 'node:fs';import * as path from 'node:path';
+  write(path.join(fake,'lib/subjects/index.ts'),`import * as fs from 'node:fs';import * as path from 'node:path';
 export const buildFor=(s,b)=>b;
 export const subject=(name)=>({name,
  index(dir){if(fs.existsSync(path.join(dir,'expect.json')))throw Error('answers leaked');
@@ -99,7 +99,7 @@ export const subject=(name)=>({name,
  if(dir.endsWith('-repeat')){if(process.env.CGQA_T3_MODE==='reorder'){s.nodes.reverse();for(const n of s.nodes)n.id='x'+n.id;for(const e of s.edges){e.src='x'+e.src;e.dst='x'+e.dst;}}
  if(process.env.CGQA_T3_MODE==='changed')s.edges=[];}return s;}});\n`);
   const outA=path.join(tmp,'meta-cg.json');const outB=path.join(tmp,'meta-cgr.json');
-  const meta=(subject='codegraph',mode='stable',output=outA)=>run(path.join(fake,'metamorphic/run.mjs'),['--subject',subject,path.join(fake,'lib/subjects/codegraph.mjs'),'fixtures','--json',output],{CGQA_T3_TRACE:trace,CGQA_T3_MODE:mode});
+  const meta=(subject='codegraph',mode='stable',output=outA)=>run(path.join(fake,'metamorphic/run.mjs'),['--subject',subject,path.join(fake,'lib/subjects/codegraph.ts'),'fixtures','--json',output],{CGQA_T3_TRACE:trace,CGQA_T3_MODE:mode});
   check('actual runner shares challenges across subjects with different graphs and isolates expectations',()=>{
     let r=meta();assert.equal(r.status,0,r.stdout+r.stderr);r=meta('code-graph-rag','stable',outB);assert.equal(r.status,0,r.stdout+r.stderr);
     const a=read(outA),b=read(outB);assert.equal(a.length,3);assert.deepEqual(a.map(x=>x.challengeSha256),b.map(x=>x.challengeSha256));
