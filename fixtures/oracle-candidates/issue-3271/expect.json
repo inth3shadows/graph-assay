@@ -1,0 +1,1 @@
+{"issue": 3271, "wrong": [{"from": "entry", "kind": "calls", "to": "decoy.ts:useForm"}], "right": []}

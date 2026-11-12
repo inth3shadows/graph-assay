@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Fixtures `issue-3271` (an import of a package the manifest doesn't list but `node_modules` holds,
+  linked to an unrelated project export) and `issue-3271-copied-sibling` (its control: a sibling
+  package copied into `node_modules` keeps its edge). Both carry their own `node_modules`, which
+  `.gitignore` now lets these two fixtures commit.
+
 ## [0.1.0] - 2026-11-12
 
 First public release of graph-assay, previously developed privately as codegraph-qa.
