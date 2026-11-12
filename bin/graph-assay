@@ -78,7 +78,7 @@ if (cmd === 'check') {
     const r = spawnSync(c, a, { cwd: qa, encoding: 'utf8', env: { ...process.env, NODE_NO_WARNINGS: '1' } });
     // Only absolute arguments are paths; flags and plain words print as given.
     const label = `${c} ${a.map((x) => (path.isAbsolute(x) ? path.relative(qa, x) || x : x)).join(' ')}`;
-    if (r.status !== 0) { failed++; console.log(`FAIL  ${label}${r.error ? ` (${r.error.message})` : r.signal ? ` (killed by ${r.signal})` : ''}\n${tail(`${r.stdout ?? ''}${r.stderr ?? ''}`)}`); }
+    if (r.status !== 0) { failed++; console.log(`FAIL  ${label}${r.error ? ` (${r.error.message})` : r.signal ? ` (killed by ${r.signal})` : ''}\n${tail([r.stdout, r.stderr].map((s) => (s ?? '').trim()).filter(Boolean).join('\n'))}`); }
     else if (c === 'shellcheck') console.log(`ok    shellcheck: ${shells.length} scripts`);
     else if (!a.includes('--check') && c !== 'bash') console.log(`ok    ${label}: ${(r.stdout.trim().split('\n').pop() ?? '')}`);
   }
@@ -86,7 +86,9 @@ if (cmd === 'check') {
   // Imported here, not at the top: a broken lib/typecheck.mjs must not take down other commands.
   let tc;
   try { tc = (await import('../lib/typecheck.mjs')).typecheck(qa); } catch (e) {
-    tc = { ok: false, lines: [`FAIL  typecheck: lib/typecheck.mjs failed (${e?.message?.split('\n')[0] ?? e})`] };
+    // The message and the first stack frame: where it broke (lib/typecheck.mjs, or a module it imports).
+    const frame = String(e?.stack ?? '').split('\n').find((l) => /^\s+at /.test(l))?.trim();
+    tc = { ok: false, lines: [`FAIL  typecheck: crashed: ${String(e?.message ?? e).split('\n')[0]}${frame ? ` (${frame})` : ''}`] };
   }
   if (!tc.ok) failed++;
   console.log(tc.lines.join('\n'));
