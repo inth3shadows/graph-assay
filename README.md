@@ -3,8 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Node 22.13–24](https://img.shields.io/badge/node-22.13%E2%80%9324-339933.svg) [![ci](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml/badge.svg)](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml)
 
 Accuracy testing for the code graphs AI agents query. graph-assay finds wrong and missing edges in a
-code-graph tool by checking its graph against the compiler. Each finding becomes a minimal repro
-ready for an upstream issue, and tools are scored on a published spec ([SPEC.md](SPEC.md)).
+code-graph tool by checking its graph against the compiler, helps turn each confirmed finding into a
+minimal repro for an upstream issue (minimizing is a manual step today), and scores tools on a
+published spec ([SPEC.md](SPEC.md)).
 
 A code-graph tool (an MCP server or CLI that answers "who calls this?", "what breaks if I change
 this?") is only as good as its edges. A call linked to the wrong definition makes every answer
@@ -52,7 +53,7 @@ snapshots, so a new tool needs a new adapter, not new scorers.
 
 - Node 22.13 to 24 (the codegraph adapter uses `node:sqlite`; codegraph does not build on Node 25+) and `git`.
 - Python 3 for code-graph-rag (3.12 on x86_64 gets the hash-locked install), Go on PATH for Go repos,
-  Docker for `scip-java`. `graph-assay setup` installs the rest.
+  Docker for `scip-java`. `node bin/graph-assay setup` installs the rest.
 - Docker, for the pinned end-to-end reproduction (`Dockerfile`, `tools/repro.mjs`).
 
 ## Quick Start
@@ -68,7 +69,8 @@ deprecated alias).
    BROKEN, FIXED, GUESSED or CHANGED next to its upstream issue number.
 4. Run the oracle on any repo you have checked out:
    `node bin/graph-assay oracle <name> <path to repo> <ts|python|go|jvm>`. Add
-   `CGQA_SUBJECT=code-graph-rag` to measure the other tool.
+   `CGQA_SUBJECT=code-graph-rag` to measure the other tool (environment variables keep the prefix
+   from the project's old name, codegraph-qa).
 5. Rank what it found: `node bin/graph-assay triage`. To explain one call site, use
    `node bin/graph-assay site <name> <file:line>`.
 
