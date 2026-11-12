@@ -2,7 +2,7 @@
 // (what the hermetic self-tests freeze, so they need no scip binary).
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import { config } from './config.mjs';
+import { config } from './config.ts';
 
 export function loadScip(file) {
   if (file.endsWith('.json')) return JSON.parse(fs.readFileSync(file, 'utf8'));

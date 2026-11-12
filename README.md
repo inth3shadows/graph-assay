@@ -1,6 +1,6 @@
 # graph-assay
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Node 22.13–24](https://img.shields.io/badge/node-22.13%E2%80%9324-339933.svg) [![ci](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml/badge.svg)](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Node 22.18–24](https://img.shields.io/badge/node-22.18%E2%80%9324-339933.svg) [![ci](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml/badge.svg)](https://github.com/inth3shadows/graph-assay/actions/workflows/ci.yml)
 
 Accuracy testing for the code graphs AI agents query. graph-assay finds wrong and missing edges in a
 code-graph tool by checking its graph against the compiler, helps turn each confirmed finding into a
@@ -51,7 +51,7 @@ snapshots, so a new tool needs a new adapter, not new scorers.
 
 ## Prerequisites
 
-- Node 22.13 to 24 (the codegraph adapter uses `node:sqlite`; codegraph does not build on Node 25+) and `git`.
+- Node 22.18 to 24 (`lib/` is TypeScript run by Node's type stripping, unflagged from 22.18; the codegraph adapter uses `node:sqlite`; codegraph does not build on Node 25+) and `git`.
 - Python 3 for code-graph-rag (3.12 on x86_64 gets the hash-locked install), Go on PATH for Go repos,
   Docker for `scip-java`. `node bin/graph-assay setup` installs the rest.
 - Docker, for the pinned end-to-end reproduction (`Dockerfile`, `tools/repro.mjs`).
@@ -83,7 +83,7 @@ variable or `~/.config/graph-assay/config.json`.
 |---|---|
 | `bin/graph-assay` | The command-line entry point |
 | `SPEC.md` | Scoring semantics: units, tracks, equivalences, verdicts, failure policy |
-| `lib/` | Shared code: paths (`config.mjs`), the snapshot contract, one adapter per tool (`subjects/`), SCIP reading, fixture expectations, run manifests, adapter conformance |
+| `lib/` | Shared code: paths (`config.ts`), the snapshot contract, one adapter per tool (`subjects/`), SCIP reading, fixture expectations, run manifests, adapter conformance |
 | `schema/` | JSON Schemas for snapshots and fixture expectations |
 | `oracle/` | The compiler oracle, per-language SCIP wrappers, and self-tests with a mutation pass (`oracle/test/`) |
 | `fixtures/` | Bug repros: `oracle-candidates/` (codegraph), `cgr-candidates/` (code-graph-rag) |
@@ -105,5 +105,5 @@ variable or `~/.config/graph-assay/config.json`.
 CGQA_SUBJECT -> oracle/run.sh
 --dry-run -> tools/setup.sh
 cgr-candidates -> fixtures/replay.mjs
-node:sqlite -> lib/subjects/codegraph.mjs
+node:sqlite -> lib/subjects/codegraph.ts
 -->

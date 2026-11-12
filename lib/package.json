@@ -1,0 +1,4 @@
+{
+  "description": "Marks lib/*.ts as ES modules for Node type stripping and tsc; scoped here so .js test sources elsewhere keep their module type.",
+  "type": "module"
+}

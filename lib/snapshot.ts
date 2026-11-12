@@ -1,16 +1,26 @@
 // Snapshot v1 (schema/snapshot.v1.json): load, validate, and the joins scorers need.
 import * as fs from 'node:fs';
+import type { Snapshot } from './types.ts';
 
-export const SNAPSHOT_SCHEMA = 'graph-assay/snapshot@1';
+export const SNAPSHOT_SCHEMA: Snapshot['schema'] = 'graph-assay/snapshot@1';
 
-const isStr = (v) => typeof v === 'string';
-const isInt = (v) => Number.isInteger(v);
-const optStr = (v) => v === undefined || v === null || isStr(v);
-const optInt = (v) => v === undefined || v === null || isInt(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isInt = (v: unknown): v is number => Number.isInteger(v);
+const optStr = (v: unknown) => v === undefined || v === null || isStr(v);
+const optInt = (v: unknown) => v === undefined || v === null || isInt(v);
 
-/** Returns a list of problems (empty when valid). Checks what scorers rely on, not every nicety. */
-export function validateSnapshot(s) {
-  const p = [];
+/** One edge joined with its two nodes; see joinedEdges. */
+export interface JoinedEdge {
+  kind: string; line: number | null; col: number | null; ref: string | null; by: string | null; prov: string | null;
+  sfile: string; sname: string; slang: string | null; skind: string;
+  tkind: string; tname: string; tqname: string; tfile: string; tstart: number; tend: number;
+  ssimple: string; sstart: number; send: number;
+}
+
+/** Returns a list of problems (empty when valid). Checks what scorers rely on, not every nicety.
+ * `s` is untrusted input, so it is read as `any` and checked field by field. */
+export function validateSnapshot(s: any): string[] {
+  const p: string[] = [];
   if (!s || typeof s !== 'object') return ['not an object'];
   if (s.schema !== SNAPSHOT_SCHEMA) p.push(`schema is ${JSON.stringify(s.schema)}, expected ${SNAPSHOT_SCHEMA}`);
   if (!s.subject || !isStr(s.subject.name)) p.push('subject.name missing');
@@ -19,7 +29,7 @@ export function validateSnapshot(s) {
   for (const k of ['siteLines', 'siteColumns', 'unresolved', 'provenance']) if (typeof c[k] !== 'boolean') p.push(`capabilities.${k} not boolean`);
   for (const k of ['files', 'nodes', 'edges', 'unresolved']) if (!Array.isArray(s[k])) p.push(`${k} not an array`);
   if (p.length) return p;
-  const ids = new Set();
+  const ids = new Set<string>();
   s.nodes.forEach((n, i) => {
     if (!isStr(n.id) || !isStr(n.kind) || !isStr(n.name) || !isStr(n.file) || !isInt(n.start) || !isInt(n.end) || !optStr(n.qname)) p.push(`nodes[${i}] malformed`);
     else if (ids.has(n.id)) p.push(`nodes[${i}] duplicate id ${n.id}`);
@@ -37,14 +47,14 @@ export function validateSnapshot(s) {
   return p.slice(0, 20);
 }
 
-export function loadSnapshot(file) {
+export function loadSnapshot(file: string): Snapshot {
   const s = JSON.parse(fs.readFileSync(file, 'utf8'));
   const problems = validateSnapshot(s);
   if (problems.length) throw new Error(`invalid snapshot ${file}: ${problems.join('; ')}`);
   return s;
 }
 
-export function writeSnapshot(file, s) {
+export function writeSnapshot(file: string, s: Snapshot): void {
   const problems = validateSnapshot(s);
   if (problems.length) throw new Error(`refusing to write an invalid snapshot: ${problems.join('; ')}`);
   fs.writeFileSync(file, JSON.stringify(s));
@@ -55,7 +65,7 @@ export function writeSnapshot(file, s) {
  * {kind, line, col, ref, by, prov, sfile, sname (qname), slang, skind, tkind, tname, tqname, tfile, tstart, tend,
  * ssimple, sstart, send} (the source's own name and span, for identity that does not read names).
  */
-export function joinedEdges(s) {
+export function joinedEdges(s: Snapshot): JoinedEdge[] {
   const byId = new Map(s.nodes.map((n) => [n.id, n]));
   return s.edges.map((e) => {
     const a = byId.get(e.src); const b = byId.get(e.dst);

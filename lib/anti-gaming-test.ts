@@ -6,10 +6,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { adapterHash, ADAPTER_SHARED, recordedAdapterHash } from './provenance.mjs';
-import { copyFixture, markerLeaks, scoreFixture } from './fixture.mjs';
-import { validateSnapshot } from './snapshot.mjs';
-import { gate } from './scores.mjs';
+import { adapterHash, ADAPTER_SHARED, recordedAdapterHash } from './provenance.ts';
+import { copyFixture, markerLeaks, scoreFixture } from './fixture.ts';
+import { validateSnapshot } from './snapshot.ts';
+import { gate } from './scores.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-anti-gaming-'));
@@ -31,7 +31,7 @@ const edge = { from: 'main.js', kind: 'calls', to: 'main.js:f', toLine: 1 };
 const expect = { issue: 1, wrong: [], right: [edge] };
 try {
   const root = path.join(tmp, 'hash-root'); const moved = path.join(tmp, 'moved');
-  const files = [...ADAPTER_SHARED, 'lib/subjects/codegraph.mjs', 'lib/subjects/code-graph-rag.mjs'];
+  const files = [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/subjects/code-graph-rag.ts'];
   for (const file of files) write(path.join(root, file), fs.readFileSync(path.join(qa, file), 'utf8'));
   const cg = adapterHash('codegraph', root); const cgr = adapterHash('code-graph-rag', root);
   check('adapter hashes are deterministic, subject-specific and independent of install path/.git', () => {
@@ -40,7 +40,7 @@ try {
     assert.equal(cg, adapterHash('codegraph', moved)); assert.equal(cgr, adapterHash('code-graph-rag', moved));
   });
   check('editing one adapter invalidates its hash but not the peer', () => {
-    fs.appendFileSync(path.join(root, 'lib/subjects/codegraph.mjs'), '\n// edit\n');
+    fs.appendFileSync(path.join(root, 'lib/subjects/codegraph.ts'), '\n// edit\n');
     assert.notEqual(cg, adapterHash('codegraph', root)); assert.equal(cgr, adapterHash('code-graph-rag', root));
   });
   check('shared implementation/schema changes invalidate both adapters without a commit', () => {
@@ -50,7 +50,7 @@ try {
       for (const [i, name] of ['codegraph', 'code-graph-rag'].entries()) assert.notEqual(before[i], adapterHash(name, moved));
     }
     assert.throws(() => adapterHash('unknown', root), /unknown adapter/);
-    fs.unlinkSync(path.join(root, 'lib/config.mjs')); assert.throws(() => adapterHash('codegraph', root), /ENOENT/);
+    fs.unlinkSync(path.join(root, 'lib/config.ts')); assert.throws(() => adapterHash('codegraph', root), /ENOENT/);
   });
   check('snapshot contract accepts legacy and valid hashes, rejects malformed typed hashes', () => {
     assert.deepEqual(validateSnapshot(snap), []);
@@ -156,10 +156,10 @@ try {
 
   // Actual replay CLI with a stub subject; the stub refuses any indexed copy containing answers.
   const fake = path.join(tmp, 'qa');
-  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.mjs', 'lib/expect.mjs', 'lib/fixture.mjs', 'lib/fixture-install.mjs', 'lib/spec.mjs', 'fixtures/replay.mjs']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
+  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/expect.ts', 'lib/fixture.ts', 'lib/fixture-install.ts', 'lib/spec.ts', 'fixtures/replay.mjs']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
   const fixture = path.join(fake, 'fixtures/oracle-candidates/issue-canary');
   write(path.join(fixture, 'main.js'), 'export function f() {}\nf();\n'); write(path.join(fixture, 'expect.json'), expect);
-  write(path.join(fake, 'lib/subjects/index.mjs'), `import * as fs from 'node:fs'; import * as path from 'node:path';
+  write(path.join(fake, 'lib/subjects/index.ts'), `import * as fs from 'node:fs'; import * as path from 'node:path';
 const source = dir => fs.readFileSync(path.join(dir, 'main.js'), 'utf8');
 const isCanary = dir => /CGQA_CANARY_/.test(source(dir));
 const mode = process.env.CGQA_TEST_MODE;
@@ -174,7 +174,7 @@ export const subject = () => ({ name:'codegraph',
   return s; }
 });\n`);
   const result = path.join(tmp, 'replay.json');
-  const replay = (mode = 'stable', canary = true, names = []) => run(path.join(fake, 'fixtures/replay.mjs'), [path.join(fake, 'lib/subjects/codegraph.mjs'), ...names, '--json', result, ...(canary ? ['--canary'] : [])], { CGQA_TEST_MODE: mode });
+  const replay = (mode = 'stable', canary = true, names = []) => run(path.join(fake, 'fixtures/replay.mjs'), [path.join(fake, 'lib/subjects/codegraph.ts'), ...names, '--json', result, ...(canary ? ['--canary'] : [])], { CGQA_TEST_MODE: mode });
   check('replay CLI isolates answers, writes hash, and reports stable canary PASS', () => {
     const r = replay(); assert.equal(r.status, 0, r.stdout + r.stderr);
     const out = read(result); assert.match(out.adapterSha256, /^[a-f0-9]{64}$/); assert.equal(out.results[0].verdict, 'FIXED');

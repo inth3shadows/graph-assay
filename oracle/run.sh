@@ -10,11 +10,11 @@
 #
 # Env:
 #   CGQA_SUBJECT       subject to test: codegraph (default) or code-graph-rag; work dir w-<name>[-<subject>]
-#   CODEGRAPH_BUILD    codegraph.js to test   (default: lib/config.mjs codegraphBuild)
+#   CODEGRAPH_BUILD    codegraph.js to test   (default: lib/config.ts codegraphBuild)
 #   CGQA_BUILD         a non-codegraph subject's build (default: the subject's own)
 #   ORACLE_WORK        work dirs, w-<name>/   (default ${XDG_CACHE_HOME:-~/.cache}/graph-assay/oracle/work)
 #   ORACLE_SCIP_CACHE  cached .scip files     (default ${XDG_CACHE_HOME:-~/.cache}/graph-assay/oracle/scip)
-#   ORACLE_TOOLS       scip-typescript/python/go install (default: lib/config.mjs tools)
+#   ORACLE_TOOLS       scip-typescript/python/go install (default: lib/config.ts tools)
 #   ORACLE_SHOW        top groups to print per candidate bucket (default 3)
 #   ORACLE_REDACT=1    for code that must not leave this machine: the oracle prints only
 #                      bucket counts, and a failure names its log instead of printing it
@@ -22,10 +22,10 @@ set -euo pipefail
 [ $# -ge 3 ] || { sed -n '2,3p' "$0"; exit 2; }
 name=$1 src=$(cd "$2" && pwd) lang=$3; shift 3
 qa=$(cd "$(dirname "$0")/.." && pwd)
-cfg() { node "$qa/lib/config.mjs" "$1"; }
+cfg() { node "$qa/lib/config.ts" "$1"; }
 subject=${CGQA_SUBJECT:-codegraph}
 if [ "$subject" = codegraph ]; then build=$(cfg codegraphBuild); w=$(cfg work)/w-$name
-else build=${CGQA_BUILD:-$(node "$qa/lib/subjects/index.mjs" "$subject" default-build)}; w=$(cfg work)/w-$name-$subject; fi
+else build=${CGQA_BUILD:-$(node "$qa/lib/subjects/index.ts" "$subject" default-build)}; w=$(cfg work)/w-$name-$subject; fi
 tools=$(cfg tools)
 scip_cache=$(cfg scipCache)
 [ -f "$build" ] || { echo "$name: no build at $build" >&2; exit 1; }
@@ -50,15 +50,15 @@ timer=(); /usr/bin/time -f '' true 2>/dev/null && timer=(/usr/bin/time -f '%e %M
 # so every SCIP call site is a miss with the oracle's own denominator, and both outputs record
 # `subjectFailed`. Only an oracle (SCIP) failure stops the run.
 failed=""
-CGQA_NICE=1 ${timer[@]+"${timer[@]}"} node "$qa/lib/subjects/index.mjs" "$subject" index . "$build" > "$w/init.log" 2>&1 || failed="index exited $?"
+CGQA_NICE=1 ${timer[@]+"${timer[@]}"} node "$qa/lib/subjects/index.ts" "$subject" index . "$build" > "$w/init.log" 2>&1 || failed="index exited $?"
 # The oracle exports codegraph's store itself; any other subject hands it a snapshot
 # (writeSnapshot refuses an invalid one).
 if [ -z "$failed" ] && [ "$subject" != codegraph ]; then
-  node "$qa/lib/subjects/index.mjs" "$subject" snapshot . "$w/snapshot.json" "$build" > "$w/snapshot.log" 2>&1 || failed="snapshot failed"
+  node "$qa/lib/subjects/index.ts" "$subject" snapshot . "$w/snapshot.json" "$build" > "$w/snapshot.log" 2>&1 || failed="snapshot failed"
 fi
 if [ -n "$failed" ]; then
   echo "$name: $subject FAILED ($failed); scored as misses (SPEC §8)"; logtail "$w/init.log"
-  node --input-type=module -e "import { writeSnapshot, SNAPSHOT_SCHEMA } from '$qa/lib/snapshot.mjs';
+  node --input-type=module -e "import { writeSnapshot, SNAPSHOT_SCHEMA } from '$qa/lib/snapshot.ts';
     writeSnapshot(process.argv[1], { schema: SNAPSHOT_SCHEMA, subject: { name: process.argv[2] },
       capabilities: { siteLines: true, siteColumns: false, unresolved: true, provenance: true }, files: [], nodes: [], edges: [], unresolved: [] });" \
     "$w/snapshot.json" "$subject"

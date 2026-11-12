@@ -1,11 +1,11 @@
 // Every path graph-assay uses, in one place. Precedence: environment variable, then
 // ~/.config/graph-assay/config.json (keys as below), then this machine's defaults.
 //
-//   node lib/config.mjs [key]   prints one value (or all as JSON), for shell scripts
+//   node lib/config.ts [key]   prints one value (or all as JSON), for shell scripts
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { isMain } from './main.mjs';
+import { isMain } from './main.ts';
 
 const home = os.homedir();
 const xdgCache = process.env.XDG_CACHE_HOME ?? path.join(home, '.cache');

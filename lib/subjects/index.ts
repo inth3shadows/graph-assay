@@ -1,9 +1,9 @@
 // Subject registry: every tool graph-assay can measure. Each module exports name, defaultBuild(),
 // index(dir, build, opts) -> {ok, status, signal, output, stdout, ms}, snapshot(dir, {build}) and
 // version(build).
-import * as codegraph from './codegraph.mjs';
-import * as cgr from './code-graph-rag.mjs';
-import { isMain } from '../main.mjs';
+import * as codegraph from './codegraph.ts';
+import * as cgr from './code-graph-rag.ts';
+import { isMain } from '../main.ts';
 
 export const SUBJECTS = { codegraph, 'code-graph-rag': cgr };
 
@@ -18,9 +18,9 @@ export function subject(name = 'codegraph') {
 export const buildFor = (s, b) => (!b || b === 'default' ? s.defaultBuild() : b);
 
 // CLI, for shell scripts:
-//   node lib/subjects/index.mjs <subject> default-build
-//   node lib/subjects/index.mjs <subject> index <dir> <build>              exit status = the subject's
-//   node lib/subjects/index.mjs <subject> snapshot <dir> <out.json> <build>
+//   node lib/subjects/index.ts <subject> default-build
+//   node lib/subjects/index.ts <subject> index <dir> <build>              exit status = the subject's
+//   node lib/subjects/index.ts <subject> snapshot <dir> <out.json> <build>
 if (isMain(import.meta.url)) {
   const [name, cmd, dir, a, b] = process.argv.slice(2);
   const s = subject(name);
@@ -30,10 +30,10 @@ if (isMain(import.meta.url)) {
     process.stdout.write(r.output);
     process.exit(r.ok ? 0 : (r.status || 1));
   } else if (cmd === 'snapshot' && dir && a) {
-    const { writeSnapshot } = await import('../snapshot.mjs');
+    const { writeSnapshot } = await import('../snapshot.ts');
     writeSnapshot(a, s.snapshot(dir, { build: b ?? null }));
   } else {
-    console.error('usage: index.mjs <subject> default-build | index <dir> <build> | snapshot <dir> <out.json> [build]');
+    console.error('usage: index.ts <subject> default-build | index <dir> <build> | snapshot <dir> <out.json> [build]');
     process.exit(2);
   }
 }

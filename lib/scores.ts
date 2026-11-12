@@ -3,7 +3,13 @@ const STRICT_OK = /^(ok|ok-overload-set)\|/; const TOL_OK = /^(ok-other-column|l
 const MISMATCH = /^(wrong-target|external|local-shadow|cross-file-unimported|receiver-fallback)\|/;
 const NOISE = /^noise:/; const UNALIGNED = /^(no-scip-ref|outside-scip|scip-local-undefined)/;
 
-export function forward(j) {
+/** Verdict counts keyed `verdict|...` (oracle out-forward.json / out-missing.json `buckets`). */
+type Buckets = Record<string, number>;
+export interface ForwardResult { buckets: Buckets; skipped?: Record<string, number> }
+export interface MissingResult { buckets: Buckets; decorators?: { causes?: Record<string, number>; total: number } }
+interface Trigger { scope: string; metric: string; before: number[] | string; after: number[] | string; sites?: number; deltaPoints?: number; verdict: string }
+
+export function forward(j: ForwardResult) {
   const c = { match: 0, tol: 0, mismatch: 0, noise: 0, unaligned: 0 };
   for (const [k, v] of Object.entries(j.buckets)) {
     const key = `${k}|`;
@@ -16,8 +22,8 @@ export function forward(j) {
 }
 const CAUSES = new Set(['found', 'found-heuristic-only', 'found-other-line', 'receiver-fallback', 'wrong-edge',
   'unresolved-ref', 'no-ref', 'target-not-a-node', 'file-not-indexed', 'target-file-not-indexed']);
-export function missing(j) {
-  const c = {};
+export function missing(j: MissingResult) {
+  const c: Record<string, number> = {};
   for (const [k, v] of Object.entries(j.buckets)) {
     const cause = k.split('|')[1];
     if (!CAUSES.has(cause)) throw new Error(`unknown missing-edge verdict ${k} (SPEC §5): fix the oracle or the mapping`);
@@ -43,7 +49,7 @@ export function pairs(j) {
     skipped: p.skipped, guessOnly: p.guessOnly, decorators: [p.decorators.found, p.decorators.total],
     unmapped: p.unmappedEdges.caller + p.unmappedEdges.target,
     // null for results that predate the count (before #39)
-    skippedEdges: p.skippedEdges ? Object.values(p.skippedEdges).reduce((a, b) => a + b, 0) : null,
+    skippedEdges: p.skippedEdges ? Object.values(p.skippedEdges as Record<string, number>).reduce((a, b) => a + b, 0) : null,
     callerRanges: p.callerRanges, atFile: p.unitsAtFileLevel };
 }
 
@@ -53,10 +59,9 @@ export function pairs(j) {
  * (reversed for a gain), avoiding double-counting a match becoming a mismatch.
  */
 export function gate(old, next) {
-  /** @type {{ scope: string, metric: string, before: number[] | string, after: number[] | string, sites?: number, deltaPoints?: number, verdict: string }[]} */
-  const triggers = []; const incomparable = [];
+  const triggers: Trigger[] = []; const incomparable = [];
   const pools = { precision: [[0, 0], [0, 0]], recall: [[0, 0], [0, 0]] };
-  const compare = (scope, metric, before, after, scale, siteFloor = 0) => {
+  const compare = (scope: string, metric: string, before: number[], after: number[], scale: number, siteFloor = 0) => {
     if (!before[1] || !after[1]) return;
     // Cross multiplication keeps inclusive 1.0 / 0.5 point boundaries exact.
     const diff = BigInt(after[0]) * BigInt(before[1]) - BigInt(before[0]) * BigInt(after[1]);
@@ -79,7 +84,7 @@ export function gate(old, next) {
       incomparable.push({ scope: repo, reason: 'missing-mode total changed', before: a.missing.total, after: b.missing.total });
       continue;
     }
-    for (const [metric, score] of /** @type {const} */ ([['precision', forward], ['recall', missing]])) {
+    for (const [metric, score] of [['precision', forward], ['recall', missing]] as const) {
       const mode = metric === 'precision' ? 'forward' : 'missing';
       const before = score(a[mode]).strict; const after = score(b[mode]).strict;
       compare(repo, metric, before, after, 100, 3);
@@ -102,7 +107,7 @@ export function gate(old, next) {
     }
   }
   if (old.pycg || next.pycg) {
-    const sum = (cs) => Object.values(cs).reduce(([k, n], c) => [k + c.hit, n + c.expected], [0, 0]);
+    const sum = (cs: Record<string, { hit: number; expected: number }>) => Object.values(cs).reduce(([k, n], c) => [k + c.hit, n + c.expected], [0, 0]);
     if (!old.pycg || !next.pycg) incomparable.push({ scope: 'PyCG', reason: 'run missing', lost: !!old.pycg });
     else {
       const before = sum(old.pycg); const after = sum(next.pycg);

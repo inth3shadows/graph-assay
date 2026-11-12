@@ -26,6 +26,19 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- `lib/` is TypeScript: every `lib/**/*.mjs` is now `.ts`, run by Node's type stripping with no build
+  step, so the Node floor is 22.18 (`engines.node`: `>=22.18.0 <25`). `lib/types.ts` types the
+  snapshot and expectation schemas once, and the scorers and adapters import it. Callers outside
+  `lib/` stay `.mjs` and import the `.ts` paths. Behaviour is unchanged: fixture replay gives the same
+  per-site results, and the adapter goldens are byte-identical. Second phase of #14.
+- `adapterSha256` changes for both adapters, because the hashed files are renamed to `.ts` and
+  retyped. Results recorded before this change carry the old hashes.
+- The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
+  and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
+  count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
+- When the type check crashes on a module that does not parse, the crash line names that file and
+  line, not a Node-internal frame. `check` sets the exit code instead of calling `process.exit()`, so
+  piped output is not cut off (#26).
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.

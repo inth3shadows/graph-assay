@@ -6,8 +6,8 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
-import { FIXTURE_INSTALL } from '../lib/fixture-install.mjs';
+import { config } from '../lib/config.ts';
+import { FIXTURE_INSTALL } from '../lib/fixture-install.ts';
 
 export const FIXED = { W: 'other-in-repo', X: 'external', Y: 'local', Z: 'cannot-tell' };
 // Never shown to a labeller: subject outputs, answer keys, and agent instructions or tool configs.

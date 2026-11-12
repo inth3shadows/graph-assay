@@ -5,9 +5,9 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const qa = fileURLToPath(new URL('../', import.meta.url));
-const adapters = { codegraph: 'codegraph.mjs', 'code-graph-rag': 'code-graph-rag.mjs' };
-export const ADAPTER_SHARED = ['lib/provenance.mjs', 'lib/config.mjs', 'lib/snapshot.mjs', 'lib/main.mjs',
-  'lib/subjects/index.mjs', 'schema/snapshot.v1.json'];
+const adapters = { codegraph: 'codegraph.ts', 'code-graph-rag': 'code-graph-rag.ts' };
+export const ADAPTER_SHARED = ['lib/provenance.ts', 'lib/config.ts', 'lib/snapshot.ts', 'lib/main.ts',
+  'lib/subjects/index.ts', 'schema/snapshot.v1.json'];
 
 /** Recompute from disk so edited adapters are identified even without a commit or .git. */
 export function adapterHash(name, root = qa) {

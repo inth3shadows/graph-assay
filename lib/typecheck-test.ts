@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The type check's reporting (lib/typecheck.mjs): error counts, config errors, failures with no
+// The type check's reporting (lib/typecheck.ts): error counts, config errors, failures with no
 // diagnostics, stale installs and lockfiles, that an unparseable tsconfig.json emits nothing, and
 // that tsconfig.json keeps browser globals out of lib/.
 import assert from 'node:assert/strict';
@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { summarize, staleInstall, runTsc, typecheck, joinOutput, extendsChain } from './typecheck.mjs';
+import { summarize, staleInstall, runTsc, typecheck, joinOutput, extendsChain } from './typecheck.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let n = 0; let failed = 0; let skipped = 0;
@@ -16,7 +16,7 @@ const check = (name, fn) => { n++; try { if (fn() === 'skip') skipped++; } catch
 const fail = { status: 2 };
 const haveTsc = fs.existsSync(path.join(qa, 'node_modules/typescript/bin/tsc'));
 /** A temp project using this checkout's node_modules; `files` maps relative path -> contents. */
-const project = (files, fn) => {
+const project = (files: Record<string, string>, fn: (dir: string) => void) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-typecheck-'));
   try {
     fs.symlinkSync(path.join(qa, 'node_modules'), path.join(dir, 'node_modules'), 'junction');
@@ -62,10 +62,72 @@ check('a message spanning lines is not a cut-short run', () => {
   assert.equal(summarize(out, { status: 2 }).summary, '1 type error (tsc -p .)');
 });
 check('the extends chain is read from tsconfig.json, relative to each config', () => {
+  if (!haveTsc) return 'skip';
   project({ 'tsconfig.json': '{ "extends": "./cfg/base.json" }', 'cfg/base.json': '{ "extends": ["./more.json", "@pkg/cfg"] }', 'cfg/more.json': '{}' }, (dir) => {
     assert.deepEqual(extendsChain(dir), ['cfg/base.json', 'cfg/more.json']);
   });
   project({ 'tsconfig.json': '{ bad' }, (dir) => assert.deepEqual(extendsChain(dir), []));
+});
+check('the extends chain reads JSONC configs and resolves extends as tsc does (.json appended, absolute paths)', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '// comment\n{ "extends": "./cfg/base", }\n', 'cfg/base.json': '{ /* c */ "extends": "./more", }', 'cfg/more.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(dir), ['cfg/base.json', 'cfg/more.json']);
+  });
+  project({ 'cfg/abs.json': '{}' }, (dir) => {
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({ extends: path.join(dir, 'cfg/abs') }));
+    assert.deepEqual(extendsChain(dir), ['cfg/abs.json']);
+  });
+});
+check('the extends chain survives a recoverable syntax error, as tsc does', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "extends": "./base.json" "include": ["lib"] }', 'base.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(dir), ['base.json']);
+  });
+});
+check('an extends naming a directory resolves to <name>.json, as tsc does', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "extends": "./cfg" }', 'cfg/other.json': '{}', 'cfg.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(dir), ['cfg.json']);
+  });
+});
+check('a relative root gives the same chain as an absolute one', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '// c\n{ "extends": "./base.json", }', 'base.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(path.relative(process.cwd(), dir)), ['base.json']);
+  });
+});
+check('a typescript without the config API gives an empty chain, not a throw', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-typecheck-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules/typescript'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'node_modules/typescript/package.json'), '{ "name": "typescript", "main": "index.js" }');
+    fs.writeFileSync(path.join(dir, 'node_modules/typescript/index.js'), 'module.exports = {};\n');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{ "extends": "./base.json" }');
+    fs.writeFileSync(path.join(dir, 'base.json'), '{}');
+    assert.deepEqual(extendsChain(dir), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+check('a relative root runs tsc and reports its errors', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "files": ["a.ts"] }', 'a.ts': 'export const a: number = "x";\n' }, (dir) => {
+    // A bare subdirectory name: a `../../tmp/...` path survives being resolved twice, since `..` stops at /.
+    const cwd = process.cwd(); process.chdir(path.dirname(dir));
+    let r;
+    try { r = runTsc(path.basename(dir)); } finally { process.chdir(cwd); }
+    assert.match(r.lines.at(-1), /^FAIL {2}typecheck: 1 type error \(tsc -p \.\)$/);
+  });
+});
+check('an extends naming a package config is followed', () => {
+  if (!haveTsc) return 'skip';
+  // Not project(): its node_modules is this checkout's, and the package must not be written there.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-typecheck-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules/@cfg/base'), { recursive: true });
+    fs.symlinkSync(path.join(qa, 'node_modules/typescript'), path.join(dir, 'node_modules/typescript'), 'junction');
+    fs.writeFileSync(path.join(dir, 'node_modules/@cfg/base/tsconfig.json'), '{}');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{ "extends": "@cfg/base/tsconfig.json" }');
+    assert.deepEqual(extendsChain(dir), ['node_modules/@cfg/base/tsconfig.json']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 check('stdout and stderr are joined on a line boundary', () => {
   assert.equal(joinOutput({ stdout: 'lib/a.mjs(1,7): error TS2322: x', stderr: 'error TS5083: Cannot read file.' }),
@@ -108,7 +170,7 @@ check('an unparseable tsconfig.json fails and writes no .js', () => {
 });
 check('tsconfig.json keeps browser globals out of lib/ (no DOM lib)', () => {
   if (!haveTsc) return 'skip';
-  project({ 'tsconfig.json': fs.readFileSync(path.join(qa, 'tsconfig.json'), 'utf8'), 'lib/a.mjs': 'export const t = document.title;\n' }, (dir) => {
+  project({ 'tsconfig.json': fs.readFileSync(path.join(qa, 'tsconfig.json'), 'utf8'), 'lib/a.ts': 'export const t = document.title;\n' }, (dir) => {
     const r = runTsc(dir);
     assert.equal(r.ok, false, 'document type-checked');
     assert.match(r.lines.join('\n'), /Cannot find name 'document'/);

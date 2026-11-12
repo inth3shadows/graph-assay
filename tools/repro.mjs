@@ -2,8 +2,8 @@
 // Docker's entry point. Orchestration only: all scores come from the existing scorers.
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { adapterHash } from '../lib/provenance.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -73,7 +73,7 @@ save();
 try {
   // Fail early with the exact Docker namespace requirement, before fetching the corpus.
   run('unshare', ['-rn', 'true'], 'namespace-check');
-  run('node', ['-e', `console.log(JSON.stringify({codegraph:await (await import('./lib/subjects/codegraph.mjs')).version(process.env.CODEGRAPH_BUILD),cgr:(await import('./lib/subjects/code-graph-rag.mjs')).version(),tools:(await import('./lib/manifest.mjs')).tools()}))`], 'versions');
+  run('node', ['-e', `console.log(JSON.stringify({codegraph:await (await import('./lib/subjects/codegraph.ts')).version(process.env.CODEGRAPH_BUILD),cgr:(await import('./lib/subjects/code-graph-rag.ts')).version(),tools:(await import('./lib/manifest.ts')).tools()}))`], 'versions');
   manifest.versions = JSON.parse(fs.readFileSync(path.join(out, 'logs/versions.log'), 'utf8'));
   console.log('repro: fetch pinned dev corpus');
   const dirs = fetchRepos(path.join(out, 'repos'), repos);

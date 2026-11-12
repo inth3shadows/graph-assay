@@ -17,10 +17,10 @@
 //             edge in either direction.
 //   extra     codegraph calls/instantiates edges between mapped project nodes that PyCG lacks
 // A snippet is PASS when every expected edge is hit and nothing is extra.
-import { buildFor, subject } from '../lib/subjects/index.mjs';
+import { buildFor, subject } from '../lib/subjects/index.ts';
 import * as fs from 'node:fs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { adapterHash } from '../lib/provenance.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 

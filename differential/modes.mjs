@@ -14,12 +14,12 @@
 // failed: a failure, never missing data). Exit 0 = no DIFFER/FAILED, 1 = some, 2 = usage.
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { copySeed } from '../lib/fixture-install.mjs';
+import { adapterHash } from '../lib/provenance.ts';
+import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as codegraph from '../lib/subjects/codegraph.mjs';
-import { isMain } from '../lib/main.mjs';
+import * as codegraph from '../lib/subjects/codegraph.ts';
+import { isMain } from '../lib/main.ts';
 
 const SKIP = new Set(['.codegraph', 'node_modules']);
 

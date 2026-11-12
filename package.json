@@ -1,9 +1,12 @@
 {
   "name": "graph-assay",
   "private": true,
+  "engines": {
+    "node": ">=22.18.0 <25"
+  },
   "description": "Development tooling only: the runtime has no npm dependencies.",
   "scripts": {
-    "typecheck": "node lib/typecheck.mjs"
+    "typecheck": "node lib/typecheck.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

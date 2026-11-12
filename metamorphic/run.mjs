@@ -19,14 +19,14 @@
 //            LOST      an original edge with no shifted counterpart
 // Exit code: 0 when every seed is clean, 1 when any diff was found, 2 on usage / index errors.
 import { fileURLToPath } from 'node:url';
-import { joinedEdges } from '../lib/snapshot.mjs';
+import { joinedEdges } from '../lib/snapshot.ts';
 import { canonical, diffCanonical, rawHash } from '../differential/modes.mjs';
 import { applyRelation, RELATIONS, SKIP, DECOY_DIR, SHIFT } from './relations.mjs';
-import { buildFor, subject } from '../lib/subjects/index.mjs';
+import { buildFor, subject } from '../lib/subjects/index.ts';
 import * as fs from 'node:fs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { copySeed } from '../lib/fixture-install.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { adapterHash } from '../lib/provenance.ts';
+import { copySeed } from '../lib/fixture-install.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 

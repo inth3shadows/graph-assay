@@ -1,22 +1,22 @@
 // A run manifest: everything that decides a run's results, content-addressed, so two runs are
 // comparable only when their manifests say they ran the same scorers on the same inputs.
 //
-//   node lib/manifest.mjs <out.json> <codegraph.js> [stage=status ...] [--gate gate.json]
+//   node lib/manifest.ts <out.json> <codegraph.js> [stage=status ...] [--gate gate.json]
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { config } from './config.mjs';
-import { adapterHash } from './provenance.mjs';
-import { SPEC_VERSION } from './spec.mjs';
-import * as codegraph from './subjects/codegraph.mjs';
-import { isMain } from './main.mjs';
+import { config } from './config.ts';
+import { adapterHash } from './provenance.ts';
+import { SPEC_VERSION } from './spec.ts';
+import * as codegraph from './subjects/codegraph.ts';
+import { isMain } from './main.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const sh = (cmd, args, cwd) => { const r = spawnSync(cmd, args, { cwd, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
-const sha = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const sh = (cmd: string, args: string[], cwd?: string): string | null => { const r = spawnSync(cmd, args, { cwd, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
+const sha = (f: string) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
 /** sha256 of every tracked scorer file, plus the repo's HEAD and whether it was dirty. */
 export function scorers() {
@@ -53,11 +53,11 @@ export function manifest(build, stages = {}) {
 
 if (isMain(import.meta.url)) {
   const [out, build, ...st] = process.argv.slice(2);
-  if (!out) { console.error('usage: node lib/manifest.mjs <out.json> <codegraph.js> [stage=status ...] [--gate gate.json]'); process.exit(2); }
+  if (!out) { console.error('usage: node lib/manifest.ts <out.json> <codegraph.js> [stage=status ...] [--gate gate.json]'); process.exit(2); }
   const gateAt = st.indexOf('--gate');
   const gateFile = gateAt < 0 ? null : st.splice(gateAt, 2)[1];
   const stages = Object.fromEntries(st.map((x) => x.split('=')).map(([k, v]) => [k, Number.isNaN(Number(v)) ? v : Number(v)]));
-  const result = manifest(build ?? null, stages);
+  const result: ReturnType<typeof manifest> & { gate?: unknown } = manifest(build ?? null, stages);
   result.gate = gateFile ? JSON.parse(fs.readFileSync(gateFile, 'utf8')) : { verdict: 'NOT COMPARED' };
   fs.writeFileSync(out, JSON.stringify(result, null, 1));
 }

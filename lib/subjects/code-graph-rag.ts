@@ -6,10 +6,11 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { config } from '../config.mjs';
-import { SNAPSHOT_SCHEMA } from '../snapshot.mjs';
-import { adapterHash } from '../provenance.mjs';
-import { isMain } from '../main.mjs';
+import { config } from '../config.ts';
+import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
+import { adapterHash } from '../provenance.ts';
+import { isMain } from '../main.ts';
+import type { Snapshot, SnapshotEdge, SnapshotNode } from '../types.ts';
 
 export const name = 'code-graph-rag';
 /** Where index() leaves the export, inside the indexed dir (and excluded from the index). */
@@ -63,18 +64,18 @@ const segments = (q) => { const out = []; let cur = ''; let depth = 0; for (cons
 const edgeKind = (t) => KIND[t] ?? (/^(DEFINES|CONTAINS)/.test(t) ? 'contains' : t.toLowerCase());
 
 /** Map `dir`'s cgr export (left there by index()) to a snapshot v1. */
-export function snapshot(dir, { build = null } = {}) {
+export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
   const g = JSON.parse(fs.readFileSync(path.join(dir, OUT, 'export.json'), 'utf8'));
-  const lines = new Map();
-  const lineCount = (p) => {
+  const lines = new Map<string, number>();
+  const lineCount = (p: string) => {
     if (!lines.has(p)) { let n = 1; try { n = fs.readFileSync(path.join(dir, p), 'utf8').split('\n').length; } catch { /* unreadable: 1 */ } lines.set(p, n); }
     return lines.get(p);
   };
   // Module qualified names, by path: a definition's local name is its qname minus its module's.
-  const moduleQ = new Map(g.nodes.filter((n) => n.labels.includes('Module') && n.properties.path).map((n) => [n.properties.path, n.properties.qualified_name]));
-  const nodes = [];
-  const keep = new Set();
+  const moduleQ = new Map<string, string>(g.nodes.filter((n) => n.labels.includes('Module') && n.properties.path).map((n) => [n.properties.path, n.properties.qualified_name]));
+  const nodes: SnapshotNode[] = [];
+  const keep = new Set<string>();
   for (const n of g.nodes) {
     const p = n.properties; const label = n.labels[0];
     // Project, Folder, Package, File (listed under files), and external modules (no path in the repo)
@@ -90,7 +91,7 @@ export function snapshot(dir, { build = null } = {}) {
     nodes.push({ id, kind: label.toLowerCase(), name: p.name ?? segments(local).pop(), qname: segments(local).join('::'), file: p.path,
       language: lang(p.path), start: p.start_line ?? 1, end: p.end_line ?? p.start_line ?? 1 });
   }
-  const edges = [];
+  const edges: SnapshotEdge[] = [];
   for (const r of g.relationships) {
     const src = String(r.from_id); const dst = String(r.to_id);
     if (!keep.has(src) || !keep.has(dst)) continue;
@@ -114,7 +115,7 @@ export function snapshot(dir, { build = null } = {}) {
   };
 }
 
-// CLI: node lib/subjects/code-graph-rag.mjs index <dir> [cgr] | snapshot <dir> <out.json> [cgr]
+// CLI: node lib/subjects/code-graph-rag.ts index <dir> [cgr] | snapshot <dir> <out.json> [cgr]
 if (isMain(import.meta.url)) {
   const [cmd, dir, a, b] = process.argv.slice(2);
   if (cmd === 'index' && dir) {
@@ -122,10 +123,10 @@ if (isMain(import.meta.url)) {
     process.stdout.write(r.output);
     process.exit(r.ok ? 0 : (r.status || 1));
   } else if (cmd === 'snapshot' && dir && a) {
-    const { writeSnapshot } = await import('../snapshot.mjs');
+    const { writeSnapshot } = await import('../snapshot.ts');
     writeSnapshot(a, snapshot(dir, { build: b ?? defaultBuild() }));
   } else {
-    console.error('usage: code-graph-rag.mjs index <dir> [cgr] | snapshot <dir> <out.json> [cgr]');
+    console.error('usage: code-graph-rag.ts index <dir> [cgr] | snapshot <dir> <out.json> [cgr]');
     process.exit(2);
   }
 }

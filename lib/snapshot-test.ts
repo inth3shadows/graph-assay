@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as codegraph from './subjects/codegraph.mjs';
-import { validateSnapshot } from './snapshot.mjs';
+import * as codegraph from './subjects/codegraph.ts';
+import { validateSnapshot } from './snapshot.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(fs.readFileSync(path.join(here, '..', 'schema', 'snapshot.v1.json'), 'utf8'));
@@ -18,7 +18,7 @@ for (const key of schema.required) {
   n++; const s = structuredClone(valid); delete s[key];
   if (!validateSnapshot(s).length) missed.push(key);
 }
-for (const [key, v] of Object.entries(schema.properties)) {
+for (const [key, v] of Object.entries<any>(schema.properties)) {
   const req = v.type === 'array' ? item(v)?.required : v.required;
   for (const field of req ?? []) {
     n++; const s = structuredClone(valid);

@@ -12,7 +12,7 @@
 //     "wrong": [{ "from": "test_one", "kind": "calls", "to": "pkg/core.py:reverts", "toLine"?: 7 }],
 //     "right": [ ...edges a fix should produce; [] when the fix is "no edge" ] }
 // `from` is the source's qualified name; `to` is "<target file>:<target qualified name>"; names match
-// tool-neutrally (lib/expect.mjs `present`: same last name, suffix-compatible container chain).
+// tool-neutrally (lib/expect.ts `present`: same last name, suffix-compatible container chain).
 //
 // Verdicts:
 //   BROKEN   a wrong edge is present (or, for a missing-edge fixture with `wrong: []`, a right edge is missing)
@@ -26,11 +26,11 @@
 // the native kernel or the fixture is an ERROR), telemetry off, in a
 // copy of the fixture under a temp dir with a sandboxed HOME.
 import { fileURLToPath } from 'node:url';
-import { copyFixture, markerLeaks, scoreFixture } from '../lib/fixture.mjs';
-import { adapterHash } from '../lib/provenance.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
-import { buildFor, subject } from '../lib/subjects/index.mjs';
-import { validateExpect } from '../lib/expect.mjs';
+import { copyFixture, markerLeaks, scoreFixture } from '../lib/fixture.ts';
+import { adapterHash } from '../lib/provenance.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
+import { buildFor, subject } from '../lib/subjects/index.ts';
+import { validateExpect } from '../lib/expect.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

@@ -17,10 +17,10 @@ const COMMANDS = {
   pycg: ['node', p('benchmarks/pycg.mjs'), '<codegraph.js> [category ...] [--json out]: PyCG micro-benchmark'],
   selftest: ['node', p('oracle/test/run.mjs'), '[--mutate] [--dump] [case ...]: hermetic oracle self-tests'],
   baseline: ['node', p('oracle/baseline.mjs'), 'save <dir> | diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--json gate.json]'],
-  snapshot: ['node', p('lib/subjects/codegraph.mjs'), 'snapshot <dir> <out.json> [codegraph.js] | index <dir> <codegraph.js>'],
-  expect: ['node', p('lib/expect.mjs'), '[dir ...]: validate every expect.json'],
-  config: ['node', p('lib/config.mjs'), '[key]: resolved paths'],
-  conformance: ['node', p('lib/conformance.mjs'), '<codegraph.js>: is the adapter faithful, and how does the subject handle awkward cases'],
+  snapshot: ['node', p('lib/subjects/codegraph.ts'), 'snapshot <dir> <out.json> [codegraph.js] | index <dir> <codegraph.js>'],
+  expect: ['node', p('lib/expect.ts'), '[dir ...]: validate every expect.json'],
+  config: ['node', p('lib/config.ts'), '[key]: resolved paths'],
+  conformance: ['node', p('lib/conformance.ts'), '<codegraph.js>: is the adapter faithful, and how does the subject handle awkward cases'],
   modes: ['node', p('differential/modes.mjs'), '<codegraph.js> <dir ...> [--modes ..] [--json out]: execution modes (kernel, workers, sync, repeat) diffed against base'],
   builds: ['node', p('differential/builds.mjs'), '<old codegraph.js> <new codegraph.js> <dir ...> [--md out] [--json out] | --fetch <dest>: two builds, canonical graph diff'],
   triage: ['node', p('bench/triage.mjs'), '[--work <oracle work dir>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],
@@ -40,23 +40,26 @@ if (cmd === 'check') {
   const files = (spawnSync('git', ['ls-files'], { cwd: qa, encoding: 'utf8' }).stdout ?? '').split('\n').filter(Boolean);
   // Outside a git checkout the file list is empty and every syntax check would be skipped silently.
   if (!files.length) { console.error('check needs a git checkout (git ls-files listed nothing)'); process.exit(2); }
-  const listed = ['lib/expect.mjs', 'oracle/test/run.mjs', 'differential/test.mjs', 'labels/test.mjs', 'oracle/site-test.mjs',
-    'oracle/ts-cover-test.mjs', 'lib/scores-test.mjs', 'lib/spec-test.mjs', 'lib/anti-gaming-test.mjs', 'bench/robustness-test.mjs',
+  const listed = ['lib/expect.ts', 'oracle/test/run.mjs', 'differential/test.mjs', 'labels/test.mjs', 'oracle/site-test.mjs',
+    'oracle/ts-cover-test.mjs', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.mjs',
     'bench/tables-test.mjs', 'bench/triage-test.mjs', 'tools/repro-test.mjs'];
-  // A new *-test.mjs runs without anyone remembering to list it.
-  const discovered = files.filter((f) => f.endsWith('-test.mjs') && !listed.includes(f));
+  // A new *-test.mjs, or *-test.ts in lib/, runs without anyone remembering to list it. Only lib/'s .ts:
+  // elsewhere a .ts is an indexed test source (oracle/test, conformance, fixtures), never a script.
+  const discovered = files.filter((f) => (f.endsWith('-test.mjs') || (f.startsWith('lib/') && f.endsWith('-test.ts'))) && !listed.includes(f));
   const steps = [
+    // .mjs only: node --check parses a .ts file as plain JS. lib/**/*.ts gets its syntax check from tsc,
+    // whose erasableSyntaxOnly also refuses what Node's type stripping cannot run.
     ...files.filter((f) => f.endsWith('.mjs') || f === 'bin/graph-assay' || f === 'bin/cgqa').map((f) => ['node', '--check', p(f)]),
     ...files.filter((f) => f.endsWith('.sh')).map((f) => ['bash', '-n', p(f)]),
-    ['node', p('lib/expect.mjs')],
+    ['node', p('lib/expect.ts')],
     ['node', p('oracle/test/run.mjs'), '--mutate'],
     ['node', p('differential/test.mjs')],
     ['node', p('labels/test.mjs')],
     ['node', p('oracle/site-test.mjs')],
     ['node', p('oracle/ts-cover-test.mjs')],
-    ['node', p('lib/scores-test.mjs')],
-    ['node', p('lib/spec-test.mjs')],
-    ['node', p('lib/anti-gaming-test.mjs')],
+    ['node', p('lib/scores-test.ts')],
+    ['node', p('lib/spec-test.ts')],
+    ['node', p('lib/anti-gaming-test.ts')],
     ['node', p('bench/robustness-test.mjs')],
     ['node', p('bench/tables-test.mjs')],
     ['node', p('bench/triage-test.mjs')],
@@ -82,23 +85,26 @@ if (cmd === 'check') {
     else if (c === 'shellcheck') console.log(`ok    shellcheck: ${shells.length} scripts`);
     else if (!a.includes('--check') && c !== 'bash') console.log(`ok    ${label}: ${(r.stdout.trim().split('\n').pop() ?? '')}`);
   }
-  // Type check last, so its verdict sits next to the summary (lib/typecheck.mjs).
-  // Imported here, not at the top: a broken lib/typecheck.mjs must not take down other commands.
+  // Type check last, so its verdict sits next to the summary (lib/typecheck.ts).
+  // Imported here, not at the top: a broken lib/typecheck.ts must not take down other commands.
   let tc;
-  try { tc = (await import('../lib/typecheck.mjs')).typecheck(qa); } catch (e) {
-    // The message and the first stack frame: where it broke (lib/typecheck.mjs, or a module it imports).
-    const frame = String(e?.stack ?? '').split('\n').find((l) => /^\s+at /.test(l))?.trim();
+  try { tc = (await import('../lib/typecheck.ts')).typecheck(qa); } catch (e) {
+    // The message and where it broke (lib/typecheck.ts, or a module it imports). A syntax error's
+    // stack opens with `file:///...:line` and then Node-internal frames; otherwise use the first frame.
+    const stack = String(e?.stack ?? '').split('\n');
+    const frame = /^(file:\/\/|\/)\S*:\d+/.test(stack[0]) ? stack[0].trim() : stack.find((l) => /^\s+at /.test(l))?.trim();
     tc = { ok: false, lines: [`FAIL  typecheck: crashed: ${String(e?.message ?? e).split('\n')[0]}${frame ? ` (${frame})` : ''}`] };
   }
   if (!tc.ok) failed++;
   console.log(tc.lines.join('\n'));
   console.log(`${steps.length + 1} checks, ${failed} failed`);
-  process.exit(failed ? 1 : 0);
+  // exitCode, not exit(): exit() can cut off a large output still draining into a pipe.
+  process.exitCode = failed ? 1 : 0;
+} else {
+  const entry = COMMANDS[cmd];
+  if (!entry) { console.error(`unknown command ${cmd}; try graph-assay help`); process.exit(2); }
+  const r = spawnSync(entry[0], [entry[1], ...args], { stdio: 'inherit' });
+  if (r.error) console.error(`graph-assay ${cmd}: could not run ${entry[0]}: ${r.error.message}`);
+  else if (r.signal) console.error(`graph-assay ${cmd}: killed by ${r.signal}`);
+  process.exit(r.status ?? 1);
 }
-
-const entry = COMMANDS[cmd];
-if (!entry) { console.error(`unknown command ${cmd}; try graph-assay help`); process.exit(2); }
-const r = spawnSync(entry[0], [entry[1], ...args], { stdio: 'inherit' });
-if (r.error) console.error(`graph-assay ${cmd}: could not run ${entry[0]}: ${r.error.message}`);
-else if (r.signal) console.error(`graph-assay ${cmd}: killed by ${r.signal}`);
-process.exit(r.status ?? 1);

@@ -13,7 +13,7 @@ Read [README.md](README.md) for what graph-assay is and [TECHNICAL.md](TECHNICAL
 
 ## Do not change without a deliberate version step
 
-- `SPEC.md` semantics: bump `SPEC_VERSION` in `lib/spec.mjs` and SPEC.md together (`lib/spec-test.mjs`).
+- `SPEC.md` semantics: bump `SPEC_VERSION` in `lib/spec.ts` and SPEC.md together (`lib/spec-test.ts`).
 - `corpus/v1.txt`, `corpus/v2.txt`: preregistered; their sha256 is recorded in reproduction manifests.
 - `labels/protocol.json` and the files it pins: `node labels/protocol.mjs` must exit 0; `--update` makes
   a new protocol.
@@ -27,6 +27,6 @@ Read [README.md](README.md) for what graph-assay is and [TECHNICAL.md](TECHNICAL
   `wrong` edges the bug produces, `right` edges a fix should produce. Validate with
   `node bin/graph-assay expect`. codegraph fixtures go in `fixtures/oracle-candidates/`; other tools'
   in their own set (`fixtures/cgr-candidates/`).
-- Every path comes from `lib/config.mjs`; no hard-coded home paths.
+- Every path comes from `lib/config.ts`; no hard-coded home paths.
 - Indexing runs in a sandbox (temp HOME, telemetry off); see [SECURITY.md](SECURITY.md) before
   running anything on an untrusted repository.

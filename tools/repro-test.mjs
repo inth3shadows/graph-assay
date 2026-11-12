@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { SPEC_VERSION } from '../lib/spec.ts';
 const qa=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'cgqa-repro-test-'));let n=0;
 const check=(name,fn)=>{fn();n++;console.log(`ok    ${name}`);};

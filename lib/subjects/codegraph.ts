@@ -5,10 +5,11 @@ import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { config } from '../config.mjs';
-import { SNAPSHOT_SCHEMA } from '../snapshot.mjs';
-import { adapterHash } from '../provenance.mjs';
-import { isMain } from '../main.mjs';
+import { config } from '../config.ts';
+import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
+import { adapterHash } from '../provenance.ts';
+import { isMain } from '../main.ts';
+import type { Snapshot, SnapshotEdge, SnapshotFile, SnapshotNode, Unresolved } from '../types.ts';
 
 export const name = 'codegraph';
 export const defaultBuild = () => config.codegraphBuild;
@@ -35,8 +36,7 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
   const ownHome = !home;
   const h = home ?? fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
   if (!ownHome) fs.mkdirSync(h, { recursive: true });
-  /** @type {Record<string, string>} */
-  const env = {
+  const env: Record<string, string> = {
     ...Object.fromEntries(Object.entries(process.env).filter(([k]) => PASS_ENV.test(k))),
     HOME: h, USERPROFILE: h, XDG_CONFIG_HOME: path.join(h, '.config'),
     CODEGRAPH_NO_TELEMETRY: '1', DO_NOT_TRACK: '1', NODE_NO_WARNINGS: '1',
@@ -66,24 +66,24 @@ export function version(build) {
 }
 
 /** Export `dir`/.codegraph/codegraph.db as a snapshot v1. */
-export function snapshot(dir, { build = null, kernel = process.env.CODEGRAPH_KERNEL ?? '0' } = {}) {
+export function snapshot(dir: string, { build = null as string | null, kernel = process.env.CODEGRAPH_KERNEL ?? '0' } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
   const db = new DatabaseSync(path.join(dir, '.codegraph/codegraph.db'), { readOnly: true });
   try {
     const nodes = db.prepare(`SELECT id, kind, name, qualified_name AS qname, file_path AS file, language,
-                                     start_line AS start, end_line AS "end" FROM nodes`).all();
+                                     start_line AS start, end_line AS "end" FROM nodes`).all() as unknown as (Omit<SnapshotNode, 'id'> & { id: number | string })[];
     const edges = db.prepare(`SELECT kind, source AS src, target AS dst, line, col, provenance,
                                      json_extract(metadata, '$.refName') AS ref,
                                      json_extract(metadata, '$.resolvedBy') AS resolvedBy
-                                FROM edges`).all();
+                                FROM edges`).all() as unknown as SnapshotEdge[];
     const unresolved = db.prepare(`SELECT from_node_id AS src, file_path AS file, line, col,
-                                          reference_name AS name, reference_kind AS kind FROM unresolved_refs`).all();
-    const fileRows = db.prepare(`SELECT DISTINCT file_path AS path, language FROM nodes WHERE kind = 'file'`).all();
+                                          reference_name AS name, reference_kind AS kind FROM unresolved_refs`).all() as unknown as Unresolved[];
+    const fileRows = db.prepare(`SELECT DISTINCT file_path AS path, language FROM nodes WHERE kind = 'file'`).all() as unknown as SnapshotFile[];
     return {
       schema: SNAPSHOT_SCHEMA,
       subject: { name, adapterSha256: adapterHash(name), version: build ? version(build) : null, config: { kernel: kernel === '0' ? 'wasm' : 'native' } },
       capabilities: {
-        // columns are UTF-16 code units (TS and Python; lib/conformance.mjs checks it)
+        // columns are UTF-16 code units (TS and Python; lib/conformance.ts checks it)
         siteLines: true, siteColumns: true, columnEncoding: 'utf16', unresolved: true, provenance: true,
         edgeKinds: [...new Set(edges.map((e) => e.kind))].sort(),
       },
@@ -98,8 +98,8 @@ export function snapshot(dir, { build = null, kernel = process.env.CODEGRAPH_KER
 }
 
 // CLI, for shell scripts:
-//   node lib/subjects/codegraph.mjs index <dir> <codegraph.js>      exit status = codegraph's; output to stdout
-//   node lib/subjects/codegraph.mjs snapshot <dir> <out.json> [codegraph.js]
+//   node lib/subjects/codegraph.ts index <dir> <codegraph.js>      exit status = codegraph's; output to stdout
+//   node lib/subjects/codegraph.ts snapshot <dir> <out.json> [codegraph.js]
 if (isMain(import.meta.url)) {
   const [cmd, dir, a, b] = process.argv.slice(2);
   if (cmd === 'index' && dir && a) {
@@ -107,10 +107,10 @@ if (isMain(import.meta.url)) {
     process.stdout.write(r.output);
     process.exit(r.ok ? 0 : (r.status || 1));
   } else if (cmd === 'snapshot' && dir && a) {
-    const { writeSnapshot } = await import('../snapshot.mjs');
+    const { writeSnapshot } = await import('../snapshot.ts');
     writeSnapshot(a, snapshot(dir, { build: b ?? null }));
   } else {
-    console.error('usage: codegraph.mjs index <dir> <codegraph.js> | snapshot <dir> <out.json> [codegraph.js]');
+    console.error('usage: codegraph.ts index <dir> <codegraph.js> | snapshot <dir> <out.json> [codegraph.js]');
     process.exit(2);
   }
 }

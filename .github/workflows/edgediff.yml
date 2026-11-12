@@ -29,7 +29,7 @@ on:
       - differential/builds.mjs
       - differential/modes.mjs
       - corpus/v1.txt
-      - lib/subjects/codegraph.mjs
+      - lib/subjects/codegraph.ts
       - tools/build-codegraph.sh
 permissions:
   contents: read

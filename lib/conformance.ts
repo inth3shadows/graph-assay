@@ -6,18 +6,18 @@
 //        scorers must handle, not adapter bugs): two calls of one callee on a line, a call to an
 //        overloaded function, calls inside anonymous functions, and which unit its columns use.
 //
-// Usage: node lib/conformance.mjs <codegraph.js>      (exit 1 on any FAIL)
+// Usage: node lib/conformance.ts <codegraph.js>      (exit 1 on any FAIL)
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { joinedEdges, validateSnapshot } from './snapshot.mjs';
-import * as codegraph from './subjects/codegraph.mjs';
+import { joinedEdges, validateSnapshot } from './snapshot.ts';
+import * as codegraph from './subjects/codegraph.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const [build] = process.argv.slice(2);
-if (!build || !fs.existsSync(build)) { console.error('usage: node lib/conformance.mjs <codegraph.js>'); process.exit(2); }
+if (!build || !fs.existsSync(build)) { console.error('usage: node lib/conformance.ts <codegraph.js>'); process.exit(2); }
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-conf-'));
 let fails = 0;

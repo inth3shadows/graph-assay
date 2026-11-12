@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { forward, missing, gate } from './scores.mjs';
+import { forward, missing, gate } from './scores.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let n = 0;

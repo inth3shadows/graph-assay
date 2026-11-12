@@ -25,13 +25,13 @@
 // repo-cluster bootstrap, over the repos every subject ran (SPEC §8). A failed subject run is scored.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
+import { config } from '../lib/config.ts';
 import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.mjs';
-import { recordedAdapterHash } from '../lib/provenance.mjs';
-import { forward, missing, pairs } from '../lib/scores.mjs';
+import { recordedAdapterHash } from '../lib/provenance.ts';
+import { forward, missing, pairs } from '../lib/scores.ts';
 import { CORPUS, readRepos } from '../differential/builds.mjs';
 import { DIAGNOSTIC_FLOOR, diagnosticLanguages } from '../labels/score.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
+import { SPEC_VERSION } from '../lib/spec.ts';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };

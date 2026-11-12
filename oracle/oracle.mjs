@@ -33,11 +33,11 @@
 // ORACLE_REDACT=1 is for code that must not leave its machine: stdout and out.json carry only
 // bucket keys, counts and group sizes (no code, paths, names or SCIP symbols); ORACLE_SHOW is
 // ignored, and an error prints only its kind.
-import { loadScip } from '../lib/scip.mjs';
-import { recordedAdapterHash } from '../lib/provenance.mjs';
-import { SPEC_VERSION } from '../lib/spec.mjs';
-import { loadSnapshot, joinedEdges } from '../lib/snapshot.mjs';
-import * as codegraph from '../lib/subjects/codegraph.mjs';
+import { loadScip } from '../lib/scip.ts';
+import { recordedAdapterHash } from '../lib/provenance.ts';
+import { SPEC_VERSION } from '../lib/spec.ts';
+import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
+import * as codegraph from '../lib/subjects/codegraph.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

@@ -14,8 +14,8 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { config } from '../lib/config.mjs';
-import { isMain } from '../lib/main.mjs';
+import { config } from '../lib/config.ts';
+import { isMain } from '../lib/main.ts';
 
 /** What each bucket's first segment means (oracle.mjs; SPEC §9 maps them to match / mismatch / unaligned). */
 export const MEANING = {
@@ -99,7 +99,7 @@ if (isMain(import.meta.url)) {
     const scipFile = fs.readdirSync(config.scipCache).filter((f) => f.startsWith(`${runName}-`) && f.endsWith('.scip'))
       .map((f) => path.join(config.scipCache, f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
     if (scipFile) {
-      const { loadScip } = await import('../lib/scip.mjs');
+      const { loadScip } = await import('../lib/scip.ts');
       const defs = new Map();
       for (const d of loadScip(scipFile).documents ?? []) for (const o of d.occurrences ?? []) {
         if (!((o.symbol_roles ?? 0) & 1) || !o.symbol) continue;
@@ -116,10 +116,10 @@ if (isMain(import.meta.url)) {
     const records = { forward: at(fwd.sites), missing: at(miss.sites) };
     let snap = null;
     try {
-      snap = subj === 'codegraph' ? (await import('../lib/subjects/codegraph.mjs')).snapshot(path.join(dir, 'repo'))
-        : (await import('../lib/snapshot.mjs')).loadSnapshot(path.join(dir, 'snapshot.json'));
+      snap = subj === 'codegraph' ? (await import('../lib/subjects/codegraph.ts')).snapshot(path.join(dir, 'repo'))
+        : (await import('../lib/snapshot.ts')).loadSnapshot(path.join(dir, 'snapshot.json'));
     } catch { /* no store: edges are not shown */ }
-    const { joinedEdges } = await import('../lib/snapshot.mjs');
+    const { joinedEdges } = await import('../lib/snapshot.ts');
     const edges = snap ? joinedEdges(snap).filter((e) => e.sfile === file && e.line === line && (e.kind === 'calls' || e.kind === 'instantiates') && (!name || e.tname === name || (e.ref ?? '').endsWith(name))) : [];
     const sym = [...records.forward, ...records.missing].map((r) => r.scip).find(Boolean);
     const lines = explainSite({ subject: subj, site, name, records, source: lineIn(dir, file, line), edges, defs: defsFor(sym), skipped: { ...fwd.skipped, ...miss.skipped } });
