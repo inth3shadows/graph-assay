@@ -67,19 +67,27 @@ if (cmd === 'check') {
   const shells = files.filter((f) => f.endsWith('.sh'));
   if (spawnSync('shellcheck', ['--version']).status === 0) steps.push(['shellcheck', '-S', 'warning', ...shells.map((f) => p(f))]);
   else console.log('skip  shellcheck (not installed)');
+  // A failing step's last TAIL lines; say how many came before, so a cut is never silent.
+  const TAIL = 40;
+  const tail = (text) => {
+    const lines = text.trim().split('\n');
+    return lines.length > TAIL ? [`(${lines.length - TAIL} earlier lines not shown)`, ...lines.slice(-TAIL)].join('\n') : lines.join('\n');
+  };
   let failed = 0;
   for (const [c, ...a] of steps) {
     const r = spawnSync(c, a, { cwd: qa, encoding: 'utf8', env: { ...process.env, NODE_NO_WARNINGS: '1' } });
     // Only absolute arguments are paths; flags and plain words print as given.
     const label = `${c} ${a.map((x) => (path.isAbsolute(x) ? path.relative(qa, x) || x : x)).join(' ')}`;
-    if (r.status !== 0) { failed++; console.log(`FAIL  ${label}${r.error ? ` (${r.error.message})` : r.signal ? ` (killed by ${r.signal})` : ''}\n${(`${r.stdout ?? ''}${r.stderr ?? ''}`).trim().split('\n').slice(-8).join('\n')}`); }
+    if (r.status !== 0) { failed++; console.log(`FAIL  ${label}${r.error ? ` (${r.error.message})` : r.signal ? ` (killed by ${r.signal})` : ''}\n${tail(`${r.stdout ?? ''}${r.stderr ?? ''}`)}`); }
     else if (c === 'shellcheck') console.log(`ok    shellcheck: ${shells.length} scripts`);
     else if (!a.includes('--check') && c !== 'bash') console.log(`ok    ${label}: ${(r.stdout.trim().split('\n').pop() ?? '')}`);
   }
   // Type check last, so its verdict sits next to the summary (lib/typecheck.mjs).
   // Imported here, not at the top: a broken lib/typecheck.mjs must not take down other commands.
-  const { typecheck } = await import('../lib/typecheck.mjs');
-  const tc = typecheck(qa);
+  let tc;
+  try { tc = (await import('../lib/typecheck.mjs')).typecheck(qa); } catch (e) {
+    tc = { ok: false, lines: [`FAIL  typecheck: lib/typecheck.mjs failed (${e?.message?.split('\n')[0] ?? e})`] };
+  }
   if (!tc.ok) failed++;
   console.log(tc.lines.join('\n'));
   console.log(`${steps.length + 1} checks, ${failed} failed`);

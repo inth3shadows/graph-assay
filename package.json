@@ -3,7 +3,7 @@
   "private": true,
   "description": "Development tooling only: the runtime has no npm dependencies.",
   "scripts": {
-    "typecheck": "tsc -p . --noEmit --pretty false"
+    "typecheck": "node lib/typecheck.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

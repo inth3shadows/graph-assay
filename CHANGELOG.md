@@ -21,7 +21,8 @@ All notable changes to this project are recorded here. The format follows
   separately and says when tsc failed with no diagnostics or was cut short. It refuses a missing or
   stale install, or an unreadable lockfile, with a FAIL line. It passes `--noEmit` on the command line,
   so even an unparseable `tsconfig.json` writes no `.js`.
-- `check` step labels print flags as given, also when `check` runs from another directory.
+- `check` step labels print flags as given, also when `check` runs from another directory. A failing
+  step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
