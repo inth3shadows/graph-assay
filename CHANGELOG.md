@@ -33,9 +33,9 @@ All notable changes to this project are recorded here. The format follows
   per-site results, and the adapter goldens are byte-identical. Second phase of #14.
 - `adapterSha256` changes for both adapters, because the hashed files are renamed to `.ts` and
   retyped. Results recorded before this change carry the old hashes.
-- The type check reads `tsconfig.json` and the configs it extends as JSONC, as tsc does. It also
-  resolves an `extends` written without `.json` and an absolute `extends`, so errors in those configs
-  count as config errors (#26).
+- The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
+  and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
+  count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
 - When the type check crashes on a module that does not parse, the crash line names that file and
   line, not a Node-internal frame. `check` sets the exit code instead of calling `process.exit()`, so
   piped output is not cut off (#26).

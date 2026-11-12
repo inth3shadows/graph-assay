@@ -14,37 +14,18 @@ const TSCONFIG = /^tsconfig.*\.json$/;
 // A stack frame: tsc (or node) crashed, so the diagnostics before it are a partial list.
 const STACK_FRAME = /^\s+at \S/m;
 
-/** Parse a tsconfig the way tsc does (JSONC: comments, trailing commas, a BOM), with the project's
- * own typescript; plain JSON if it cannot be loaded. Throws when the file is unreadable or invalid. */
-function readConfig(root: string, abs: string): unknown {
-  let ts: any;
-  try { ts = createRequire(path.join(root, 'package.json'))('typescript'); } catch { /* not installed: plain JSON */ }
-  if (!ts) return JSON.parse(fs.readFileSync(abs, 'utf8'));
-  const { config, error } = ts.readConfigFile(abs, ts.sys.readFile);
-  if (error) throw new Error(ts.flattenDiagnosticMessageText(error.messageText, '\n'));
-  return config;
-}
-
-/** Paths, relative to `root`, of the configs tsconfig.json extends, transitively. Relative and
- * absolute `extends` are followed as tsc resolves them (`.json` appended when the file is missing);
- * package configs are not. An unreadable or invalid config ends the chain. */
+/** Paths, relative to `root`, of the configs tsconfig.json extends, transitively: relative, absolute
+ * and package `extends`, as tsc itself resolves them (it is asked, with the project's own typescript).
+ * JSONC is fine, and a recoverable syntax error does not end the chain. [] when typescript cannot load. */
 export function extendsChain(root: string): string[] {
-  const chain: string[] = []; const seen = new Set<string>();
-  const visit = (file: string) => {
-    let cfg: any;
-    try { cfg = readConfig(root, path.join(root, file)); } catch { return; }
-    const ext = cfg && typeof cfg === 'object' ? cfg.extends : undefined;
-    for (const e of (Array.isArray(ext) ? ext : [ext])) {
-      if (typeof e !== 'string' || !(e.startsWith('.') || path.isAbsolute(e))) continue;
-      let abs = path.resolve(root, path.dirname(file), e);
-      if (!fs.existsSync(abs) && !abs.endsWith('.json')) abs = `${abs}.json`;
-      const rel = path.relative(root, abs);
-      if (seen.has(rel)) continue;
-      seen.add(rel); chain.push(rel); visit(rel);
-    }
-  };
-  visit('tsconfig.json');
-  return chain;
+  const abs = path.resolve(root);
+  let ts: any;
+  try { ts = createRequire(path.join(abs, 'package.json'))('typescript'); } catch { return []; }
+  // An unrecoverable config error (no tsconfig.json at all) is tsc's to report, not ours.
+  const host = { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} };
+  const parsed = ts.getParsedCommandLineOfConfigFile(path.join(abs, 'tsconfig.json'), undefined, host);
+  const files: string[] = parsed?.options?.configFile?.extendedSourceFiles ?? [];
+  return files.map((f) => path.relative(abs, f));
 }
 
 /** stdout then stderr, on a line boundary so a diagnostic opening stderr stays at a line start. */
@@ -98,7 +79,9 @@ export function runTsc(root: string, extra: string[] = []): { ok: boolean, lines
   const r = spawnSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', '.', '--noEmit', '--pretty', 'false', ...extra],
     { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, NODE_NO_WARNINGS: '1' } });
   const out = joinOutput(r);
-  const { ok, summary } = summarize(out, r, extendsChain(root));
+  // The extends chain only labels errors, and loading typescript to find it costs ~0.4 s: only on a failure.
+  const failed = r.status !== 0 || !!r.error;
+  const { ok, summary } = summarize(out, r, failed ? extendsChain(root) : []);
   // The full output first, the verdict last, next to the check's own summary.
   // tsc prints nothing on a clean run unless asked (e.g. --listFilesOnly); show whatever it printed.
   return { ok, lines: [...(out ? [out] : []), `${ok ? 'ok   ' : 'FAIL '} typecheck: ${summary}`] };

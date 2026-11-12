@@ -43,8 +43,9 @@ if (cmd === 'check') {
   const listed = ['lib/expect.ts', 'oracle/test/run.mjs', 'differential/test.mjs', 'labels/test.mjs', 'oracle/site-test.mjs',
     'oracle/ts-cover-test.mjs', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.mjs',
     'bench/tables-test.mjs', 'bench/triage-test.mjs', 'tools/repro-test.mjs'];
-  // A new *-test.mjs or *-test.ts runs without anyone remembering to list it.
-  const discovered = files.filter((f) => /-test\.(mjs|ts)$/.test(f) && !listed.includes(f));
+  // A new *-test.mjs, or *-test.ts in lib/, runs without anyone remembering to list it. Only lib/'s .ts:
+  // elsewhere a .ts is an indexed test source (oracle/test, conformance, fixtures), never a script.
+  const discovered = files.filter((f) => (f.endsWith('-test.mjs') || (f.startsWith('lib/') && f.endsWith('-test.ts'))) && !listed.includes(f));
   const steps = [
     // .mjs only: node --check parses a .ts file as plain JS. lib/**/*.ts gets its syntax check from tsc,
     // whose erasableSyntaxOnly also refuses what Node's type stripping cannot run.

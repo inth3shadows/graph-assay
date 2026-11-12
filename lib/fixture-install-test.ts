@@ -71,7 +71,7 @@ try {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
       if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if (/\.(mjs|ts)$/.test(e.name) && !/-test\.(mjs|ts)$/.test(e.name) && e.name !== 'test.mjs') scripts.push(rel);
+      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (rel.startsWith('lib/') && e.name.endsWith('.ts'))) && !/-test\.(mjs|ts)$/.test(e.name) && e.name !== 'test.mjs') scripts.push(rel); // lib/'s .ts are scripts; elsewhere a .ts is an indexed source
     }
   };
   visit('');

@@ -77,6 +77,36 @@ check('the extends chain reads JSONC configs and resolves extends as tsc does (.
     assert.deepEqual(extendsChain(dir), ['cfg/abs.json']);
   });
 });
+check('the extends chain survives a recoverable syntax error, as tsc does', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "extends": "./base.json" "include": ["lib"] }', 'base.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(dir), ['base.json']);
+  });
+});
+check('an extends naming a directory resolves to <name>.json, as tsc does', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "extends": "./cfg" }', 'cfg/other.json': '{}', 'cfg.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(dir), ['cfg.json']);
+  });
+});
+check('a relative root gives the same chain as an absolute one', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '// c\n{ "extends": "./base.json", }', 'base.json': '{}' }, (dir) => {
+    assert.deepEqual(extendsChain(path.relative(process.cwd(), dir)), ['base.json']);
+  });
+});
+check('an extends naming a package config is followed', () => {
+  if (!haveTsc) return 'skip';
+  // Not project(): its node_modules is this checkout's, and the package must not be written there.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-typecheck-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules/@cfg/base'), { recursive: true });
+    fs.symlinkSync(path.join(qa, 'node_modules/typescript'), path.join(dir, 'node_modules/typescript'), 'junction');
+    fs.writeFileSync(path.join(dir, 'node_modules/@cfg/base/tsconfig.json'), '{}');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{ "extends": "@cfg/base/tsconfig.json" }');
+    assert.deepEqual(extendsChain(dir), ['node_modules/@cfg/base/tsconfig.json']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 check('stdout and stderr are joined on a line boundary', () => {
   assert.equal(joinOutput({ stdout: 'lib/a.mjs(1,7): error TS2322: x', stderr: 'error TS5083: Cannot read file.' }),
     'lib/a.mjs(1,7): error TS2322: x\nerror TS5083: Cannot read file.');

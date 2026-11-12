@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "graph-assay/expect@1",
   "title": "Fixture expectation v1",
-  "description": "fixtures/oracle-candidates/<name>/expect.json. `wrong` edges must be absent and `right` edges present for the fixture to count as FIXED; a fixture with no `wrong` edges is BROKEN while a `right` edge is missing. Validated by lib/expect.ts.",
+  "description": "fixtures/oracle-candidates/<name>/expect.json. `wrong` edges must be absent and `right` edges present for the fixture to count as FIXED; a fixture with no `wrong` edges is BROKEN while a `right` edge is missing. Validated by lib/expect.mjs.",
   "type": "object",
   "required": ["issue", "wrong", "right"],
   "additionalProperties": false,
