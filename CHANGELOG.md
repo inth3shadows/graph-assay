@@ -16,15 +16,12 @@ All notable changes to this project are recorded here. The format follows
 - Type checking of `lib/` as JavaScript (`tsc --noEmit` with `allowJs` + `checkJs`), run by
   `graph-assay check`, which now needs `npm ci --ignore-scripts` first and fails without it. Dev
   dependencies only, pinned: `typescript` 6.0.3 (Apache-2.0) and `@types/node` 22.20.5 (MIT); the
-  runtime still has no npm dependencies. First phase of the TypeScript migration (#14).
-
-### Fixed
-- The type check in `check` (#19):
-  - it no longer reports "0 type errors" when tsc fails without diagnostics;
-  - it counts tsconfig errors apart from type errors and prints its verdict after the output;
-  - it refuses a `node_modules` that doesn't match `package-lock.json`, and a missing or unreadable lockfile, with a FAIL line;
-  - it passes `--noEmit` on the command line, so an unparseable `tsconfig.json` no longer writes `.js`;
-  - step labels no longer garble flags when `check` runs from another directory.
+  runtime still has no npm dependencies. First phase of the TypeScript migration (#14). The type
+  check runs last and prints every diagnostic, then one verdict line: it counts type and config errors
+  separately and says when tsc failed with no diagnostics or was cut short. It refuses a missing or
+  stale install, or an unreadable lockfile, with a FAIL line. It passes `--noEmit` on the command line,
+  so even an unparseable `tsconfig.json` writes no `.js`.
+- `check` step labels print flags as given, also when `check` runs from another directory.
 
 ### Changed
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
