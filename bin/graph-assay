@@ -67,15 +67,21 @@ if (cmd === 'check') {
   const shells = files.filter((f) => f.endsWith('.sh'));
   if (spawnSync('shellcheck', ['--version']).status === 0) steps.push(['shellcheck', '-S', 'warning', ...shells.map((f) => p(f))]);
   else console.log('skip  shellcheck (not installed)');
-  let failed = 0;
+  // Type check (tsconfig.json). typescript is a dev dependency: a missing install fails the check, never skips it.
+  const tsc = p('node_modules/typescript/bin/tsc');
+  const typecheck = fs.existsSync(tsc);
+  if (typecheck) steps.push(['node', tsc, '-p', '.', '--pretty', 'false']);
+  else console.log('FAIL  typecheck: node_modules/typescript is missing; run `npm ci --ignore-scripts` first');
+  let failed = typecheck ? 0 : 1;
   for (const [c, ...a] of steps) {
     const r = spawnSync(c, a, { cwd: qa, encoding: 'utf8', env: { ...process.env, NODE_NO_WARNINGS: '1' } });
     const label = `${c} ${a.map((x) => path.relative(qa, x) || x).join(' ')}`;
     if (r.status !== 0) { failed++; console.log(`FAIL  ${label}${r.error ? ` (${r.error.message})` : r.signal ? ` (killed by ${r.signal})` : ''}\n${(`${r.stdout ?? ''}${r.stderr ?? ''}`).trim().split('\n').slice(-8).join('\n')}`); }
+    else if (a[0] === tsc) console.log('ok    typecheck: tsc -p . (0 errors)');
     else if (c === 'shellcheck') console.log(`ok    shellcheck: ${shells.length} scripts`);
     else if (!a.includes('--check') && c !== 'bash') console.log(`ok    ${label}: ${(r.stdout.trim().split('\n').pop() ?? '')}`);
   }
-  console.log(`${steps.length} checks, ${failed} failed`);
+  console.log(`${steps.length + (typecheck ? 0 : 1)} checks, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }
 

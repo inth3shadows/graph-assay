@@ -11,6 +11,15 @@ All notable changes to this project are recorded here. The format follows
   linked to an unrelated project export) and `issue-3271-copied-sibling` (its control: a sibling
   package copied into `node_modules` keeps its edge). Both carry their own `node_modules`, which
   `.gitignore` now lets these two fixtures commit.
+- Type checking of `lib/` as JavaScript (`tsc --noEmit` with `allowJs` + `checkJs`), run by
+  `graph-assay check`, which now needs `npm ci --ignore-scripts` first and fails without it. Dev
+  dependencies only, pinned: `typescript` 6.0.3 (Apache-2.0) and `@types/node` 22.20.5 (MIT); the
+  runtime still has no npm dependencies. First phase of the TypeScript migration (#14).
+
+### Changed
+- `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
+  `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
+  identical apart from the hash.
 
 ## [0.1.0] - 2026-11-12
 
