@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-12
+
 First public release of graph-assay, previously developed privately as codegraph-qa.
 
 ### Added
@@ -50,3 +52,6 @@ First public release of graph-assay, previously developed privately as codegraph
   schema ids are `graph-assay/*@1`, and caches and config live under `graph-assay`.
 - The build-diff workflow builds from `colbymchenry/codegraph` by default, with the repository as
   an input.
+
+[Unreleased]: https://github.com/inth3shadows/graph-assay/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/inth3shadows/graph-assay/releases/tag/v0.1.0
