@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { config } from '../lib/config.mjs';
+import { placeFixtureInstall } from '../lib/fixture-install.mjs';
 
 export const FIXED = { W: 'other-in-repo', X: 'external', Y: 'local', Z: 'cannot-tell' };
 // Never shown to a labeller: subject outputs, answer keys, and agent instructions or tool configs.
@@ -24,6 +25,7 @@ export function repoCopy(src) {
   if (!fs.existsSync(dst)) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.cpSync(src, `${dst}.tmp`, { recursive: true, filter: (p) => !HIDE.has(path.basename(p)) });
+    placeFixtureInstall(`${dst}.tmp`);
     fs.renameSync(`${dst}.tmp`, dst);
   }
   return dst;

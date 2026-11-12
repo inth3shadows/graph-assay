@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { config } from '../../lib/config.mjs';
+import { placeFixtureInstall } from '../../lib/fixture-install.mjs';
 import * as codegraph from '../../lib/subjects/codegraph.mjs';
 import { coverPath, coverTsconfig } from '../../oracle/ts-cover.mjs';
 
@@ -51,6 +52,9 @@ for (const name of names) {
   try {
     const repo = path.join(work, 'repo');
     fs.cpSync(src, repo, { recursive: true, filter: (p) => path.basename(p) !== 'expect.json' && !p.includes('.codegraph') });
+    placeFixtureInstall(repo);
+    // An installed package is a dependency, not project source.
+    if (fs.existsSync(path.join(repo, 'node_modules')) && !fs.existsSync(path.join(repo, '.gitignore'))) fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\n');
     run('git', ['init', '-q'], { cwd: repo }); run('git', ['add', '-A', '.'], { cwd: repo });
     const ix = codegraph.index(repo, build, { kernel: '0' });
     if (!ix.ok) throw new Error(`codegraph index failed: ${ix.output.trim().split('\n').slice(-2).join(' | ')}`);

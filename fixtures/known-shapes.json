@@ -283,6 +283,13 @@
     "receiver-fallback|calls|import|constant>term": 1,
     "missing|receiver-fallback|ts|term@decl>method": 1
    }
+  },
+  "issue-3271": {
+   "issue": 3271,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|exact-match|function>method": 1
+   }
   }
  }
 }

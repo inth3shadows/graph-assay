@@ -1,1 +1,0 @@
-{"issue": 3271, "wrong": [], "right": [{"from": "entry", "kind": "calls", "to": "libs/lib/index.ts:useLib"}]}

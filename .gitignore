@@ -5,7 +5,3 @@ node_modules/
 out*.json
 oracle/targets.txt
 !lib/test/adapters/codegraph/.codegraph/
-
-# These fixtures need installed packages, so they carry their own node_modules (#3271).
-!fixtures/oracle-candidates/issue-3271/node_modules/
-!fixtures/oracle-candidates/issue-3271-copied-sibling/node_modules/

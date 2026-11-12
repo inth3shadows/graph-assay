@@ -25,6 +25,7 @@ import { applyRelation, RELATIONS, SKIP, DECOY_DIR, SHIFT } from './relations.mj
 import { buildFor, subject } from '../lib/subjects/index.mjs';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.mjs';
+import { placeFixtureInstall } from '../lib/fixture-install.mjs';
 import { SPEC_VERSION } from '../lib/spec.mjs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -51,7 +52,7 @@ const seeds = seedArgs.flatMap((s) => s === 'fixtures'
 if (!seeds.length) { console.error('no metamorphic seeds selected'); process.exit(2); }
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-meta-'));
-const copy = (from, to) => fs.cpSync(from, to, { recursive: true, filter: (p) => !SKIP.has(path.basename(p)) && !/^\.env(?:\.|$)/.test(path.basename(p)) });
+const copy = (from, to) => { fs.cpSync(from, to, { recursive: true, filter: (p) => !SKIP.has(path.basename(p)) && !/^\.env(?:\.|$)/.test(path.basename(p)) }); placeFixtureInstall(to); };
 
 
 function index(dir) {
