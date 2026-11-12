@@ -16,16 +16,19 @@ const STACK_FRAME = /^\s+at \S/m;
 
 /** Paths, relative to `root`, of the configs tsconfig.json extends, transitively: relative, absolute
  * and package `extends`, as tsc itself resolves them (it is asked, with the project's own typescript).
- * JSONC is fine, and a recoverable syntax error does not end the chain. [] when typescript cannot load. */
+ * JSONC is fine, and a recoverable syntax error does not end the chain. [] when typescript cannot load
+ * or its config API throws: the chain only labels errors, so it must never cost the diagnostics. */
 export function extendsChain(root: string): string[] {
   const abs = path.resolve(root);
   let ts: any;
   try { ts = createRequire(path.join(abs, 'package.json'))('typescript'); } catch { return []; }
   // An unrecoverable config error (no tsconfig.json at all) is tsc's to report, not ours.
-  const host = { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} };
-  const parsed = ts.getParsedCommandLineOfConfigFile(path.join(abs, 'tsconfig.json'), undefined, host);
-  const files: string[] = parsed?.options?.configFile?.extendedSourceFiles ?? [];
-  return files.map((f) => path.relative(abs, f));
+  try {
+    const host = { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} };
+    const parsed = ts.getParsedCommandLineOfConfigFile(path.join(abs, 'tsconfig.json'), undefined, host);
+    const files: string[] = parsed?.options?.configFile?.extendedSourceFiles ?? [];
+    return files.map((f) => path.relative(abs, f));
+  } catch { return []; }
 }
 
 /** stdout then stderr, on a line boundary so a diagnostic opening stderr stays at a line start. */
@@ -75,6 +78,7 @@ export function staleInstall(lock: unknown, installedVersion: (dir: string) => s
 /** Run tsc in `root` (no install checks). Returns the lines to print, last one the verdict.
  * `extra`: more tsc arguments (`npm run typecheck -- <flags>`). */
 export function runTsc(root: string, extra: string[] = []): { ok: boolean, lines: string[] } {
+  root = path.resolve(root); // tsc runs with cwd = root, so a relative path would resolve twice
   // --noEmit on the command line too: an unparseable tsconfig.json makes tsc fall back to defaults and emit .js.
   const r = spawnSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', '.', '--noEmit', '--pretty', 'false', ...extra],
     { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, NODE_NO_WARNINGS: '1' } });

@@ -62,6 +62,7 @@ check('a message spanning lines is not a cut-short run', () => {
   assert.equal(summarize(out, { status: 2 }).summary, '1 type error (tsc -p .)');
 });
 check('the extends chain is read from tsconfig.json, relative to each config', () => {
+  if (!haveTsc) return 'skip';
   project({ 'tsconfig.json': '{ "extends": "./cfg/base.json" }', 'cfg/base.json': '{ "extends": ["./more.json", "@pkg/cfg"] }', 'cfg/more.json': '{}' }, (dir) => {
     assert.deepEqual(extendsChain(dir), ['cfg/base.json', 'cfg/more.json']);
   });
@@ -93,6 +94,27 @@ check('a relative root gives the same chain as an absolute one', () => {
   if (!haveTsc) return 'skip';
   project({ 'tsconfig.json': '// c\n{ "extends": "./base.json", }', 'base.json': '{}' }, (dir) => {
     assert.deepEqual(extendsChain(path.relative(process.cwd(), dir)), ['base.json']);
+  });
+});
+check('a typescript without the config API gives an empty chain, not a throw', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ga-typecheck-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules/typescript'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'node_modules/typescript/package.json'), '{ "name": "typescript", "main": "index.js" }');
+    fs.writeFileSync(path.join(dir, 'node_modules/typescript/index.js'), 'module.exports = {};\n');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{ "extends": "./base.json" }');
+    fs.writeFileSync(path.join(dir, 'base.json'), '{}');
+    assert.deepEqual(extendsChain(dir), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+check('a relative root runs tsc and reports its errors', () => {
+  if (!haveTsc) return 'skip';
+  project({ 'tsconfig.json': '{ "files": ["a.ts"] }', 'a.ts': 'export const a: number = "x";\n' }, (dir) => {
+    // A bare subdirectory name: a `../../tmp/...` path survives being resolved twice, since `..` stops at /.
+    const cwd = process.cwd(); process.chdir(path.dirname(dir));
+    let r;
+    try { r = runTsc(path.basename(dir)); } finally { process.chdir(cwd); }
+    assert.match(r.lines.at(-1), /^FAIL {2}typecheck: 1 type error \(tsc -p \.\)$/);
   });
 });
 check('an extends naming a package config is followed', () => {
