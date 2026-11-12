@@ -9,9 +9,10 @@ All notable changes to this project are recorded here. The format follows
 ### Added
 - Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
   doesn't list but `node_modules` holds links to an unrelated project export of the same name.
-- A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`, and every
-  copy of a fixture (replay, metamorphic, `builds`, `modes`, `shadow`, labels, tag-fixtures) puts it in
-  place as `node_modules`, so ignore files and copy filters that drop `node_modules` leave it alone.
+- A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy
+  a subject indexes (replay, metamorphic, `builds`, `modes`, `shadow`, labeller qualification,
+  tag-fixtures) puts it in place as `node_modules`, so ignore files and copy filters that drop
+  `node_modules` leave it alone. The labeller's own copy still hides installed packages.
 
 ## [0.1.0] - 2026-11-12
 

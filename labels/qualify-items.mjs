@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { chainMatch, definedNames } from '../lib/expect.mjs';
+import { copySeed } from '../lib/fixture-install.mjs';
 import * as codegraph from '../lib/subjects/codegraph.mjs';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,7 +30,7 @@ for (const fx of fs.readdirSync(root).sort()) {
   const expect = JSON.parse(fs.readFileSync(ef, 'utf8'));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-qual-'));
   try {
-    fs.cpSync(path.join(root, fx), work, { recursive: true, filter: (p) => !p.includes('.codegraph') });
+    copySeed(path.join(root, fx), work, (p) => !p.includes('.codegraph'));
     if (!codegraph.index(work, build).ok) { skipped++; continue; }
     const snap = codegraph.snapshot(work);
     const defined = definedNames(snap);

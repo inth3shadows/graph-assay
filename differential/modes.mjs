@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.mjs';
-import { placeFixtureInstall } from '../lib/fixture-install.mjs';
+import { copySeed } from '../lib/fixture-install.mjs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.mjs';
@@ -56,7 +56,7 @@ function withHome(fn) {
   try { return fn(home); } finally { fs.rmSync(home, { recursive: true, force: true }); }
 }
 const join = (a, b) => ({ ...b, ms: a.ms + b.ms, output: `${a.output}\n${b.output}` });
-const copy = (src, dst) => { fs.cpSync(src, dst, { recursive: true, filter: (p) => !SKIP.has(path.basename(p)) }); placeFixtureInstall(dst); };
+const copy = (src, dst) => copySeed(src, dst, (p) => !SKIP.has(path.basename(p)));
 
 const count = (keys) => { const m = new Map(); for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1); return m; };
 
