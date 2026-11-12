@@ -61,7 +61,7 @@ snapshots, so a new tool needs a new adapter, not new scorers.
 Everything runs through `bin/graph-assay` (`bin/graph-assay help` lists the commands; `bin/cgqa` is a
 deprecated alias).
 
-1. Check graph-assay itself (what CI runs; no tool build needed): `node bin/graph-assay check`.
+1. Check graph-assay itself (what CI runs; no tool build needed): `npm ci --ignore-scripts` (the type checker, a dev dependency), then `node bin/graph-assay check`.
 2. Install the SCIP indexers and build both tools at their pinned versions, where graph-assay looks
    for them: `node bin/graph-assay setup` (`--dry-run` shows the steps; `--codegraph <commit>` builds
    another commit; `--no-cgr` and friends skip parts).
