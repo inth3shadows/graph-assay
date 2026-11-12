@@ -22,7 +22,7 @@ prints one verdict per bug:
 - CHANGED: the wrong answer is gone, but the right one doesn't appear either; look at it by hand.
 
 Run this before a release, or after merging upstream changes. code-graph-rag's examples are a
-separate set; point the replay at that folder to check them.
+separate set; the README in their folder (fixtures/cgr-candidates) gives the command that replays them.
 
 **Find new bugs in a real project.** Pick a project you have checked out, preferably in a language
 the tool changed recently, and run the compiler comparison on it.
@@ -38,7 +38,8 @@ the tool changed recently, and run the compiler comparison on it.
 
 **Review a change to the tool.** Index the same pinned projects with the build before the change
 and the build after it, then compare. Edges that vanished but look correct point at a regression.
-The build-diff workflow on GitHub does this for a pull request number.
+The build-diff workflow on GitHub does this for a pull request number (in codegraph's repository by
+default; another repository can be named).
 
 **Check that the tool's switches really don't matter.** The execution-mode comparison indexes the
 same code under each mode the tool documents as equivalent (native or WASM parsing, worker counts,
@@ -57,8 +58,8 @@ every input. The exact commands are in the Technical Reference under "Docker rep
   folder that the indexer couldn't find. Use the Python wrapper, which handles that.
 - **"The run stopped partway with no message"**: the machine probably ran out of memory. Run one
   project at a time.
-- **"The Java indexer was refused"**: it builds the project, which runs that project's own code, so it
-  only runs inside its sealed container.
+- **"The Java indexer failed or was refused"**: it builds the project, which runs that project's own
+  code, so it only runs inside its Docker container. Check that Docker is installed and running.
 - **"The check itself fails"**: run the self-check. It needs no tool build, and it names the
   failing test.
 

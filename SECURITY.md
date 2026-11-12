@@ -17,7 +17,7 @@ you point the oracle at. Treat every indexed repository as untrusted input. What
 - **Corpus setup.** Dependencies install with `npm ci --ignore-scripts` / `npm install --ignore-scripts`,
   so package install scripts do not run.
 - **Labelling** (`labels/`, optional) sends call-site snippets and repository excerpts to the model
-  providers you configure. Never label a repository whose code may not leave your machine. The
+  providers you configure (third-party model APIs). Never label a repository whose code may not leave your machine. The
   labellers' file tools are not confined to the repository copy, so a prompt injection in a corpus
   file could steer one to read other local files. `labels/run.mjs` therefore refuses to start unless
   `GRAPH_ASSAY_LABEL_SANDBOX=1` says it runs in a container or VM, or `--unsafe-host` accepts the
