@@ -18,6 +18,14 @@ All notable changes to this project are recorded here. The format follows
   dependencies only, pinned: `typescript` 6.0.3 (Apache-2.0) and `@types/node` 22.20.5 (MIT); the
   runtime still has no npm dependencies. First phase of the TypeScript migration (#14).
 
+### Fixed
+- The type check in `check` (#19):
+  - it no longer reports "0 type errors" when tsc fails without diagnostics;
+  - it counts tsconfig errors apart from type errors and prints its verdict after the output;
+  - it refuses a `node_modules` that doesn't match `package-lock.json`;
+  - it passes `--noEmit` on the command line, so an unparseable `tsconfig.json` no longer writes `.js`;
+  - step labels no longer garble flags when `check` runs from another directory.
+
 ### Changed
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
