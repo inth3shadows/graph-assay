@@ -20,7 +20,8 @@ All notable changes to this project are recorded here. The format follows
   check runs last and prints every diagnostic, then one verdict line: it counts type and config errors
   separately and says when tsc failed with no diagnostics or was cut short. It refuses a missing or
   stale install, or an unreadable lockfile, with a FAIL line. It passes `--noEmit` on the command line,
-  so even an unparseable `tsconfig.json` writes no `.js`.
+  so even an unparseable `tsconfig.json` writes no `.js`. `npm run typecheck` runs the same check,
+  install guards included, and passes extra arguments on to tsc.
 - `check` step labels print flags as given, also when `check` runs from another directory. A failing
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
