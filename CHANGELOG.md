@@ -22,7 +22,7 @@ All notable changes to this project are recorded here. The format follows
 - The type check in `check` (#19):
   - it no longer reports "0 type errors" when tsc fails without diagnostics;
   - it counts tsconfig errors apart from type errors and prints its verdict after the output;
-  - it refuses a `node_modules` that doesn't match `package-lock.json`;
+  - it refuses a `node_modules` that doesn't match `package-lock.json`, and a missing or unreadable lockfile, with a FAIL line;
   - it passes `--noEmit` on the command line, so an unparseable `tsconfig.json` no longer writes `.js`;
   - step labels no longer garble flags when `check` runs from another directory.
 
