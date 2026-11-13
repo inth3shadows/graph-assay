@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Oracle self-tests. Each case dir holds sources, case.json, and frozen inputs from regen.mjs:
+// Oracle self-tests. Each case dir holds sources, case.json, and frozen inputs from regen.ts:
 // snapshot.json (the subject's graph, snapshot v1) and index.scip.json (decoded SCIP). The oracle
 // runs on those, so these tests pin the oracle's rules, not codegraph's current behavior, and need
 // neither codegraph nor the scip binary (hermetic: CI runs them).
 //
-// Usage: node oracle/test/run.mjs [--mutate] [case ...]
+// Usage: node oracle/test/run.ts [--mutate] [case ...]
 //   case.json: { "lang": "python"|"ts"|"go", "mode": "forward"|"missing", "exclude": [path prefixes], "waterfall": {...},
 //                "expect": [{ "at": "file:line", "name": "called name", "key": "bucket key prefix" },
 //                           { "at": "file:line", "name": "...", "absent": true }] }
@@ -16,14 +16,14 @@
 //   leading "!" means it must not be. "pairCounts": a subset of the pairs counts (oracle, matched, ...).
 //   "dropLines": true runs the case on its snapshot with every edge's site line removed (a subject
 //   without site lines, scored on the function-pair track only).
-//   "inputs": "<case>" reuses that case's sources and frozen inputs (regen.mjs skips such a case).
+//   "inputs": "<case>" reuses that case's sources and frozen inputs (regen.ts skips such a case).
 //   "patch": edits applied to the frozen snapshot at test time, to give the oracle a subject error no
 //   real subject makes on the case: { "op": "drop", "at": "file:line", "kind" } removes call edges;
 //   { "op": "retarget", "at", "to": { "name", "kind" } } points them at another node; { "op": "add",
 //   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
 //   one with "provenance").
 // --dump: print every site's bucket per case (for writing expectations), then exit.
-// --mutate: re-run every case once per rule in oracle.mjs (each `on('<rule>')`) with that rule
+// --mutate: re-run every case once per rule in oracle.ts (each `on('<rule>')`) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -32,7 +32,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const oracle = path.join(here, '..', 'oracle.mjs');
+const oracle = path.join(here, '..', 'oracle.ts');
 const args = process.argv.slice(2);
 const mutate = args.includes('--mutate');
 const dump = args.includes('--dump');
@@ -87,11 +87,11 @@ function check(name, disable = '') {
   const result = JSON.parse(fs.readFileSync(out, 'utf8'));
   const sites = result.sites;
   if (dump) for (const s of sites) console.log(`  ${s.site.padEnd(22)} ${s.name.padEnd(16)} ${s.key}`);
-  if (dump && result.pairs) { const { sets, ...counts } = result.pairs; console.log(`  pairs ${JSON.stringify(counts)}`); for (const [k, v] of Object.entries(sets ?? {})) console.log(`  pairs.${k}: ${v.join(' | ')}`); }
+  if (dump && result.pairs) { const { sets, ...counts } = result.pairs; console.log(`  pairs ${JSON.stringify(counts)}`); for (const [k, v] of Object.entries<string[]>(sets ?? {})) console.log(`  pairs.${k}: ${v.join(' | ')}`); }
   const fails = [];
   // `waterfall`: expected SPEC §7 file counts (a subset of out.json's waterfall)
   for (const [k, v] of Object.entries(spec.waterfall ?? {})) if (result.waterfall?.[k] !== v) fails.push(`waterfall.${k}: expected ${v}, got ${result.waterfall?.[k]}`);
-  for (const [set, want] of Object.entries(spec.pairs ?? {})) {
+  for (const [set, want] of Object.entries<string[]>(spec.pairs ?? {})) {
     const have = new Set(result.pairs?.sets?.[set] ?? []);
     for (const w of want) {
       const neg = w.startsWith('!'); const p = neg ? w.slice(1) : w;

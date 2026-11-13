@@ -74,13 +74,13 @@ case $lang in
 esac
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
 # SPEC §7: the oracle covers every tracked TS/JS file, not only those a tsconfig includes. A repo with
-# a root tsconfig.json is indexed through oracle/ts-cover.mjs's project (at the repo root, untracked,
+# a root tsconfig.json is indexed through oracle/ts-cover.ts's project (at the repo root, untracked,
 # extending that tsconfig, listing every tracked TS/JS file; removed after indexing). Project dirs given
 # on the command line are indexed as given.
 projects=("$@"); cover=
 if [ "$lang" = ts ] && [ $# -eq 0 ] && [ -f tsconfig.json ]; then
   cover=tracked-files-2
-  projects=("$(node "$qa/oracle/ts-cover.mjs" . 2> "$w/ts-cover.log")")
+  projects=("$(node "$qa/oracle/ts-cover.ts" . 2> "$w/ts-cover.log")")
 fi
 key=$(printf '%s\n' "$name" "$sha" "$lang" "$*" "$tool_ver" "$(sha256 "$qa/oracle/scip-python.sh" | cut -c1-12)" $cover | sha256 | cut -c1-16)
 scip=$scip_cache/$name-${sha:0:12}-$key.scip
@@ -111,7 +111,7 @@ fi
 [ -z "$cover" ] || rm -f "${projects[0]}"
 
 case $lang in python|go|jvm) export ORACLE_LANG=$lang;; esac
-ORACLE_ALLSITES=1 ORACLE_SHOW=${ORACLE_SHOW:-3} node "$qa/oracle/oracle.mjs" "$w/repo" "$scip" "$w/out.json"
+ORACLE_ALLSITES=1 ORACLE_SHOW=${ORACLE_SHOW:-3} node "$qa/oracle/oracle.ts" "$w/repo" "$scip" "$w/out.json"
 # The inverse check, quietly: its buckets go to out-missing.json (and into baselines).
-ORACLE_ALLSITES=1 ORACLE_MODE=missing ORACLE_SHOW=0 node "$qa/oracle/oracle.mjs" "$w/repo" "$scip" "$w/out-missing.json" > "$w/missing.txt"
+ORACLE_ALLSITES=1 ORACLE_MODE=missing ORACLE_SHOW=0 node "$qa/oracle/oracle.ts" "$w/repo" "$scip" "$w/out-missing.json" > "$w/missing.txt"
 echo "$name: full results in $w/out.json, missing-edge buckets in $w/out-missing.json"

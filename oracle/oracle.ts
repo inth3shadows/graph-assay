@@ -2,7 +2,7 @@
 // Diff codegraph's resolved call edges against a SCIP index (compiler-grade
 // references) of the same checkout.
 //
-// Usage: [ORACLE_LANG=python] node oracle.mjs <repo dir with .codegraph/> <index.scip> [out.json]
+// Usage: [ORACLE_LANG=python] node oracle.ts <repo dir with .codegraph/> <index.scip> [out.json]
 //
 // For each non-heuristic `calls`/`instantiates` edge, find the SCIP reference
 // at the call site (same file, same line, identifier text == the called name,
@@ -43,7 +43,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const REDACT = process.env.ORACLE_REDACT === '1';
-// ORACLE_DISABLE=rule,rule switches named rules off (oracle/test/run.mjs --mutate uses it to prove
+// ORACLE_DISABLE=rule,rule switches named rules off (oracle/test/run.ts --mutate uses it to prove
 // every rule is pinned by a test). Rule names are the strings passed to on().
 const DISABLED = new Set((process.env.ORACLE_DISABLE ?? '').split(',').filter(Boolean));
 const on = (rule) => !DISABLED.has(rule);
@@ -164,7 +164,7 @@ const waterfall = () => {
 const edges = allEdges.filter((e) => CALL_KINDS.has(e.kind) && e.prov == null && e.line != null && LANGS.has(e.slang));
 // Everything left out of the buckets, by reason, so the coverage waterfall (SPEC §7) is published
 // next to them: `skipped` in out.json. Bucket keys never include these.
-const skipped = {};
+const skipped: Record<string, number> = {};
 const skip = (why) => { skipped[why] = (skipped[why] ?? 0) + 1; return true; };
 if (process.env.ORACLE_MODE !== 'missing') {
   for (const e of allEdges) {
@@ -346,8 +346,8 @@ report(buckets, samples, edges.length, 'edges', { waterfall: waterfall() });
 
 // Group each bucket's samples by (codegraph target, SCIP definition): one group is usually one cause.
 // Writes out.json and prints the buckets, then (ORACLE_SHOW) the top groups of each candidate bucket.
-function report(buckets, samples, total, unit, extra = {}) {
-  const groups = {};
+function report(buckets: Record<string, number>, samples: Record<string, any[]>, total, unit, extra = {}) {
+  const groups: Record<string, any[]> = {};
   for (const [key, list] of Object.entries(samples)) {
     const g = new Map();
     for (const x of list) {
@@ -360,7 +360,7 @@ function report(buckets, samples, total, unit, extra = {}) {
     groups[key] = [...g.values()].sort((a, b) => b.n - a.n);
   }
   const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
-  const result = REDACT
+  const result: Record<string, unknown> = REDACT
     ? { redacted: true, total, buckets: Object.fromEntries(sorted), skipped,
         groupSizes: Object.fromEntries(Object.entries(groups).map(([k, gs]) => [k, gs.map((g) => g.n)])) }
     : { repo, total, buckets: Object.fromEntries(sorted), skipped, groups, samples, ...(ALLSITES ? { sites: allSites } : {}) };

@@ -20,7 +20,7 @@ const sha = (f: string) => createHash('sha256').update(fs.readFileSync(f)).diges
 
 /** sha256 of every tracked scorer file, plus the repo's HEAD and whether it was dirty. */
 export function scorers() {
-  const files = (sh('git', ['ls-files', 'lib', 'oracle/*.mjs', 'metamorphic', 'benchmarks', 'fixtures/replay.mjs', 'differential/modes.mjs', 'schema', 'SPEC.md'], qa) ?? '')
+  const files = (sh('git', ['ls-files', 'lib', ':(glob)oracle/*.ts', ':(glob)oracle/test/*.ts', 'oracle/package.json', 'metamorphic', 'benchmarks', 'fixtures/replay.mjs', 'differential/modes.mjs', 'schema', 'SPEC.md'], qa) ?? '')
     .split('\n').filter(Boolean).sort();
   const hashes = Object.fromEntries(files.map((f) => [f, sha(path.join(qa, f))]));
   const all = createHash('sha256').update(files.map((f) => `${f} ${hashes[f]}`).join('\n')).digest('hex');

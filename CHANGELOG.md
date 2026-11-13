@@ -33,6 +33,15 @@ All notable changes to this project are recorded here. The format follows
   per-site results, and the adapter goldens are byte-identical. Second phase of #14.
 - `adapterSha256` changes for both adapters, because the hashed files are renamed to `.ts` and
   retyped. Results recorded before this change carry the old hashes.
+- `oracle/` is TypeScript too. Its scripts (`oracle/*.ts`, `oracle/test/run.ts`, `regen.ts`) run
+  through Node's type stripping, and `tsc` checks them along with `lib/`. `oracle/package.json` marks
+  them as ES modules. Self-test cases are copied to a temp dir before anything indexes them, so the
+  marker never reaches a case's sources. Oracle output is byte-identical: the same results on every
+  self-test case, with each rule disabled in turn, and on a cached excalidraw run in both modes. Third
+  phase of #14.
+- The scorer manifest (`manifest.scorers`) hashes oracle/'s `.ts` scripts and `oracle/package.json`,
+  so its `sha256` changes. It no longer hashes `oracle/test/ts-forward/helper.mjs`, a self-test case
+  source that git's `oracle/*.mjs` pathspec matched across directories.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
   count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
