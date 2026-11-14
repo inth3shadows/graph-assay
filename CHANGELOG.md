@@ -46,8 +46,10 @@ All notable changes to this project are recorded here. The format follows
 ### Fixed
 - Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
   fixture's caller is in the graph compared the last part of `from` with node names only, and a
-  codegraph route node is named `GET /api/...`; only its qualified name ends in `route:/...`. A caller
-  now also counts when its qualified name matches `from` the way an edge's source does. On a
+  codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A
+  caller now also counts when a node that is not a file has exactly `from` as its qualified name (its
+  name when it has none), in `fromFile` when the fixture names one. A file node never counts: it
+  exists even when its file produced nothing. On a
   codegraph build with the #2975 fix (colbymchenry/codegraph#3140), `issue-2975` now scores `FIXED`;
   no other fixture verdict changes on that build or on f72c9d2e. A graph without the caller still
   scores `CHANGED`.
