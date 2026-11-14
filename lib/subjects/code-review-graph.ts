@@ -33,9 +33,11 @@ export const canIsolateNetwork = () => (offline ??= spawnSync('unshare', ['-rn',
 /**
  * Index `dir` with the crg binary `build`: one `build` (full parse, core install: no embeddings;
  * Jedi enrichment forced off) with HOME, CRG_HOME and CRG_DATA_DIR in a temp dir, an allowlisted
- * environment and, where unshare works, no network. Then copy the graph's `nodes` and `edges`, paths
- * made relative to `dir`, to `dir`/.graph-assay/crg.db. `home` keeps HOME and data across calls
- * (then `args: ['update']` is incremental); other `args` run as `<build> <args>` in the same sandbox.
+ * environment and, where unshare works, no network. The repo root is pinned to `dir` (`--repo` and
+ * CRG_REPO_ROOT; crg otherwise walks up to the nearest .git). Then copy the graph's `nodes` and
+ * `edges`, paths made relative to `dir`, to `dir`/.graph-assay/crg.db. `home` keeps HOME and data
+ * across calls (then `args: ['update']` is incremental); `build` and `update` args extract again,
+ * other `args` run as `<build> <args>` in the same sandbox.
  * Returns {ok, status, signal, output, stdout, ms}.
  */
 export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home = null, args = null, nice = false, env: extra = {} } = {}) {
@@ -45,15 +47,15 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   const data = path.join(h, 'crg-data');
   fs.mkdirSync(path.join(h, 'tmp'), { recursive: true });
   const out = path.join(dir, OUT);
-  const indexing = !args || args[0] === 'update';
+  const indexing = !args || args[0] === 'build' || args[0] === 'update';
   if (indexing) fs.rmSync(out, { recursive: true, force: true });
   const env: Record<string, string> = {
     ...Object.fromEntries(Object.entries(process.env).filter(([k]) => PASS_ENV.test(k))),
     HOME: h, XDG_CONFIG_HOME: path.join(h, '.config'), XDG_CACHE_HOME: path.join(h, '.cache'), TMPDIR: path.join(h, 'tmp'),
     CRG_HOME: path.join(h, '.crg'), CRG_DATA_DIR: data, CRG_DISABLE_ENRICHMENT: '1', NO_COLOR: '1', DO_NOT_TRACK: '1',
-    PYTHONDONTWRITEBYTECODE: '1', ...extra,
+    PYTHONDONTWRITEBYTECODE: '1', ...extra, CRG_REPO_ROOT: dir,
   };
-  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build), ...(args ?? ['build'])];
+  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build), ...(args ?? ['build', '--repo', dir])];
   const t0 = Date.now();
   try {
     const r = spawnSync(nice ? 'nice' : argv[0], nice ? ['-n', '10', ...argv] : argv.slice(1),
@@ -72,21 +74,30 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
 }
 
 /** Copy the nodes and edges of crg's store `from` into a new SQLite file `to`, with every path
- * (crg stores absolute ones, also inside qualified names) made relative to `root`. */
+ * (crg stores absolute ones, also inside qualified names and edge metadata) made relative to `root`. */
 export function extract(from: string, to: string, root: string) {
   fs.rmSync(to, { force: true });
+  // The repo as given and as resolved (a temp dir behind a symlink; on macOS /var/... resolves to
+  // /private/var/..., which holds the given path as text): strip whichever crg wrote, longest first,
+  // and only where a value starts with it.
+  const prefixes = [...new Set([path.resolve(root), fs.realpathSync(root)])].map((p) => `${p}/`).sort((a, b) => b.length - a.length);
+  const rel = (v: any) => { if (typeof v !== 'string') return v; const p = prefixes.find((x) => v.startsWith(x)); return p ? v.slice(p.length) : v; };
+  // Inside edge metadata (JSON) a path starts right after a quote: `"<root>/m.py::g"` -> `"m.py::g"`.
+  const relJson = (v: any) => (typeof v === 'string' ? prefixes.reduce((x, p) => x.replaceAll(`"${p}`, '"'), v) : v);
+  const src = new DatabaseSync(from, { readOnly: true });
   const db = new DatabaseSync(to);
-  // The repo as given and as resolved (a temp dir behind a symlink): strip whichever crg wrote.
-  const prefixes = [...new Set([path.resolve(root), fs.realpathSync(root)])].map((p) => `${p}/`);
-  const rel = (col: string) => prefixes.reduce((x, p) => `replace(${x}, '${p.replaceAll("'", "''")}', '')`, col);
   try {
-    db.exec(`ATTACH DATABASE '${from.replaceAll("'", "''")}' AS src;
-      CREATE TABLE nodes AS SELECT kind, ${rel('name')} AS name, ${rel('qualified_name')} AS qualified_name, ${rel('file_path')} AS file_path,
-        line_start, line_end, language, parent_name FROM src.nodes;
-      CREATE TABLE edges AS SELECT id, kind, ${rel('source_qualified')} AS source_qualified, ${rel('target_qualified')} AS target_qualified,
-        ${rel('file_path')} AS file_path, line, extra, confidence_tier, target_resolution FROM src.edges;
-      DETACH DATABASE src;`);
-  } finally { db.close(); }
+    db.exec(`CREATE TABLE nodes (kind TEXT, name TEXT, qualified_name TEXT, file_path TEXT, line_start INTEGER, line_end INTEGER, language TEXT);
+             CREATE TABLE edges (id INTEGER, kind TEXT, source_qualified TEXT, target_qualified TEXT, file_path TEXT, line INTEGER, extra TEXT, confidence_tier TEXT);
+             BEGIN;`);
+    const putNode = db.prepare('INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)');
+    for (const n of src.prepare('SELECT kind, name, qualified_name, file_path, line_start, line_end, language FROM nodes').iterate() as Iterable<any>)
+      putNode.run(n.kind, rel(n.name), rel(n.qualified_name), rel(n.file_path), n.line_start, n.line_end, n.language);
+    const putEdge = db.prepare('INSERT INTO edges VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const e of src.prepare('SELECT id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier FROM edges').iterate() as Iterable<any>)
+      putEdge.run(e.id, e.kind, rel(e.source_qualified), rel(e.target_qualified), rel(e.file_path), e.line, relJson(e.extra), e.confidence_tier);
+    db.exec('COMMIT;');
+  } finally { db.close(); src.close(); }
 }
 
 /** The release version the program reports (`code-review-graph 2.4.0`), or null. */
@@ -100,33 +111,52 @@ const KIND = { CALLS: 'calls', CONTAINS: 'contains', IMPORTS_FROM: 'imports', RE
 // crg's own tiers (graph.py v2.4.0): EXTRACTED (the source names the symbol and the node exists),
 // INFERRED (a resolver chose the node from other evidence, e.g. a receiver's class), AMBIGUOUS
 // (several nodes fit and nothing chooses), UNRESOLVED (no node). SPEC Terms: the subject's marking
-// decides; only AMBIGUOUS says the target is a guess.
+// decides; only AMBIGUOUS says the target is a guess. crg stores an ambiguous call with a bare target
+// and its candidates in `extra.ambiguous_targets`; snapshot() links it to each candidate as guessed.
 const GUESSED = new Set(['AMBIGUOUS']);
 /** crg's symbol part of a qualified name: `<file>::<Class>.<member>[:S<hash>[:n]]` -> `Class.member`. */
 const symbol = (id: string) => { const cut = id.indexOf('::'); return (cut >= 0 ? id.slice(cut + 2) : id).replace(/:S[0-9a-f]+(?::\d+)?$/, ''); };
+// `ns.I.m(a.b)` -> ['ns', 'I', 'm(a.b)']: dots inside a signature stay.
+const segments = (q: string) => { const out: string[] = []; let cur = ''; let depth = 0; for (const ch of q) { if (ch === '(') depth++; if (ch === ')') depth--; if (ch === '.' && !depth) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; };
 
 /**
- * Give every definition node its container chain (`Outer::inner`, `Class::method`) from the nesting
- * of crg's own spans within a file. crg names a class member `Class.member` but a nested function by
- * its bare name, with a hash suffix when the name repeats in the file (`skipString:S<hash>:2`), so the
- * chain is read from the spans: a node's container is the innermost node of the same file whose span
- * holds it. Two nodes with one span (a one-line class and its method) nest only when crg's symbol for
- * the outer one is a prefix of the inner one's (`A` of `A.m`).
+ * Give every definition node its container chain (`Class::method`, `Outer::inner`). crg's symbol
+ * names a member's containers (`Router.Host` for a Go receiver method, `K.m`, `ns.I.m()`), and those
+ * come first: the container is the node of the same file with that symbol, or, when there is none
+ * (a namespace, a receiver type declared elsewhere), the symbol's own segments. A bare symbol is a
+ * top-level or nested function (crg adds a hash suffix when the name repeats: `skipString:S<hash>:2`),
+ * and its container is the innermost node of the same file whose span strictly holds it. Two bare
+ * definitions on one span (a one-line nested function) cannot be told apart and stay unnested.
  */
 function qualify(nodes: SnapshotNode[]) {
   const byFile = new Map<string, SnapshotNode[]>();
   for (const n of nodes) if (n.kind !== 'file') (byFile.get(n.file) ?? byFile.set(n.file, []).get(n.file)).push(n);
   for (const list of byFile.values()) {
-    const depth = (n: SnapshotNode) => symbol(n.id).split('.').length;
-    list.sort((a, b) => a.start - b.start || b.end - a.end || depth(a) - depth(b));
-    const stack: SnapshotNode[] = [];
-    for (const n of list) {
-      const holds = (o: SnapshotNode) => o.start <= n.start && n.end <= o.end
-        && (o.start !== n.start || o.end !== n.end || symbol(n.id).startsWith(`${symbol(o.id)}.`));
-      while (stack.length && !holds(stack[stack.length - 1])) stack.pop();
-      n.qname = [...stack.map((o) => o.name), n.name].join('::');
-      stack.push(n);
-    }
+    const bySymbol = new Map<string, SnapshotNode>();
+    for (const n of list) if (!bySymbol.has(symbol(n.id))) bySymbol.set(symbol(n.id), n);
+    const done = new Map<SnapshotNode, string>();
+    const chain = (n: SnapshotNode, seen: Set<SnapshotNode>): string => {
+      if (done.has(n)) return done.get(n);
+      if (seen.has(n)) return n.name; // a cycle cannot happen by construction; never loop on bad input
+      seen.add(n);
+      const segs = segments(symbol(n.id));
+      let outer: string | null = null;
+      if (segs.length > 1) {
+        const owner = bySymbol.get(segs.slice(0, -1).join('.'));
+        outer = owner && owner !== n ? chain(owner, seen) : segs.slice(0, -1).map((x) => x.replace(/\(.*\)$/, '')).join('::');
+      } else {
+        let best: SnapshotNode | null = null;
+        for (const o of list) {
+          if (o === n || o.start > n.start || o.end < n.end || (o.start === n.start && o.end === n.end)) continue;
+          if (!best || o.end - o.start < best.end - best.start || (o.end - o.start === best.end - best.start && o.start > best.start)) best = o;
+        }
+        if (best) outer = chain(best, seen);
+      }
+      const q = outer ? `${outer}::${n.name}` : n.name;
+      done.set(n, q);
+      return q;
+    };
+    for (const n of list) n.qname = chain(n, new Set());
   }
 }
 
@@ -141,8 +171,8 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     const rows = db.prepare(`SELECT kind, name, qualified_name AS qname, file_path AS file, line_start AS start, line_end AS "end",
                                     language FROM nodes ORDER BY file_path, line_start, qualified_name`).all() as unknown as Row[];
     const er = db.prepare(`SELECT kind, source_qualified AS src, target_qualified AS dst, file_path AS file, line, extra,
-                                  confidence_tier AS tier, target_resolution AS resolution FROM edges ORDER BY id`).all() as unknown as
-      { kind: string; src: string; dst: string; file: string; line: number | null; extra: string; tier: string | null; resolution: string | null }[];
+                                  confidence_tier AS tier FROM edges ORDER BY id`).all() as unknown as
+      { kind: string; src: string; dst: string; file: string; line: number | null; extra: string; tier: string | null }[];
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
       if (!n.file || internal(n.file)) continue;
@@ -151,7 +181,7 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
         nodes.push({ id: n.qname, kind: 'file', name: n.file, qname: n.file, file: n.file, language: n.language, start: 1, end: Math.max(1, n.end ?? 1) });
         continue;
       }
-      // qname is filled in below from the nesting of spans
+      // qname is filled in below by qualify()
       nodes.push({ id: n.qname, kind: n.kind.toLowerCase(), name: n.name, qname: n.name, file: n.file,
         language: n.language, start, end: Math.max(start, n.end ?? start) });
     }
@@ -166,6 +196,12 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       const line = Number.isInteger(e.line) && e.line > 0 ? e.line : null;
       if (!byId.has(e.src)) continue;
       if (!byId.has(e.dst)) {
+        // An ambiguous call names a bare target and lists the candidates it could not choose between:
+        // one guessed edge to each candidate the snapshot holds.
+        const candidates = e.tier === 'AMBIGUOUS' && Array.isArray(x.ambiguous_targets) ? x.ambiguous_targets.filter((t) => byId.has(t)) : [];
+        for (const t of candidates) edges.push({ kind: KIND[e.kind] ?? e.kind.toLowerCase(), src: e.src, dst: t, line, col: null, ref,
+          resolvedBy: e.tier, provenance: 'ambiguous' });
+        if (candidates.length) continue;
         // An unresolved call names a bare target (`print`, `get`); other kinds to a non-node are dropped.
         if (e.kind === 'CALLS' && line) unresolved.push({ src: e.src, file: e.file, line, col: null, name: ref ?? e.dst, kind: 'calls' });
         continue;

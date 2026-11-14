@@ -38,9 +38,13 @@ Design decisions:
   install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
   unshared where possible; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
   path made relative to the repo). Its confidence tier becomes `resolvedBy`, and `AMBIGUOUS` becomes
-  provenance. Calls to a bare unresolved name become unresolved references. crg names a nested
-  function by its bare name (with a hash suffix when the name repeats in a file), so the adapter
-  builds each node's container chain from the nesting of crg's own spans (`scanD::skipString`).
+  provenance: crg stores an ambiguous call with a bare target and its candidates in
+  `extra.ambiguous_targets`, and the adapter links it to each candidate as a guessed edge. Other
+  calls to a bare name become unresolved references. The repo root is pinned (`--repo`,
+  `CRG_REPO_ROOT`); crg otherwise walks up to the nearest `.git`. Container chains: crg's symbol
+  names a member's containers (`Router.Host`, `K.m`, `ns.I.m()`); a nested function gets its bare
+  name (with a hash suffix when it repeats in a file), so its container is the innermost node whose
+  span strictly holds it (`scanD::skipString`). Two bare definitions on one line stay unnested.
   `lib/subjects/index.ts`
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
@@ -292,7 +296,7 @@ supplies the adapter's existing `unshare` isolation.
 | codegraph | upstream commit `f72c9d2efb14454ff4f9fd7b8460abd82f19a287` | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph/commit/f72c9d2efb14454ff4f9fd7b8460abd82f19a287), CI's known build pair. `npm ci` uses that commit's lock, then `npm run build`; WASM extraction (`CODEGRAPH_KERNEL=0`). |
 | code-graph-rag | `0.5.0`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.5.0/), matching SPEC's subject spike. `docker/requirements.lock` freezes the existing benchmark venv's transitive versions and PyPI wheel SHA256s (pip report, CPython 3.12/amd64). `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
 | codebase-memory-mcp | `0.12.1`; archive SHA256 `8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7` | [Release v0.12.1](https://github.com/DeusData/codebase-memory-mcp/releases/tag/v0.12.1) linux-amd64 asset; checksum from the release's `checksums.txt`. `tools/setup.sh` checks it before extraction (`--no-cbm` skips; other platforms are not pinned). Not in the Docker reproduction yet. |
-| code-review-graph | `2.4.0`, core (no extras) | [PyPI release](https://pypi.org/project/code-review-graph/2.4.0/). `docker/crg-requirements.lock` pins every dependency with all of its PyPI wheel hashes (`uv pip compile --generate-hashes`, resolved for CPython 3.12 x86_64); `tools/setup.sh` installs it with `--require-hashes --only-binary=:all:` (`--no-crg` skips). No embeddings or enrichment. Not in the Docker reproduction yet. |
+| code-review-graph | `2.4.0`, core (no extras) | [PyPI release](https://pypi.org/project/code-review-graph/2.4.0/). `docker/crg-requirements.lock` pins every dependency with all of its PyPI wheel hashes (`uv pip compile --generate-hashes`, resolved for CPython 3.12 x86_64); `tools/setup.sh` installs it with `--require-hashes --only-binary=:all:` (`--no-crg` skips; needs Python 3.11+ on Linux or macOS, and replaces an existing venv). No embeddings or enrichment. Not in the Docker reproduction yet. |
 | Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's upstream has no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata). Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Other dev entries need no setup. |
 | PyCG | `8d5dc40837803beef1d8d379fbf2cdad6cd94641` | Same public source pin as `tools/fetch-benchmarks.sh`; snippets are input data. |
 | Bootstrap | seed `1`, 2000 resamples | Existing `bench/tables.ts` defaults; the runner passes the seed explicitly. |

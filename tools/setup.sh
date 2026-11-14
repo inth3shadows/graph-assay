@@ -74,9 +74,16 @@ if [ "$do_cbm" = 1 ]; then
   fi
 fi
 if [ "$do_crg" = 1 ]; then
-  # code-review-graph 2.4.0, core only; the lock pins every dependency with all of its wheel hashes
+  # code-review-graph 2.4.0, core only; the lock pins every dependency with all of its wheel hashes.
+  # It was resolved for Python 3.11+ (3.10 also needs tomli, which it does not list); Linux or macOS.
+  if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || ! case $(uname -s) in Linux|Darwin) true;; *) false;; esac; then
+    echo "setup: the hash-locked code-review-graph install needs Python 3.11+ on Linux or macOS; pass --no-crg" >&2
+    exit 1
+  fi
   venv=$subjects/code-review-graph/venv
   step "code-review-graph 2.4.0 -> $venv"
+  # a fresh venv: installing over an old one would keep packages the lock does not list
+  run rm -rf "$venv"
   run python3 -m venv "$venv"
   run "$venv/bin/pip" install -q --only-binary=:all: --require-hashes -r "$qa/docker/crg-requirements.lock"
 fi
