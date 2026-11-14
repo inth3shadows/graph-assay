@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- A third subject, codebase-memory-mcp 0.12.1 (`lib/subjects/codebase-memory-mcp.ts`): indexes in a
+  sandboxed HOME and cache with the repo as the allowed root, and maps the graph's nodes and edges to
+  a snapshot v1. It declares no site lines (cbm keeps one edge per caller and callee), so it is
+  scored on the function-pair track. Edges resolved by a strategy cbm itself calls a weak name-only
+  match are guessed. `tools/setup.sh` installs the linux-amd64 release, sha256-pinned (`--no-cbm`
+  skips). A golden mapping test and a sandbox probe join `lib/adapter-test.ts`.
+- `fixtures/cbm-candidates/`, two unfiled codebase-memory-mcp repros, both BROKEN on 0.12.1:
+  `cbm1-js-ts-same-stem` (`client.js` next to `client.ts`: the TS file's functions and calls vanish)
+  and `cbm2-py-nested-call-lifted` (a call inside a nested function is recorded on the module).
 - Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
   that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
   `java-fq-static-receiver` (`com.x.b.Util.log(...)` in a file that imports `com.x.a.*`, so only
@@ -14,8 +23,9 @@ All notable changes to this project are recorded here. The format follows
   under `import com.x.b.*`; `right` also pins the `new` to `com.x.b`), and three Laravel route forms
   that still link the top-level controller: `laravel-route-group-use`, `laravel-route-namespace-use`
   and `laravel-route-fq-class`. Their sources copy the parent fixture (`issue-2976` or `issue-2975`)
-  except the caller file; each `expect.json` has `issue: null`, a note, and only the edges of its own
-  form. `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
+  except the caller file; each `expect.json` names the upstream issue it was filed as (#3290,
+  #3291, and #3292 for the three Laravel forms), a note, and only the edges of its own form.
+  `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
 - Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
   doesn't list but `node_modules` holds links to an unrelated project export of the same name.
 - A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy

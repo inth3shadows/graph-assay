@@ -3,9 +3,10 @@
 // report whether each fixture's wrong edge is still there.
 //
 // Usage: node fixtures/replay.mts [--subject name] [--root dir] <build | default> [fixture ...] [--json out.json] [--canary]
-//   --subject: codegraph (default; build = dist/bin/codegraph.js) or code-graph-rag (build = the cgr binary)
+//   --subject: codegraph (default; build = dist/bin/codegraph.js), code-graph-rag (build = the cgr binary) or
+//              codebase-memory-mcp (build = its release binary)
 //   --root: the fixture set (default fixtures/oracle-candidates, codegraph's regression set; code-graph-rag's
-//           own findings live in fixtures/cgr-candidates)
+//           own findings live in fixtures/cgr-candidates, codebase-memory-mcp's in fixtures/cbm-candidates)
 //
 // Each fixture dir holds an expect.json:
 //   { "issue": 3229,
