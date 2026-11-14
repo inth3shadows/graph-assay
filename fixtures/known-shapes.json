@@ -192,13 +192,13 @@
    "note": "no oracle indexer for this language"
   },
   "java-fq-static-receiver": {
-   "issue": null,
+   "issue": 3290,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
   "java-typed-var-wildcard": {
-   "issue": null,
+   "issue": 3291,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
@@ -210,19 +210,19 @@
    "note": "no oracle indexer for this language"
   },
   "laravel-route-fq-class": {
-   "issue": null,
+   "issue": 3292,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
   "laravel-route-group-use": {
-   "issue": null,
+   "issue": 3292,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
   "laravel-route-namespace-use": {
-   "issue": null,
+   "issue": 3292,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"

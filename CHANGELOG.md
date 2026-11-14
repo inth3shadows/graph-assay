@@ -14,8 +14,9 @@ All notable changes to this project are recorded here. The format follows
   under `import com.x.b.*`; `right` also pins the `new` to `com.x.b`), and three Laravel route forms
   that still link the top-level controller: `laravel-route-group-use`, `laravel-route-namespace-use`
   and `laravel-route-fq-class`. Their sources copy the parent fixture (`issue-2976` or `issue-2975`)
-  except the caller file; each `expect.json` has `issue: null`, a note, and only the edges of its own
-  form. `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
+  except the caller file; each `expect.json` names the upstream issue it was filed as (#3290,
+  #3291, and #3292 for the three Laravel forms), a note, and only the edges of its own form.
+  `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
 - Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
   doesn't list but `node_modules` holds links to an unrelated project export of the same name.
 - A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy
