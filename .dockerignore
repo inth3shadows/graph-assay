@@ -35,7 +35,8 @@
 !schema/
 !schema/**
 !tools/
-!tools/repro.mjs
+!tools/repro.ts
+!tools/package.json
 !labels/
 !labels/noise.ts
 !labels/questions.ts

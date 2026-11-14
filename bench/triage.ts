@@ -6,7 +6,7 @@
 // Usage: node bench/triage.ts [--work <oracle work dir>] [--corpus corpus/v1.txt] [--split dev]
 //                              [--t3 <dir with meta-cg.json / meta-cgr.json>] [--t1 <dir with replay-cg.json>]
 //                              [--known fixtures/known-shapes.json] [--top 15] [--md out.md] [--json out.json]
-//   --known: each fixture's shapes (tools/triage/tag-fixtures.mjs); a codegraph shape whose key a fixture of
+//   --known: each fixture's shapes (tools/triage/tag-fixtures.ts); a codegraph shape whose key a fixture of
 //   the same language produces lists that fixture and its upstream issue, with its replay verdict from --t1
 //   (BROKEN: still open at this build). A match is a candidate, not proof: one key can hold several bugs.
 //   --work: the dir holding w-<name>[-code-graph-rag] (default: the configured oracle work dir); for a
@@ -96,7 +96,7 @@ export function rankShapes(rows) {
 }
 
 const LANG = { python: 'python', go: 'go', typescript: 'ts', javascript: 'ts', ts: 'ts' };
-/** Fixtures (tagged by tools/triage/tag-fixtures.mjs) whose bug produces this shape in one of its languages. */
+/** Fixtures (tagged by tools/triage/tag-fixtures.ts) whose bug produces this shape in one of its languages. */
 export function knownFor(shape, known, verdicts = {}) {
   const langs = new Set(shape.langs.map((l) => LANG[l]));
   return Object.entries<any>(known?.fixtures ?? {}).filter(([, f]) => f.shapes && f.shapes[shape.key] && langs.has(LANG[f.lang]))

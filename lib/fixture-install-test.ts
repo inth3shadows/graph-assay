@@ -71,7 +71,7 @@ try {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
       if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
+      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
     }
   };
   visit('');

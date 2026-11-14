@@ -36,4 +36,4 @@ RUN git init -q /opt/codegraph && \
 
 WORKDIR /opt/graph-assay
 COPY . .
-ENTRYPOINT ["node", "tools/repro.mjs"]
+ENTRYPOINT ["node", "tools/repro.ts"]
