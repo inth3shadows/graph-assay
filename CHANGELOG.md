@@ -7,6 +7,13 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
+  that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
+  `java-fq-static-receiver` (`com.x.b.Util.log(...)` under `import com.x.b.*`),
+  `java-typed-var-wildcard` (`Util u = new Util(); u.run();`), and three Laravel route forms that
+  still link the top-level controller: `laravel-route-group-use`, `laravel-route-namespace-use` and
+  `laravel-route-fq-class`. Each differs from its parent fixture only in the caller file.
+  `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
 - Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
   doesn't list but `node_modules` holds links to an unrelated project export of the same name.
 - A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy
