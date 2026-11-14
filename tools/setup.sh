@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-command setup: the oracle's SCIP tools and a build of each subject, where lib/config.ts looks.
-# Usage: tools/setup.sh [--codegraph <commit>] [--no-codegraph] [--no-cgr] [--no-cbm] [--no-scip] [--unlocked] [--dry-run]
+# Usage: tools/setup.sh [--codegraph <commit>] [--no-codegraph] [--no-cgr] [--no-cbm] [--no-crg] [--no-scip] [--unlocked] [--dry-run]
 #   --codegraph  codegraph commit to build (default: the Docker reproduction's pin)
 #   --no-*       skip that part; --dry-run prints the steps and changes nothing
 #   --unlocked   allow code-graph-rag without the hash lock (any Python but 3.12 on x86_64): its
@@ -11,13 +11,14 @@ qa=$(cd "$(dirname "$0")/.." && pwd)
 CG_PIN=f72c9d2efb14454ff4f9fd7b8460abd82f19a287 CGR_VERSION=0.5.0
 # codebase-memory-mcp release binary (linux-amd64 only); sha256 from the release's checksums.txt
 CBM_VERSION=0.12.1 CBM_SHA256=8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7
-cg=$CG_PIN do_cg=1 do_cgr=1 do_cbm=1 do_scip=1 dry=0 unlocked=0
+cg=$CG_PIN do_cg=1 do_cgr=1 do_cbm=1 do_crg=1 do_scip=1 dry=0 unlocked=0
 while [ $# -gt 0 ]; do
   case $1 in
     --codegraph) [ $# -ge 2 ] || { sed -n '3,7p' "$0"; exit 2; }; cg=$2; shift 2;;
     --no-codegraph) do_cg=0; shift;;
     --no-cgr) do_cgr=0; shift;;
     --no-cbm) do_cbm=0; shift;;
+    --no-crg) do_crg=0; shift;;
     --no-scip) do_scip=0; shift;;
     --dry-run) dry=1; shift;;
     --unlocked) unlocked=1; shift;;
@@ -71,5 +72,12 @@ if [ "$do_cbm" = 1 ]; then
     mkdir -p "$dest"
     tar xzf "$tmp/cbm.tar.gz" -C "$dest" codebase-memory-mcp LICENSE
   fi
+fi
+if [ "$do_crg" = 1 ]; then
+  # code-review-graph 2.4.0, core only; the lock pins every dependency with all of its wheel hashes
+  venv=$subjects/code-review-graph/venv
+  step "code-review-graph 2.4.0 -> $venv"
+  run python3 -m venv "$venv"
+  run "$venv/bin/pip" install -q --only-binary=:all: --require-hashes -r "$qa/docker/crg-requirements.lock"
 fi
 step "done; check with: node $qa/bin/graph-assay config"

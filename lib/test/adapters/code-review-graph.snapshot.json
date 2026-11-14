@@ -1,0 +1,261 @@
+{
+ "schema": "graph-assay/snapshot@1",
+ "subject": {
+  "name": "code-review-graph",
+  "adapterSha256": "<hash>",
+  "version": "<version>",
+  "config": {
+   "install": "core",
+   "enrichment": false
+  }
+ },
+ "capabilities": {
+  "siteLines": true,
+  "siteColumns": false,
+  "columnEncoding": null,
+  "unresolved": true,
+  "provenance": true,
+  "edgeKinds": [
+   "calls",
+   "contains"
+  ]
+ },
+ "files": [
+  {
+   "path": "app.py",
+   "language": "python"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "app.py",
+   "kind": "file",
+   "name": "app.py",
+   "qname": "app.py",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 24
+  },
+  {
+   "id": "app.py::echo",
+   "kind": "function",
+   "name": "echo",
+   "qname": "echo",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 2
+  },
+  {
+   "id": "app.py::Greeter",
+   "kind": "class",
+   "name": "Greeter",
+   "qname": "Greeter",
+   "file": "app.py",
+   "language": "python",
+   "start": 5,
+   "end": 11
+  },
+  {
+   "id": "app.py::Greeter.greet",
+   "kind": "function",
+   "name": "greet",
+   "qname": "Greeter::greet",
+   "file": "app.py",
+   "language": "python",
+   "start": 6,
+   "end": 8
+  },
+  {
+   "id": "app.py::Greeter.loud",
+   "kind": "function",
+   "name": "loud",
+   "qname": "Greeter::loud",
+   "file": "app.py",
+   "language": "python",
+   "start": 10,
+   "end": 11
+  },
+  {
+   "id": "app.py::version_option",
+   "kind": "function",
+   "name": "version_option",
+   "qname": "version_option",
+   "file": "app.py",
+   "language": "python",
+   "start": 14,
+   "end": 18
+  },
+  {
+   "id": "app.py::callback",
+   "kind": "function",
+   "name": "callback",
+   "qname": "version_option::callback",
+   "file": "app.py",
+   "language": "python",
+   "start": 15,
+   "end": 16
+  },
+  {
+   "id": "app.py::main",
+   "kind": "function",
+   "name": "main",
+   "qname": "main",
+   "file": "app.py",
+   "language": "python",
+   "start": 21,
+   "end": 23
+  }
+ ],
+ "edges": [
+  {
+   "kind": "contains",
+   "src": "app.py",
+   "dst": "app.py::echo",
+   "line": 1,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py",
+   "dst": "app.py::Greeter",
+   "line": 5,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py::Greeter",
+   "dst": "app.py::Greeter.greet",
+   "line": 6,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::Greeter.greet",
+   "dst": "app.py::echo",
+   "line": 7,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::Greeter.greet",
+   "dst": "app.py::Greeter.loud",
+   "line": 8,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py::Greeter",
+   "dst": "app.py::Greeter.loud",
+   "line": 10,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py",
+   "dst": "app.py::version_option",
+   "line": 14,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py",
+   "dst": "app.py::callback",
+   "line": 15,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::callback",
+   "dst": "app.py::echo",
+   "line": 16,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "app.py",
+   "dst": "app.py::main",
+   "line": 21,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::main",
+   "dst": "app.py::Greeter.greet",
+   "line": 22,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "INFERRED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::main",
+   "dst": "app.py::Greeter",
+   "line": 22,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "app.py::main",
+   "dst": "app.py::version_option",
+   "line": 23,
+   "col": null,
+   "ref": null,
+   "resolvedBy": "EXTRACTED",
+   "provenance": null
+  }
+ ],
+ "unresolved": [
+  {
+   "src": "app.py::echo",
+   "file": "app.py",
+   "line": 2,
+   "col": null,
+   "name": "print",
+   "kind": "calls"
+  },
+  {
+   "src": "app.py::Greeter.loud",
+   "file": "app.py",
+   "line": 11,
+   "col": null,
+   "name": "upper",
+   "kind": "calls"
+  }
+ ]
+}

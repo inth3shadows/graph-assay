@@ -4,9 +4,10 @@
 import * as codegraph from './codegraph.ts';
 import * as cgr from './code-graph-rag.ts';
 import * as cbm from './codebase-memory-mcp.ts';
+import * as crg from './code-review-graph.ts';
 import { isMain } from '../main.ts';
 
-export const SUBJECTS = { codegraph, 'code-graph-rag': cgr, 'codebase-memory-mcp': cbm };
+export const SUBJECTS = { codegraph, 'code-graph-rag': cgr, 'codebase-memory-mcp': cbm, 'code-review-graph': crg };
 
 /** The subject called `name` (default codegraph); exits with usage on an unknown name. */
 export function subject(name = 'codegraph') {

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Hermetic adapter tests (part of `graph-assay check`):
 //   1. mapping: each adapter's snapshot of a frozen index (lib/test/adapters/<subject>/: the source,
-//      plus codegraph's .codegraph DB, code-graph-rag's export or codebase-memory-mcp's extract) equals the committed golden
+//      plus codegraph's .codegraph DB, code-graph-rag's export, or codebase-memory-mcp's or
+//      code-review-graph's extract) equals the committed golden
 //      snapshot. A change to how an adapter maps a tool's output shows up as a diff here.
-//   2. sandbox: what a codegraph or codebase-memory-mcp index process can see (environment, HOME, network).
+//   2. sandbox: what a codegraph, codebase-memory-mcp or code-review-graph index process can see (environment, HOME, network).
 //   node lib/adapter-test.ts --update   rewrites the golden snapshots (after a deliberate change)
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -13,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import * as codegraph from './subjects/codegraph.ts';
 import * as cgr from './subjects/code-graph-rag.ts';
 import * as cbm from './subjects/codebase-memory-mcp.ts';
+import * as crg from './subjects/code-review-graph.ts';
 import { validateSnapshot } from './snapshot.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +24,7 @@ const check = (name, fn) => { n++; try { fn(); } catch (e) { console.error(`FAIL
 
 // Fields that name the adapter build or the machine, not the mapping.
 const normalize = (s) => JSON.parse(JSON.stringify({ ...s, subject: { ...s.subject, adapterSha256: '<hash>', version: '<version>' } }));
-for (const [name, adapter] of [['codegraph', codegraph], ['code-graph-rag', cgr], ['codebase-memory-mcp', cbm]] as const) {
+for (const [name, adapter] of [['codegraph', codegraph], ['code-graph-rag', cgr], ['codebase-memory-mcp', cbm], ['code-review-graph', crg]] as const) {
   const dir = path.join(here, 'test', 'adapters', name);
   const golden = path.join(here, 'test', 'adapters', `${name}.snapshot.json`);
   check(`${name}: snapshot of the frozen index matches the golden snapshot`, () => {
@@ -80,6 +82,31 @@ fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), e
     assert(seen.env.CBM_CACHE_DIR.startsWith(seen.env.HOME), 'the cache must live in the sandbox HOME');
     assert.equal(seen.env.CBM_ALLOWED_ROOT, work);
     if (cbm.canIsolateNetwork()) assert.equal(seen.ifaces, 0, 'the index process has a network interface');
+    else console.log('note: unshare unavailable here; network isolation not checked');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-review-graph sandbox: allowlisted env, private HOME and data dir, enrichment off, no network where unshare works', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
+  try {
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs'; import * as os from 'node:os';
+const ifaces = Object.entries(os.networkInterfaces()).filter(([k]) => k !== 'lo').length;
+fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces }));\n`, { mode: 0o755 });
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
+    process.env.GRAPH_ASSAY_TEST_SECRET = 'x'; process.env.CRG_SERIAL_PARSE = '1'; process.env.CRG_OPENAI_API_KEY = 'x';
+    const r = crg.index(work, probe, { args: ['probe'] });
+    delete process.env.GRAPH_ASSAY_TEST_SECRET; delete process.env.CRG_SERIAL_PARSE; delete process.env.CRG_OPENAI_API_KEY;
+    assert.equal(r.ok, true, r.output);
+    const seen = JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8'));
+    assert(!seen.keys.includes('GRAPH_ASSAY_TEST_SECRET'), 'a caller variable reached the index');
+    assert(!seen.keys.includes('CRG_OPENAI_API_KEY'), 'an embedding-provider key reached the index');
+    assert.equal(seen.env.CRG_SERIAL_PARSE, '1', "crg's parse switches must pass");
+    assert.equal(seen.env.CRG_DISABLE_ENRICHMENT, '1');
+    assert.notEqual(seen.env.HOME, os.homedir());
+    assert(seen.env.CRG_DATA_DIR.startsWith(seen.env.HOME) && seen.env.CRG_HOME.startsWith(seen.env.HOME), 'crg state must live in the sandbox HOME');
+    if (crg.canIsolateNetwork()) assert.equal(seen.ifaces, 0, 'the index process has a network interface');
     else console.log('note: unshare unavailable here; network isolation not checked');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });

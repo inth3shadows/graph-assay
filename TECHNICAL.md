@@ -33,7 +33,15 @@ Design decisions:
   Its `strategy` becomes `resolvedBy`, and the strategies cbm itself calls weak name-only matches
   (`unique_name`, `suffix_match`, `field_type_hint`, `fuzzy`) become provenance. cbm keeps one edge
   per caller and callee with one site's line, so it declares no site lines and is scored on the
-  function-pair track (SPEC §3). `lib/subjects/index.ts`
+  function-pair track (SPEC §3).
+  `lib/subjects/code-review-graph.ts` does the same for code-review-graph 2.4.0 (`build`, core
+  install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
+  unshared where possible; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
+  path made relative to the repo). Its confidence tier becomes `resolvedBy`, and `AMBIGUOUS` becomes
+  provenance. Calls to a bare unresolved name become unresolved references. crg names a nested
+  function by its bare name (with a hash suffix when the name repeats in a file), so the adapter
+  builds each node's container chain from the nesting of crg's own spans (`scanD::skipString`).
+  `lib/subjects/index.ts`
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
   faithfully (counts, site lines, endpoints) and reports how the subject handles the awkward cases;
@@ -83,7 +91,7 @@ counts-and-sites comparison there.
 | `lib/types.ts`, `lib/package.json` | The snapshot and expectation contracts (`schema/snapshot.v1.json`, `schema/expect.v1.json`) as TypeScript types, written once; `lib/snapshot.ts`, `lib/expect.ts` and both adapters import them, and the validators check the same shapes at runtime. `lib/package.json` marks `lib/` as ES modules for Node and tsc, scoped to `lib/` so `.js` test sources elsewhere keep their module type. |
 | `lib/typecheck.ts`, `lib/typecheck-test.ts` | The type check `check` runs last: refuses a missing or stale install (versions against `package-lock.json`), runs `tsc -p . --noEmit` and prints every diagnostic, then one verdict line (type and config errors counted apart; a failure with no diagnostics, or a run cut short, says so). `npm run typecheck` runs it alone, guards included. |
 | `lib/main.ts` | `isMain(import.meta.url)`: the main-module check every CLI uses, robust to spaces, `%` and symlinks in the checkout path. |
-| `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB, a code-graph-rag export and a codebase-memory-mcp nodes-and-edges extract of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus sandbox probes for codegraph and codebase-memory-mcp: an index process sees no caller variables, a private HOME (and, for cbm, a private cache and a root confined to the repo) and, where `unshare` works, no network interface. |
+| `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB, a code-graph-rag export and codebase-memory-mcp and code-review-graph nodes-and-edges extracts of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus sandbox probes for codegraph, codebase-memory-mcp and code-review-graph: an index process sees no caller variables, a private HOME (and, for cbm, a private cache and a root confined to the repo) and, where `unshare` works, no network interface. |
 | `lib/snapshot-test.ts`, `benchmarks/pycg-test.ts` | The validator enforces every field the snapshot schema requires (mutation: delete each, expect a problem); the PyCG scorer against fabricated snippets and a stub subject (hits, guess-only, extras, failed index). |
 | `lib/cli-test.ts`, `metamorphic/relations-test.ts`, `labels/data-scan-test.ts` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and every `*-test.ts` among the TypeScript scripts (`tsconfig.json`'s `include`: `lib/`, oracle/'s own, `bench/`, `metamorphic/`, `benchmarks/`, `differential/`, `labels/`, `tools/` with `tools/triage/`; elsewhere a `.ts` is an indexed test source, not a script). |
 | `oracle/baseline.ts` | `save` collects one build's results (oracle forward + missing buckets and group signatures per repo, fixture verdicts, PyCG, metamorphic) into `baseline.json`; `diff` prints every change and an effect-size verdict (SPEC §9). `--fail-on-regression` exits 1 for regression, 2 on diff errors; `--fail-on-incomplete` also exits 1 when something measured on the old build errored or is missing on the new one (`incomplete` in the gate result); `--json gate.json` saves the gate result. |
@@ -235,7 +243,7 @@ Known noise on the candidate buckets, which you should rule out before filing:
 
 ## API Integrations
 
-None. Everything runs locally; code-graph-rag indexes with the network unshared, as do codegraph and codebase-memory-mcp where `unshare` works. `gh` is used by hand, outside these scripts, to file issues.
+None. Everything runs locally; code-graph-rag indexes with the network unshared, as do codegraph, codebase-memory-mcp and code-review-graph where `unshare` works. `gh` is used by hand, outside these scripts, to file issues.
 
 ## Configuration
 
@@ -284,6 +292,7 @@ supplies the adapter's existing `unshare` isolation.
 | codegraph | upstream commit `f72c9d2efb14454ff4f9fd7b8460abd82f19a287` | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph/commit/f72c9d2efb14454ff4f9fd7b8460abd82f19a287), CI's known build pair. `npm ci` uses that commit's lock, then `npm run build`; WASM extraction (`CODEGRAPH_KERNEL=0`). |
 | code-graph-rag | `0.5.0`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.5.0/), matching SPEC's subject spike. `docker/requirements.lock` freezes the existing benchmark venv's transitive versions and PyPI wheel SHA256s (pip report, CPython 3.12/amd64). `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
 | codebase-memory-mcp | `0.12.1`; archive SHA256 `8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7` | [Release v0.12.1](https://github.com/DeusData/codebase-memory-mcp/releases/tag/v0.12.1) linux-amd64 asset; checksum from the release's `checksums.txt`. `tools/setup.sh` checks it before extraction (`--no-cbm` skips; other platforms are not pinned). Not in the Docker reproduction yet. |
+| code-review-graph | `2.4.0`, core (no extras) | [PyPI release](https://pypi.org/project/code-review-graph/2.4.0/). `docker/crg-requirements.lock` pins every dependency with all of its PyPI wheel hashes (`uv pip compile --generate-hashes`, resolved for CPython 3.12 x86_64); `tools/setup.sh` installs it with `--require-hashes --only-binary=:all:` (`--no-crg` skips). No embeddings or enrichment. Not in the Docker reproduction yet. |
 | Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's upstream has no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata). Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Other dev entries need no setup. |
 | PyCG | `8d5dc40837803beef1d8d379fbf2cdad6cd94641` | Same public source pin as `tools/fetch-benchmarks.sh`; snippets are input data. |
 | Bootstrap | seed `1`, 2000 resamples | Existing `bench/tables.ts` defaults; the runner passes the seed explicitly. |
@@ -337,7 +346,8 @@ policy blocks; hence `seccomp=unconfined`. No host credentials or Docker socket 
   marker comments; exit nonzero on changed verdicts, graph-identifier leaks or index errors.
   The Docker reproduction enables this for codegraph; peers can opt in explicitly.
   code-graph-rag's own findings are a separate set: `--root fixtures/cgr-candidates`; codebase-memory-mcp's:
-  `--subject codebase-memory-mcp --root fixtures/cbm-candidates`.
+  `--subject codebase-memory-mcp --root fixtures/cbm-candidates`. code-review-graph has no set of its own yet;
+  replay the others with `--subject code-review-graph`.
 - Native kernel without cargo: `tools/build-kernel-docker.sh <codegraph checkout>` (Docker, about 2 minutes;
   stages `codegraph-kernel/prebuilds/linux-x64/codegraph-kernel.node` and checks it loads).
 - Oracle on a TS repo by hand:

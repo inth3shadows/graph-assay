@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- A fourth subject, code-review-graph 2.4.0 (`lib/subjects/code-review-graph.ts`): builds in a
+  sandboxed HOME and data dir with Jedi enrichment off, and maps the graph's nodes and edges (paths
+  made relative) to a snapshot v1 with site lines, unresolved calls, and `AMBIGUOUS` edges as
+  guessed. Nested functions get container chains from crg's own spans. `tools/setup.sh` installs it
+  from `docker/crg-requirements.lock` with `--require-hashes` (`--no-crg` skips). A golden mapping
+  test and a sandbox probe join `lib/adapter-test.ts`.
 - A third subject, codebase-memory-mcp 0.12.1 (`lib/subjects/codebase-memory-mcp.ts`): indexes in a
   sandboxed HOME and cache with the repo as the allowed root, and maps the graph's nodes and edges to
   a snapshot v1. It declares no site lines (cbm keeps one edge per caller and callee), so it is
