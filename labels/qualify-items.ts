@@ -5,7 +5,7 @@
 // wrong targets are wrong (the call may reach an interface member, a local, or a library):
 // truth `reject:<file>:<line>,...` (any answer but those, and not `cannot tell`).
 //
-// Usage: node labels/qualify-items.mjs <codegraph.js> > items.jsonl
+// Usage: node labels/qualify-items.ts <codegraph.js> > items.jsonl
 // codegraph is used only to find node spans (caller span, definition lines); the truth comes from
 // expect.json, never from codegraph's edges.
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,7 @@ import * as codegraph from '../lib/subjects/codegraph.ts';
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = path.join(qa, 'fixtures/oracle-candidates');
 const [build] = process.argv.slice(2);
-if (!build) { console.error('usage: qualify-items.mjs <codegraph.js>'); process.exit(2); }
+if (!build) { console.error('usage: qualify-items.ts <codegraph.js>'); process.exit(2); }
 const LANG = { '.py': 'python', '.ts': 'ts', '.tsx': 'ts', '.js': 'ts', '.mjs': 'ts', '.go': 'go', '.java': 'jvm', '.kt': 'jvm', '.php': 'php' };
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

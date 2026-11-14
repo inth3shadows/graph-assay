@@ -35,13 +35,13 @@ export function question(item, repoDir) {
   const lineText = (f, l) => { try { return fs.readFileSync(path.join(repoDir, f), 'utf8').split('\n')[l - 1]?.trim() ?? ''; } catch { return ''; } };
   // A..V for candidates: W..Z are the fixed answers. Item builders cap candidates at 22.
   if (item.candidates.length > 22) throw new Error(`${item.id}: ${item.candidates.length} candidates, at most 22`);
-  const letters = {};
+  const letters: Record<string, any> = {};
   const rows = order(item.id, item.candidates).map((c, i) => {
     const L = String.fromCharCode(65 + i);
     letters[L] = key(c);
     return `${L}) ${c.file}:${c.line}  ${lineText(c.file, c.line).slice(0, 140)}`;
   });
-  for (const [L, v] of Object.entries(FIXED)) letters[L] = v;
+  for (const [L, v] of Object.entries<any>(FIXED)) letters[L] = v;
   const prompt = `You are labelling one call site in the repository in the current directory.
 
 Call site: ${item.site.file}, line ${item.site.line}:
@@ -97,7 +97,7 @@ const fileLines = (repo, f) => { const k = `${repo}|${f}`; if (!sourceCache.has(
 export function unstub(item, ans) {
   const m = /^(.*):(\d+)$/.exec(ans ?? '');
   if (!m || item.lang !== 'python') return ans;
-  if (item.stubs) return item.stubs[ans] ?? ans; // precomputed by labels/export.mjs
+  if (item.stubs) return item.stubs[ans] ?? ans; // precomputed by labels/export.ts
   const lines = fileLines(repoOf(item), m[1]); let i = Number(m[2]) - 1;
   const isStub = (k) => { for (let j = k - 1; j >= 0 && /^\s*@/.test(lines[j]); j--) if (/^\s*@(?:[\w.]+\.)?overload\b/.test(lines[j])) return true; return false; };
   while (i >= 0 && /^\s*@/.test(lines[i])) i++; // a span may start at the decorator

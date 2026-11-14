@@ -40,13 +40,13 @@ if (cmd === 'check') {
   const files = (spawnSync('git', ['ls-files'], { cwd: qa, encoding: 'utf8' }).stdout ?? '').split('\n').filter(Boolean);
   // Outside a git checkout the file list is empty and every syntax check would be skipped silently.
   if (!files.length) { console.error('check needs a git checkout (git ls-files listed nothing)'); process.exit(2); }
-  const listed = ['lib/expect.ts', 'oracle/test/run.ts', 'differential/test.ts', 'labels/test.mjs', 'oracle/site-test.ts',
+  const listed = ['lib/expect.ts', 'oracle/test/run.ts', 'differential/test.ts', 'labels/test.ts', 'oracle/site-test.ts',
     'oracle/ts-cover-test.ts', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.ts',
     'bench/tables-test.ts', 'bench/triage-test.ts', 'tools/repro-test.mjs'];
   // A new *-test.mjs, or *-test.ts among the TypeScript scripts, runs without anyone remembering to list
   // it. Only these .ts are scripts (the same set as tsconfig.json's include): elsewhere (oracle/test/<case>/,
   // conformance, fixtures) a .ts is an indexed test source.
-  const scriptTs = (f) => f.endsWith('.ts') && (f.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/)[^/]+\.ts$/.test(f));
+  const scriptTs = (f) => f.endsWith('.ts') && (f.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/)[^/]+\.ts$/.test(f));
   const discovered = files.filter((f) => (f.endsWith('-test.mjs') || (scriptTs(f) && f.endsWith('-test.ts'))) && !listed.includes(f));
   const steps = [
     // .mjs only: node --check parses a .ts file as plain JS. The .ts scripts get their syntax check from tsc,
@@ -56,7 +56,7 @@ if (cmd === 'check') {
     ['node', p('lib/expect.ts')],
     ['node', p('oracle/test/run.ts'), '--mutate'],
     ['node', p('differential/test.ts')],
-    ['node', p('labels/test.mjs')],
+    ['node', p('labels/test.ts')],
     ['node', p('oracle/site-test.ts')],
     ['node', p('oracle/ts-cover-test.ts')],
     ['node', p('lib/scores-test.ts')],

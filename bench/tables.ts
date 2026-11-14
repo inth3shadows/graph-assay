@@ -30,7 +30,7 @@ import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './ro
 import { recordedAdapterHash } from '../lib/provenance.ts';
 import { forward, missing, pairs } from '../lib/scores.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
-import { DIAGNOSTIC_FLOOR, diagnosticLanguages } from '../labels/score.mjs';
+import { DIAGNOSTIC_FLOOR, diagnosticLanguages } from '../labels/score.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
 
 const args = process.argv.slice(2);

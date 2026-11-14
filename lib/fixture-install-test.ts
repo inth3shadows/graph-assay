@@ -60,7 +60,7 @@ try {
   const exempt = {
     'lib/fixture-install.ts': 'copySeed itself',
     'lib/fixture.ts': 'copyFixture, which places the install',
-    'labels/questions.mjs': "the labeller's copy, which hides installs as labels/protocol.json says",
+    'labels/questions.ts': "the labeller's copy, which hides installs as labels/protocol.json says",
     'lib/conformance.ts': "conformance's own sources, not fixtures",
     'benchmarks/pycg.ts': 'PyCG snippets, not fixtures',
     'oracle/test/run.ts': 'oracle self-test cases, not fixtures',
@@ -71,7 +71,7 @@ try {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
       if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
+      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
     }
   };
   visit('');
@@ -79,7 +79,7 @@ try {
     if (!/\bcpSync\s*\(/.test(fs.readFileSync(path.join(qa, rel), 'utf8'))) continue;
     n++; assert.ok(rel in exempt, `${rel} copies with fs.cpSync: use copySeed (lib/fixture-install.ts) so a fixture's install is placed`);
   }
-  n++; assert.match(fs.readFileSync(path.join(qa, 'labels/questions.mjs'), 'utf8'), /HIDE = new Set\([^)]*FIXTURE_INSTALL/, "labels must hide a fixture's install");
+  n++; assert.match(fs.readFileSync(path.join(qa, 'labels/questions.ts'), 'utf8'), /HIDE = new Set\([^)]*FIXTURE_INSTALL/, "labels must hide a fixture's install");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

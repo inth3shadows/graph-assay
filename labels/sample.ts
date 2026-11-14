@@ -11,7 +11,7 @@
 // the declaration or decorator), so one definition is one letter. Which source proposed which
 // candidate stays in `meta`, never in the question.
 //
-// Usage: node labels/sample.mjs <out.jsonl> [--per-lang 200] [--seed 1] [--targets name:lang,...] [--exclude a.jsonl,...]
+// Usage: node labels/sample.ts <out.jsonl> [--per-lang 200] [--seed 1] [--targets name:lang,...] [--exclude a.jsonl,...]
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -29,7 +29,7 @@ const seed = opt('--seed', '1');
 const excluded = new Set(opt('--exclude', '').split(',').filter(Boolean).flatMap((f) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).id)));
 const targets = opt('--targets', 'pub-requests:python,pub-click:python,mux:go').split(',').map((t) => { const [name, lang] = t.split(':'); return { name, lang }; });
 const [outFile] = args;
-if (!outFile) { console.error('usage: sample.mjs <out.jsonl> [--per-lang N] [--seed S] [--targets name:lang,...]'); process.exit(2); }
+if (!outFile) { console.error('usage: sample.ts <out.jsonl> [--per-lang N] [--seed S] [--targets name:lang,...]'); process.exit(2); }
 const QUOTA = { agree: 0.25, disagree: 0.35, 'scip-only': 0.2, 'subject-only': 0.2 };
 const SUBJECTS = { codegraph: '', 'code-graph-rag': '-code-graph-rag' };
 const rank = (k) => createHash('sha256').update(`${seed}|${k}`).digest('hex');
@@ -58,7 +58,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     const scipFile = latest(config.scipCache, `${t.name}-`);
     const defs = scipDefs(scipFile);
     const snaps = { codegraph: codegraph.snapshot(path.join(w, 'repo')), 'code-graph-rag': loadSnapshot(path.join(`${w}-code-graph-rag`, 'snapshot.json')) };
-    const nodes = Object.values(snaps).flatMap((s) => s.nodes.filter((n) => n.kind !== 'file'));
+    const nodes = Object.values<any>(snaps).flatMap((s) => s.nodes.filter((n) => n.kind !== 'file'));
     // innermost definition with that name whose span holds the line, else the line itself
     const canon = (file, line, name) => {
       const n = nodes.filter((x) => x.file === file && x.start <= line && line <= x.end && (!name || x.name === name)).sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
@@ -66,19 +66,19 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     };
     const byUnit = new Map();
     const unit = (s) => { const k = `${s.site}|${s.name}`; if (!byUnit.has(k)) byUnit.set(k, { site: s.site, name: s.name, scip: s.scip ?? null, fwd: {}, miss: {} }); return byUnit.get(k); };
-    for (const [subj, sfx] of Object.entries(SUBJECTS)) {
+    for (const [subj, sfx] of Object.entries<any>(SUBJECTS)) {
       for (const s of JSON.parse(fs.readFileSync(path.join(`${w}${sfx}`, 'out.json'), 'utf8')).sites ?? []) { const u = unit(s); u.fwd[subj] = { key: s.key, target: s.target }; u.scip ??= s.scip; }
       for (const s of JSON.parse(fs.readFileSync(path.join(`${w}${sfx}`, 'out-missing.json'), 'utf8')).sites ?? []) { const u = unit(s); u.miss[subj] = { key: s.key }; u.scip ??= s.scip; }
     }
     for (const u of byUnit.values()) {
-      const f = Object.values(u.fwd).map((x) => x.key); const m = Object.values(u.miss).map((x) => x.key);
+      const f = Object.values<any>(u.fwd).map((x) => x.key); const m = Object.values<any>(u.miss).map((x) => x.key);
       const stratum = f.some((k) => /^(wrong-target|external|local-shadow|cross-file-unimported|scip-local-undefined)/.test(k)) || m.some((k) => /^missing\|wrong-edge/.test(k)) ? 'disagree'
         : m.some((k) => /^missing\|(no-ref|unresolved-ref|not-extracted|target-not-a-node)/.test(k)) ? 'scip-only'
           : f.some((k) => k.startsWith('no-scip-ref')) ? 'subject-only'
             : f.length === Object.keys(SUBJECTS).length && f.every((k) => k.startsWith('ok')) ? 'agree' : null;
       if (!stratum) continue;
       const [file, line] = [u.site.slice(0, u.site.lastIndexOf(':')), Number(u.site.slice(u.site.lastIndexOf(':') + 1))];
-      const sources = {};
+      const sources: Record<string, any> = {};
       const cands = new Map();
       const add = (c, who) => { const k = `${c.file}:${c.line}`; if (!cands.has(k)) cands.set(k, c); (sources[k] ??= []).push(who); };
       let sd = u.scip ? defs.get(u.scip.replace(/`<constructor>`\(\)\.$/, '')) ?? defs.get(u.scip) : null;
@@ -90,7 +90,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
       const localUndefined = isLocal && !sd; // SCIP names a local it never defines: no answer (SPEC §9 scip-local-undefined)
       if (isLocal && sd) { const c = canon(sd[0].file, sd[0].line, u.name); if (!(c.line === sd[0].line && c.name === u.name)) sd = null; }
       if (sd) for (const d of sd) add(canon(d.file, d.line, null), 'scip');
-      for (const [subj, x] of Object.entries(u.fwd)) {
+      for (const [subj, x] of Object.entries<any>(u.fwd)) {
         if (!x.target) continue;
         const parts = x.target.split(':'); const start = Number(parts.pop()); const tf = parts[0];
         add(canon(tf, start, null), subj);
@@ -106,7 +106,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     }
   }
   // quotas per stratum, then round-robin over repos within a stratum so no repo dominates
-  for (const [stratum, q] of Object.entries(QUOTA)) {
+  for (const [stratum, q] of Object.entries<any>(QUOTA)) {
     const want = Math.round(perLang * q);
     const pools = new Map();
     for (const u of units.filter((x) => x.stratum === stratum && !excluded.has(x.id)).sort((a, b) => rank(a.id).localeCompare(rank(b.id)))) {

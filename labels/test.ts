@@ -6,8 +6,8 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { correct, parseAnswer, question, unstub } from './questions.mjs';
-import { diagnosticLanguages, wilson } from './score.mjs';
+import { correct, parseAnswer, question, unstub } from './questions.ts';
+import { diagnosticLanguages, wilson } from './score.ts';
 
 let failed = 0; let n = 0;
 const check = (name, ok) => { n++; if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}`); };
@@ -45,10 +45,10 @@ const snap = fs.existsSync(dataDir) ? fs.readdirSync(dataDir).map((d) => fs.read
 check('snapshot: items have relative repos and stubs, no home paths', snap.length > 0 && snap.every((t) => !t.includes('/home/') && t.split('\n').filter(Boolean).every((l) => { const i = JSON.parse(l); return !path.isAbsolute(i.repo) && i.stubs; })));
 const diag = diagnosticLanguages({ javascript: { ALL: { scip: [28, 47] } }, typescript: { ALL: { scip: [35, 36] } }, go: { ALL: { scip: [0, 0] } } });
 check('diagnostic: 28/47 (lower bound 45%) is diagnostic, 35/36 is not, no answers is', diag.has('javascript') && !diag.has('typescript') && diag.has('go') && Math.abs(diag.get('javascript').lower - 0.453) < 0.01);
-// noise.mjs: a later sample's meta.json retires a language from an earlier sample when pooling.
+// noise.ts: a later sample's meta.json retires a language from an earlier sample when pooling.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-noise-'));
-  const mk = (dir, items, answer, meta) => {
+  const mk = (dir, items, answer, meta?) => {
     fs.mkdirSync(path.join(tmp, dir));
     fs.writeFileSync(path.join(tmp, dir, 'items.jsonl'), items.map((i) => JSON.stringify(i)).join('\n') + '\n');
     for (const l of ['opus', 'sol']) fs.writeFileSync(path.join(tmp, dir, `${l}.jsonl`), items.map((i) => JSON.stringify({ id: i.id, ok: true, answer, model: 'm', deployment: 'm', served_by: ['m'] })).join('\n') + '\n');
@@ -57,17 +57,17 @@ check('diagnostic: 28/47 (lower bound 45%) is diagnostic, 35/36 is not, no answe
   const item = (id, lang) => ({ id, lang, stratum: 'agree', candidates: [], meta: { target: 't', scip: 'a.js:1', sources: {} } });
   mk('old', [item('o1', 'javascript'), item('o2', 'typescript')], 'b.js:2');
   mk('new', [item('n1', 'javascript')], 'a.js:1', { supersedes: { old: ['javascript'] } });
-  const r = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'noise.mjs'), path.join(tmp, 'old', 'items.jsonl'), path.join(tmp, 'old'), path.join(tmp, 'new', 'items.jsonl'), path.join(tmp, 'new'), '--labellers', 'opus,sol', '--json', path.join(tmp, 'n.json')], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'noise.ts'), path.join(tmp, 'old', 'items.jsonl'), path.join(tmp, 'old'), path.join(tmp, 'new', 'items.jsonl'), path.join(tmp, 'new'), '--labellers', 'opus,sol', '--json', path.join(tmp, 'n.json')], { encoding: 'utf8' });
   const t = r.status === 0 ? JSON.parse(fs.readFileSync(path.join(tmp, 'n.json'), 'utf8')).table : {};
   check('noise: meta.json supersedes a language of an earlier sample', JSON.stringify(t.javascript?.ALL.scip) === '[1,1]' && t.javascript?.ALL.items === 1 && t.typescript?.ALL.items === 1);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 // SPEC §9: the labelling protocol pins the prompt, the models and every committed labelling file.
 {
-  const { loadProtocol, promptTemplateSha256 } = await import('./protocol.mjs');
+  const { loadProtocol, promptTemplateSha256 } = await import('./protocol.ts');
   const here = path.dirname(fileURLToPath(import.meta.url));
   const good = loadProtocol();
-  check(`protocol: labels/protocol.json matches the prompt, labellers.mjs and every labelling file${good.problems.length ? ` (${good.problems.join('; ')})` : ''}`, good.problems.length === 0);
+  check(`protocol: labels/protocol.json matches the prompt, labellers.ts and every labelling file${good.problems.length ? ` (${good.problems.join('; ')})` : ''}`, good.problems.length === 0);
   check('protocol: qualification items have relative repos, no home paths', fs.readFileSync(path.join(here, 'qualification', 'items.jsonl'), 'utf8').split('\n').filter(Boolean).every((l) => !l.includes('/home/') && !path.isAbsolute(JSON.parse(l).repo)));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-protocol-'));
   const bad = JSON.parse(fs.readFileSync(path.join(here, 'protocol.json'), 'utf8'));
@@ -75,7 +75,7 @@ check('diagnostic: 28/47 (lower bound 45%) is diagnostic, 35/36 is not, no answe
   fs.writeFileSync(path.join(tmp, 'p.json'), JSON.stringify(bad));
   check('protocol: a file changed after pinning is a problem', loadProtocol(path.join(tmp, 'p.json')).problems.some((x) => x.includes('labels/data/v1/opus.jsonl')));
   check('protocol: the prompt hash is the template, not the item', promptTemplateSha256() === good.protocol.prompt.templateSha256);
-  const noise = (proto) => spawnSync(process.execPath, [path.join(here, 'noise.mjs'), path.join(here, 'data/v1/items.jsonl'), path.join(here, 'data/v1'), '--protocol', proto, '--json', path.join(tmp, 'n.json')], { encoding: 'utf8' });
+  const noise = (proto) => spawnSync(process.execPath, [path.join(here, 'noise.ts'), path.join(here, 'data/v1/items.jsonl'), path.join(here, 'data/v1'), '--protocol', proto, '--json', path.join(tmp, 'n.json')], { encoding: 'utf8' });
   const ok = noise(path.join(here, 'protocol.json'));
   const rec = ok.status === 0 ? JSON.parse(fs.readFileSync(path.join(tmp, 'n.json'), 'utf8')).protocol : null;
   check('noise: --protocol records the protocol hash and qualification accuracy', rec?.sha256 === good.sha256 && rec.labellers.opus.qualification.answered === 54);

@@ -12,5 +12,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["lib/**/*.ts", "oracle/*.ts", "oracle/test/*.ts", "bench/*.ts", "metamorphic/*.ts", "benchmarks/*.ts", "differential/*.ts", "fixtures/replay.mts"]
+  "include": ["lib/**/*.ts", "oracle/*.ts", "oracle/test/*.ts", "bench/*.ts", "metamorphic/*.ts", "benchmarks/*.ts", "differential/*.ts", "labels/*.ts", "fixtures/replay.mts"]
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Ask labellers about every item; resumable (an item already answered is skipped).
-// Usage: GRAPH_ASSAY_LABEL_SANDBOX=1 node labels/run.mjs <items.jsonl> <out dir> [--labellers opus,sol] [--jobs 4] [--limit N] [--tiebreak a,b] [--unsafe-host]
+// Usage: GRAPH_ASSAY_LABEL_SANDBOX=1 node labels/run.ts <items.jsonl> <out dir> [--labellers opus,sol] [--jobs 4] [--limit N] [--tiebreak a,b] [--unsafe-host]
 // --tiebreak a,b: ask only items where labellers a and b both answered and disagree (overload stubs
 // read as their implementation), so a third labeller decides a 2-of-3 consensus without labelling all.
 // Every labeller is probed first and refused if it could reach anything beyond its read-only
@@ -8,8 +8,8 @@
 // evidence, confidence, served_by, error, ms} per item, plus <out dir>/probe-<labeller>.json.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { LABELLERS, probe } from './labellers.mjs';
-import { parseAnswer, question, repoCopy, repoOf, unstub } from './questions.mjs';
+import { LABELLERS, probe } from './labellers.ts';
+import { parseAnswer, question, repoCopy, repoOf, unstub } from './questions.ts';
 
 const args = process.argv.slice(2);
 // Labellers read untrusted repository text with file-reading tools; a prompt injection there could
@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 // or VM: GRAPH_ASSAY_LABEL_SANDBOX=1), or say explicitly that you accept the risk. SECURITY.md.
 const unsafeAt = args.indexOf('--unsafe-host'); if (unsafeAt >= 0) args.splice(unsafeAt, 1);
 if (process.env.GRAPH_ASSAY_LABEL_SANDBOX !== '1' && unsafeAt < 0) {
-  console.error('labels/run.mjs: refusing to run labellers on this host. Run inside a container or VM with GRAPH_ASSAY_LABEL_SANDBOX=1, or pass --unsafe-host to accept the risk (see SECURITY.md).');
+  console.error('labels/run.ts: refusing to run labellers on this host. Run inside a container or VM with GRAPH_ASSAY_LABEL_SANDBOX=1, or pass --unsafe-host to accept the risk (see SECURITY.md).');
   process.exit(2);
 }
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
@@ -28,11 +28,11 @@ const limit = Number(opt('--limit', '0'));
 const tiebreak = opt('--tiebreak', null)?.split(',');
 const [itemsFile, outDir] = args;
 if (!itemsFile || !outDir || labellers.some((l) => !LABELLERS[l])) {
-  console.error(`usage: run.mjs <items.jsonl> <out dir> [--labellers ${Object.keys(LABELLERS).join(',')}] [--jobs N] [--limit N] [--unsafe-host]`);
+  console.error(`usage: run.ts <items.jsonl> <out dir> [--labellers ${Object.keys(LABELLERS).join(',')}] [--jobs N] [--limit N] [--unsafe-host]`);
   process.exit(2);
 }
 fs.mkdirSync(outDir, { recursive: true });
-let items = fs.readFileSync(itemsFile, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+let items = fs.readFileSync(itemsFile, 'utf8').split('\n').filter(Boolean).map(JSON.parse as (s: string) => any);
 if (limit) items = items.slice(0, limit);
 if (tiebreak) {
   const ans = (l) => new Map(fs.readFileSync(path.join(outDir, `${l}.jsonl`), 'utf8').split('\n').filter(Boolean).map((x) => JSON.parse(x)).filter((r) => r.ok).map((r) => [r.id, r.answer]));
