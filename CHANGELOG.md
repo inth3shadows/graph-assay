@@ -64,6 +64,16 @@ All notable changes to this project are recorded here. The format follows
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.
 
+### Fixed
+- Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
+  fixture's caller is in the graph compared the last part of `from` with node names only, and a
+  codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A
+  caller now also counts when a node that is not a file has exactly `from` as its qualified name (its
+  name when it has none), in `fromFile` when the fixture names one. The older name check is
+  unchanged; its gaps are tracked in #34. On a codegraph build with the #2975 fix
+  (colbymchenry/codegraph#3140), `issue-2975` now scores `FIXED`; no other fixture verdict changes on
+  that build or on f72c9d2e.
+
 ## [0.1.0] - 2026-11-12
 
 First public release of graph-assay, previously developed privately as codegraph-qa.
