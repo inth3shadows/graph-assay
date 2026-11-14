@@ -77,8 +77,10 @@ All notable changes to this project are recorded here. The format follows
 - `labels/` is TypeScript too: its scripts are `.ts`, and `labels/package.json` marks them as ES
   modules. Type fixes are annotations only. `labels/protocol.json` is unchanged, so the labelling
   protocol keeps its identity: `node labels/protocol.ts` prints the same sha256, and the noise tables
-  and qualification scores are byte-identical. The protocol's `prompt.source` still names
-  `labels/questions.mjs`, because changing that string would make a new protocol. Third phase of #14,
+  and qualification scores are byte-identical. The protocol still names the old `.mjs` files in three
+  places: `prompt.source` (`labels/questions.mjs`), `probe` (`labels/run.mjs`) and
+  `qualification.items` (`labels/qualify-items.mjs`). Changing them would make a new protocol, so the
+  next deliberate `--update` should fix all three. Third phase of #14,
   third PR.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs

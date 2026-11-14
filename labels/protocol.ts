@@ -46,7 +46,7 @@ export function loadProtocol(file = PROTOCOL) {
   }
   const listed = new Set(Object.keys(p.files));
   for (const f of pinnedFiles()) if (!listed.has(f)) problems.push(`${f} is not pinned`);
-  for (const [f, h] of Object.entries<any>(p.files)) {
+  for (const [f, h] of Object.entries(p.files)) {
     const abs = path.join(qa, f);
     if (!fs.existsSync(abs)) problems.push(`${f} is pinned but missing`);
     else if (sha(fs.readFileSync(abs)) !== h) problems.push(`${f} differs from the pinned sha256`);

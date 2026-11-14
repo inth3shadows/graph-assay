@@ -72,7 +72,7 @@ for (const item of items) {
   const got = labellers.map((l) => unstub(item, answers[l].get(item.id))).filter(Boolean);
   const counts: Record<string, any> = {};
   for (const a of got) counts[a] = (counts[a] ?? 0) + 1;
-  const [top, n] = Object.entries<any>(counts).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  const [top, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
   const truth = n >= 2 && top !== 'cannot-tell' ? top : null;
   rows.push({ id: item.id, lang: item.lang, stratum: item.stratum, target: item.meta.target, labels: got.length, unanimous: got.length >= 2 && n === got.length,
     // A tie-breaker (third labeller) answering where the first two disagree: whose side it took.

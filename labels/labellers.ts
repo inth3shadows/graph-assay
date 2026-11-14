@@ -23,7 +23,7 @@ const HARNESS = process.env.CGQA_HARNESS ?? null;
 // What a labeller process may see from the caller's environment: paths, locale, and the one
 // credential its own CLI needs. Nothing else (other tokens, cloud keys) reaches a model's tools.
 const BASE_ENV = /^(PATH|LANG|LC_[A-Z]+|TZ|TMPDIR|HOME|USER|TERM)$/;
-const envWith = (...keys) => Object.fromEntries(Object.entries<any>(process.env).filter(([k]) => BASE_ENV.test(k) || keys.includes(k)));
+const envWith = (...keys) => Object.fromEntries(Object.entries(process.env).filter(([k]) => BASE_ENV.test(k) || keys.includes(k)));
 
 function sh(cmd, args, { cwd, env, input = '', timeoutMs = 900_000 }: { cwd?: string; env?: typeof process.env; input?: string; timeoutMs?: number } = {}) {
   return new Promise<any>((resolve) => {

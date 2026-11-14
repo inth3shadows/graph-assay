@@ -41,7 +41,7 @@ export function question(item, repoDir) {
     letters[L] = key(c);
     return `${L}) ${c.file}:${c.line}  ${lineText(c.file, c.line).slice(0, 140)}`;
   });
-  for (const [L, v] of Object.entries<any>(FIXED)) letters[L] = v;
+  for (const [L, v] of Object.entries(FIXED)) letters[L] = v;
   const prompt = `You are labelling one call site in the repository in the current directory.
 
 Call site: ${item.site.file}, line ${item.site.line}:

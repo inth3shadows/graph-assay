@@ -50,7 +50,7 @@ if (isMain(import.meta.url)) {
     const byLang: Record<string, any> = {};
     for (const r of clean) { const lang = items.get(r.id).lang; byLang[lang] ??= [0, 0]; byLang[lang][1]++; if (correct(r.answer, items.get(r.id).truth)) byLang[lang][0]++; }
     console.log(`${name.padEnd(11)} ${`${ok.length}/${items.size}`.padEnd(9)} ${`${right.length}/${clean.length} ${pct(right.length, clean.length)}`.padEnd(16)} ${ci(right.length, clean.length).padEnd(10)} ${split((i) => !i.truth.startsWith('reject:'))} ${split((i) => i.truth.startsWith('reject:'))} ${tainted.length}`);
-    console.log(`            by language: ${Object.entries<any>(byLang).map(([k, [a, n]]) => `${k} ${a}/${n}`).join(', ')}`);
+    console.log(`            by language: ${Object.entries(byLang).map(([k, [a, n]]) => `${k} ${a}/${n}`).join(', ')}`);
     result[name] = { answered: ok.length, clean: clean.length, correct: right.length, ci: wilson(right.length, clean.length), tainted: tainted.length, byLang,
       wrong: clean.filter((r) => !correct(r.answer, items.get(r.id).truth)).map((r) => ({ id: r.id, answer: r.answer, truth: items.get(r.id).truth, evidence: r.evidence })) };
   }

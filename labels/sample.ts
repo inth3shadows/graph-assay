@@ -58,7 +58,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     const scipFile = latest(config.scipCache, `${t.name}-`);
     const defs = scipDefs(scipFile);
     const snaps = { codegraph: codegraph.snapshot(path.join(w, 'repo')), 'code-graph-rag': loadSnapshot(path.join(`${w}-code-graph-rag`, 'snapshot.json')) };
-    const nodes = Object.values<any>(snaps).flatMap((s) => s.nodes.filter((n) => n.kind !== 'file'));
+    const nodes = Object.values(snaps).flatMap((s) => s.nodes.filter((n) => n.kind !== 'file'));
     // innermost definition with that name whose span holds the line, else the line itself
     const canon = (file, line, name) => {
       const n = nodes.filter((x) => x.file === file && x.start <= line && line <= x.end && (!name || x.name === name)).sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
@@ -66,7 +66,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     };
     const byUnit = new Map();
     const unit = (s) => { const k = `${s.site}|${s.name}`; if (!byUnit.has(k)) byUnit.set(k, { site: s.site, name: s.name, scip: s.scip ?? null, fwd: {}, miss: {} }); return byUnit.get(k); };
-    for (const [subj, sfx] of Object.entries<any>(SUBJECTS)) {
+    for (const [subj, sfx] of Object.entries(SUBJECTS)) {
       for (const s of JSON.parse(fs.readFileSync(path.join(`${w}${sfx}`, 'out.json'), 'utf8')).sites ?? []) { const u = unit(s); u.fwd[subj] = { key: s.key, target: s.target }; u.scip ??= s.scip; }
       for (const s of JSON.parse(fs.readFileSync(path.join(`${w}${sfx}`, 'out-missing.json'), 'utf8')).sites ?? []) { const u = unit(s); u.miss[subj] = { key: s.key }; u.scip ??= s.scip; }
     }
@@ -106,7 +106,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
     }
   }
   // quotas per stratum, then round-robin over repos within a stratum so no repo dominates
-  for (const [stratum, q] of Object.entries<any>(QUOTA)) {
+  for (const [stratum, q] of Object.entries(QUOTA)) {
     const want = Math.round(perLang * q);
     const pools = new Map();
     for (const u of units.filter((x) => x.stratum === stratum && !excluded.has(x.id)).sort((a, b) => rank(a.id).localeCompare(rank(b.id)))) {
