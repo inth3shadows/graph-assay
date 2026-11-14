@@ -98,7 +98,7 @@ try {
   }
 } finally { fs.rmSync(work, { recursive: true, force: true }); }
 
-// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.mjs does.
+// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.ts does.
 const nameWidth = Math.max(22, ...results.map((r) => r.name.length));
 for (const r of results) console.log(`${r.verdict.padEnd(8)} ${(r.issue ? `#${r.issue}` : 'unfiled').padEnd(7)} ${r.name.padEnd(nameWidth)} ${r.detail}`);
 if (canary) for (const r of results) console.log(`CANARY ${r.canary?.status ?? 'ERROR'} ${r.name}${r.canary?.error ? `: ${r.canary.error}` : ''}`);
