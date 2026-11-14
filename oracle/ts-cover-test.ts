@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Hermetic check for oracle/ts-cover.mjs (SPEC §7 oracle coverage): the covering project lists every
+// Hermetic check for oracle/ts-cover.ts (SPEC §7 oracle coverage): the covering project lists every
 // tracked TS/JS file, including those the repo's own tsconfig leaves out, and nothing untracked.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { coverPath, coverTsconfig } from './ts-cover.mjs';
+import { coverPath, coverTsconfig } from './ts-cover.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-ts-cover-'));
 try {

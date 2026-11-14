@@ -2,7 +2,7 @@
 // One call site, explained: everything the oracle recorded there, and how to re-run it (SPEC P3
 // inspectability). Reads a finished oracle work dir (run.sh with ORACLE_ALLSITES=1); runs nothing.
 //
-// Usage: node oracle/site.mjs <name | work dir> <file:line> [called name]
+// Usage: node oracle/site.ts <name | work dir> <file:line> [called name]
 //                              [--subject codegraph|code-graph-rag|all] [--no-scip]
 //   <name>: the run.sh name (`pub-express`) or a corpus name (`express`); work dirs are
 //   w-<name> and w-<name>-code-graph-rag under the oracle work dir. --subject all (default) shows
@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import { config } from '../lib/config.ts';
 import { isMain } from '../lib/main.ts';
 
-/** What each bucket's first segment means (oracle.mjs; SPEC §9 maps them to match / mismatch / unaligned). */
+/** What each bucket's first segment means (oracle/forward.ts, oracle/missing.ts; SPEC §9 maps them to match / mismatch / unaligned). */
 export const MEANING = {
   ok: "the subject's target is SCIP's definition",
   'ok-other-column': "another SCIP reference on the line resolves to the subject's target",
@@ -44,7 +44,7 @@ export const MEANING = {
 };
 export const meaningOf = (key) => {
   const parts = key.split('|'); const cause = parts[0] === 'missing' ? parts[1] : parts[0];
-  return MEANING[cause] ?? (cause.startsWith('noise:') ? MEANING.noise : '(no description: see oracle/oracle.mjs)');
+  return MEANING[cause] ?? (cause.startsWith('noise:') ? MEANING.noise : '(no description: see oracle/forward.ts or oracle/missing.ts)');
 };
 
 /**
@@ -53,7 +53,8 @@ export const meaningOf = (key) => {
  * source: the site's source line; edges: joined edges on the line; defs: [{file, line, text}] for
  * SCIP's symbol (null when not looked up); skipped: the work dir's skip counts by rule.
  */
-export function explainSite({ subject, site, name, records, source, edges, defs, skipped }) {
+export function explainSite({ subject, site, name, records, source, edges, defs, skipped }: { subject: string; site: string; name?: string;
+  records: { forward: any[]; missing: any[] }; source: string | null; edges: any[]; defs: { file: string; line: number; text: string | null }[] | null; skipped: Record<string, number> }) {
   const out = [`== ${subject}  ${site}${name ? `  ${name}` : ''}`, `   ${source ?? '(source line not found)'}`];
   const all = [...records.forward.map((r) => ['forward', r]), ...records.missing.map((r) => ['missing', r])];
   if (!all.length) {
@@ -79,7 +80,7 @@ if (isMain(import.meta.url)) {
   const flag = (k) => { const i = args.indexOf(k); if (i < 0) return false; args.splice(i, 1); return true; };
   const which = opt('--subject', 'all'); const noScip = flag('--no-scip');
   const [target, site, name] = args;
-  if (!target || !/:\d+$/.test(site ?? '')) { console.error('usage: site.mjs <name | work dir> <file:line> [called name] [--subject codegraph|code-graph-rag|all] [--no-scip]'); process.exit(2); }
+  if (!target || !/:\d+$/.test(site ?? '')) { console.error('usage: site.ts <name | work dir> <file:line> [called name] [--subject codegraph|code-graph-rag|all] [--no-scip]'); process.exit(2); }
   const file = site.slice(0, site.lastIndexOf(':')); const line = Number(site.slice(site.lastIndexOf(':') + 1));
 
   const base = fs.existsSync(target) ? path.resolve(target).replace(/-code-graph-rag$/, '')
@@ -94,7 +95,7 @@ if (isMain(import.meta.url)) {
   const at = (sites) => (sites ?? []).filter((s) => s.site === site && (!name || s.name === name));
   const lineIn = (dir, f, l) => { try { return fs.readFileSync(path.join(dir, 'repo', f), 'utf8').split('\n')[l - 1]?.trim(); } catch { return null; } };
 
-  let defsFor = () => null;
+  let defsFor: (sym: string | undefined) => { file: string; line: number; text: string | null }[] | null = () => null;
   if (!noScip) {
     const scipFile = fs.readdirSync(config.scipCache).filter((f) => f.startsWith(`${runName}-`) && f.endsWith('.scip'))
       .map((f) => path.join(config.scipCache, f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];

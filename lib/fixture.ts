@@ -69,7 +69,15 @@ export function scoreFixture(snapshot, expect) {
   // (a failed parse, a subject missing a language) must not read as a fix.
   const names = new Set(snapshot.nodes.map((n) => n.name));
   const lastName = (q) => q.split('::').pop().replace(/\(.*\)$/, '');
-  const absent = [...new Set([...expect.wrong, ...expect.right].map((x) => x.from).filter((f) => !names.has(lastName(f))))];
+  // A caller also counts when a node that is not a file has exactly `from` as its qualified name (its
+  // name when it has none), in `fromFile` when the fixture names one. A codegraph route node is named
+  // `GET /api/...`; only its qualified name is the fixture's `from` (#29). This path is exact and skips
+  // file nodes, which exist even when their file produced nothing. The name check above it is older
+  // and looser (any file, last segment only, file nodes included); #34 tracks unifying the two.
+  const callers = new Set(snapshot.nodes.filter((n) => n.kind !== 'file').map((n) => `${n.file}\0${n.qname ?? n.name}`));
+  const callerQnames = new Set(snapshot.nodes.filter((n) => n.kind !== 'file').map((n) => n.qname ?? n.name));
+  const hasCaller = (x) => names.has(lastName(x.from)) || (x.fromFile ? callers.has(`${x.fromFile}\0${x.from}`) : callerQnames.has(x.from));
+  const absent = [...new Set([...expect.wrong, ...expect.right].filter((x) => !hasCaller(x)).map((x) => x.from))];
   let verdict = wrong.length || (!expect.wrong.length && missing.length) ? 'BROKEN' : guessed.length ? 'GUESSED' : missing.length ? 'CHANGED' : 'FIXED';
   if (verdict === 'FIXED' && absent.length) verdict = 'CHANGED';
   const detail = verdict === 'CHANGED' && !missing.length ? `caller not in graph: ${absent.join(', ')}` : wrong.length ? wrong.map(show).join('; ') : guessed.length ? `guessed ${guessed.map(show).join('; ')}` : missing.length ? `missing ${missing.map(show).join('; ')}${guessOnly.length ? ` (only guessed: ${guessOnly.map(show).join('; ')})` : ''}` : '';

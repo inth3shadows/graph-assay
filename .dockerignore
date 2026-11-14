@@ -11,7 +11,8 @@
 !lib/**
 !oracle/
 !oracle/*.sh
-!oracle/*.mjs
+!oracle/*.ts
+!oracle/package.json
 !differential/
 !differential/*.mjs
 !corpus/

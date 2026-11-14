@@ -2,9 +2,9 @@
 // Rebuild an oracle self-test case's frozen inputs from its sources: snapshot.json (a fresh
 // codegraph index, exported by lib/subjects/codegraph.ts) and index.scip.json (scip-python /
 // scip-typescript, decoded). Run it after editing a case's sources, then re-check the case's
-// expectations with run.mjs --dump.
+// expectations with run.ts --dump.
 //
-// Usage: node oracle/test/regen.mjs <codegraph.js> [case ...]
+// Usage: node oracle/test/regen.ts <codegraph.js> [case ...]
 // A case.json `subject` (e.g. code-graph-rag, for a behavior only that subject shows) indexes with
 // that subject's default build instead.
 // The inputs are frozen so the tests pin the ORACLE: a later codegraph fix must not break them.
@@ -20,11 +20,11 @@ import { subject } from '../../lib/subjects/index.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [build, ...only] = process.argv.slice(2);
-if (!build || !fs.existsSync(build)) { console.error('usage: node oracle/test/regen.mjs <codegraph.js> [case ...]'); process.exit(2); }
+if (!build || !fs.existsSync(build)) { console.error('usage: node oracle/test/regen.ts <codegraph.js> [case ...]'); process.exit(2); }
 const cases = only.length ? only : fs.readdirSync(here).filter((n) => fs.existsSync(path.join(here, n, 'case.json'))).sort();
 const FROZEN = new Set(['case.json', 'snapshot.json', 'index.scip.json']);
 
-const run = (cmd, args, opts) => {
+const run = (cmd: string, args: string[], opts?: object) => {
   const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 256 << 20, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed: ${(r.stdout + r.stderr).trim().split('\n').slice(-4).join(' | ')}`);
   return r;

@@ -119,7 +119,7 @@ check('gate does not mutate inputs', () => {
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-scores-'));
 const write = (f, value) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, typeof value === 'string' ? value : JSON.stringify(value)); };
-const run = (...args) => spawnSync(process.execPath, [path.join(qa, 'oracle/baseline.mjs'), ...args], { encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: tmp } });
+const run = (...args) => spawnSync(process.execPath, [path.join(qa, 'oracle/baseline.ts'), ...args], { encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: tmp } });
 try {
   const a = path.join(tmp, 'a.json'); const b = path.join(tmp, 'b.json'); const json = path.join(tmp, 'gate.json');
   write(a, old); write(b, anchored(repo(267)));

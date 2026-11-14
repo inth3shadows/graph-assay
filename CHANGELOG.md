@@ -44,6 +44,27 @@ All notable changes to this project are recorded here. The format follows
   per-site results, and the adapter goldens are byte-identical. Second phase of #14.
 - `adapterSha256` changes for both adapters, because the hashed files are renamed to `.ts` and
   retyped. Results recorded before this change carry the old hashes.
+- `oracle/` is TypeScript too. Its scripts (`oracle/*.ts`, `oracle/test/run.ts`, `regen.ts`) run
+  through Node's type stripping, and `tsc` checks them along with `lib/`. `oracle/package.json` marks
+  them as ES modules. Self-test cases are copied to a temp dir before anything indexes them, so the
+  marker never reaches a case's sources. Oracle output is byte-identical: the same results on every
+  self-test case, with each rule disabled in turn, and on a cached excalidraw run in both modes. Third
+  phase of #14.
+- `oracle/oracle.ts` is now only the command line (#7). The work moves to modules that do nothing at
+  import time:
+  - `context.ts`: options and loading;
+  - `forward.ts`, `missing.ts`, `pairs.ts`: the checks;
+  - `braces.ts`: caller ranges;
+  - `report.ts`: output;
+  - `symbols.ts`: shared helpers.
+
+  `oracle/tracks-test.ts` drives them in-process. `--mutate` finds rules in every module that
+  `oracle.ts` imports. `createContext` refuses an unknown `ORACLE_LANG`, as the command line does. Output is
+  byte-identical, with one exception: missing mode no longer calls `process.exit(0)`, so Node's SQLite
+  warning now reaches stderr, as it already did in forward mode.
+- The scorer manifest (`manifest.scorers`) hashes oracle/'s `.ts` scripts and `oracle/package.json`,
+  so its `sha256` changes. It no longer hashes `oracle/test/ts-forward/helper.mjs`, a self-test case
+  source that git's `oracle/*.mjs` pathspec matched across directories.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
   count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
@@ -53,6 +74,16 @@ All notable changes to this project are recorded here. The format follows
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.
+
+### Fixed
+- Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
+  fixture's caller is in the graph compared the last part of `from` with node names only, and a
+  codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A
+  caller now also counts when a node that is not a file has exactly `from` as its qualified name (its
+  name when it has none), in `fromFile` when the fixture names one. The older name check is
+  unchanged; its gaps are tracked in #34. On a codegraph build with the #2975 fix
+  (colbymchenry/codegraph#3140), `issue-2975` now scores `FIXED`; no other fixture verdict changes on
+  that build or on f72c9d2e.
 
 ## [0.1.0] - 2026-11-12
 

@@ -16,7 +16,7 @@ import * as path from 'node:path';
 import { config } from '../../lib/config.ts';
 import { copySeed } from '../../lib/fixture-install.ts';
 import * as codegraph from '../../lib/subjects/codegraph.ts';
-import { coverPath, coverTsconfig } from '../../oracle/ts-cover.mjs';
+import { coverPath, coverTsconfig } from '../../oracle/ts-cover.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const root = path.join(qa, 'fixtures', 'oracle-candidates');
@@ -69,7 +69,7 @@ for (const name of names) {
     const shapes = {};
     for (const mode of ['', 'missing']) {
       const o = path.join(work, `out${mode && '-missing'}.json`);
-      run(process.execPath, [path.join(qa, 'oracle', 'oracle.mjs'), repo, scip, o], {
+      run(process.execPath, [path.join(qa, 'oracle', 'oracle.ts'), repo, scip, o], {
         env: { ...process.env, NODE_NO_WARNINGS: '1', ORACLE_SHOW: '0', ORACLE_LANG: lang === 'ts' ? '' : lang, ORACLE_MODE: mode } });
       for (const [key, n] of Object.entries(JSON.parse(fs.readFileSync(o, 'utf8')).buckets)) {
         if (mode ? key.split('|')[1] !== 'found' : FORWARD_BAD.test(`${key}|`)) shapes[key] = n;

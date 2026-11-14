@@ -60,7 +60,7 @@ try {
   });
 
   check('ORACLE_LANG outside the known set exits 2', () => {
-    const r = run(process.execPath, [path.join(qa, 'oracle/oracle.mjs'), tmp, path.join(tmp, 'x.scip')], { env: { ...process.env, ORACLE_LANG: 'java' } });
+    const r = run(process.execPath, [path.join(qa, 'oracle/oracle.ts'), tmp, path.join(tmp, 'x.scip')], { env: { ...process.env, ORACLE_LANG: 'java' } });
     assert.equal(r.status, 2, r.stderr);
   });
 

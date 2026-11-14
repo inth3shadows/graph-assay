@@ -152,7 +152,7 @@ if (isMain(import.meta.url)) {
       for (const g of s.groups.slice(0, 3)) {
         md.push(`- **${g.n}** in ${g.repo}: \`${(g.code ?? '').slice(0, 100)}\``,
           `  - subject: \`${g.codegraph}\``, `  - compiler: \`${g.scipDef ? `${g.scipDef.file}:${g.scipDef.line}` : '-'}\` ${g.scip ? `(\`${g.scip.split(' ').pop().slice(-60)}\`)` : ''}`,
-          `  - inspect: \`node oracle/site.mjs ${g.workDir.replace(/-code-graph-rag$/, '')} ${g.sites[0].split(':').slice(0, 2).join(':')} --subject ${subj}\``);
+          `  - inspect: \`node oracle/site.ts ${g.workDir.replace(/-code-graph-rag$/, '')} ${g.sites[0].split(':').slice(0, 2).join(':')} --subject ${subj}\``);
       }
       md.push('');
     });
