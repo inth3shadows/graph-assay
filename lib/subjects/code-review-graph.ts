@@ -55,7 +55,10 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     CRG_HOME: path.join(h, '.crg'), CRG_DATA_DIR: data, CRG_DISABLE_ENRICHMENT: '1', NO_COLOR: '1', DO_NOT_TRACK: '1',
     PYTHONDONTWRITEBYTECODE: '1', ...extra, CRG_REPO_ROOT: dir,
   };
-  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build), ...(args ?? ['build', '--repo', dir])];
+  // build and update need --repo: update ignores CRG_REPO_ROOT and walks up to the nearest .git
+  let cmd: string[] = args ?? ['build'];
+  if ((cmd[0] === 'build' || cmd[0] === 'update') && !cmd.includes('--repo')) cmd = [...cmd, '--repo', dir];
+  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build), ...cmd];
   const t0 = Date.now();
   try {
     const r = spawnSync(nice ? 'nice' : argv[0], nice ? ['-n', '10', ...argv] : argv.slice(1),
@@ -82,11 +85,19 @@ export function extract(from: string, to: string, root: string) {
   // and only where a value starts with it.
   const prefixes = [...new Set([path.resolve(root), fs.realpathSync(root)])].map((p) => `${p}/`).sort((a, b) => b.length - a.length);
   const rel = (v: any) => { if (typeof v !== 'string') return v; const p = prefixes.find((x) => v.startsWith(x)); return p ? v.slice(p.length) : v; };
-  // Inside edge metadata (JSON) a path starts right after a quote: `"<root>/m.py::g"` -> `"m.py::g"`.
-  const relJson = (v: any) => (typeof v === 'string' ? prefixes.reduce((x, p) => x.replaceAll(`"${p}`, '"'), v) : v);
-  const src = new DatabaseSync(from, { readOnly: true });
-  const db = new DatabaseSync(to);
+  // Edge metadata is JSON that Python wrote (non-ASCII escaped as \uXXXX): parse it and strip every
+  // string inside, so the escaping never hides a path.
+  const deep = (v: any): any => (typeof v === 'string' ? rel(v) : Array.isArray(v) ? v.map(deep)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deep(x)])) : v);
+  const relJson = (v: any) => { if (typeof v !== 'string') return v; try { return JSON.stringify(deep(JSON.parse(v))); } catch { return v; } };
+  // Written under a temporary name and renamed once complete: a failed copy leaves no crg.db that
+  // snapshot() would read as an empty graph.
+  const tmp = `${to}.tmp`;
+  fs.rmSync(tmp, { force: true });
+  let src: DatabaseSync | null = null; let db: DatabaseSync | null = null;
   try {
+    src = new DatabaseSync(from, { readOnly: true });
+    db = new DatabaseSync(tmp);
     db.exec(`CREATE TABLE nodes (kind TEXT, name TEXT, qualified_name TEXT, file_path TEXT, line_start INTEGER, line_end INTEGER, language TEXT);
              CREATE TABLE edges (id INTEGER, kind TEXT, source_qualified TEXT, target_qualified TEXT, file_path TEXT, line INTEGER, extra TEXT, confidence_tier TEXT);
              BEGIN;`);
@@ -97,7 +108,12 @@ export function extract(from: string, to: string, root: string) {
     for (const e of src.prepare('SELECT id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier FROM edges').iterate() as Iterable<any>)
       putEdge.run(e.id, e.kind, rel(e.source_qualified), rel(e.target_qualified), rel(e.file_path), e.line, relJson(e.extra), e.confidence_tier);
     db.exec('COMMIT;');
-  } finally { db.close(); src.close(); }
+    db.close(); db = null;
+    fs.renameSync(tmp, to);
+  } finally {
+    db?.close(); src?.close();
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 /** The release version the program reports (`code-review-graph 2.4.0`), or null. */
@@ -120,37 +136,47 @@ const symbol = (id: string) => { const cut = id.indexOf('::'); return (cut >= 0 
 const segments = (q: string) => { const out: string[] = []; let cur = ''; let depth = 0; for (const ch of q) { if (ch === '(') depth++; if (ch === ')') depth--; if (ch === '.' && !depth) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; };
 
 /**
- * Give every definition node its container chain (`Class::method`, `Outer::inner`). crg's symbol
- * names a member's containers (`Router.Host` for a Go receiver method, `K.m`, `ns.I.m()`), and those
- * come first: the container is the node of the same file with that symbol, or, when there is none
- * (a namespace, a receiver type declared elsewhere), the symbol's own segments. A bare symbol is a
- * top-level or nested function (crg adds a hash suffix when the name repeats: `skipString:S<hash>:2`),
- * and its container is the innermost node of the same file whose span strictly holds it. Two bare
- * definitions on one span (a one-line nested function) cannot be told apart and stay unnested.
+ * Give every definition node its container chain (`Class::method`, `Outer::Inner::m`, `f::inner`).
+ * The container is the innermost node of the same file whose span holds the node (a stack walk over
+ * the file's nodes sorted by span). Two nodes on one span nest only when crg's symbol says so (`K`
+ * of `K.m`). A node that no span holds but whose crg symbol names a container (a Go receiver method
+ * declared outside its type, a member of a one-line class beside another) takes that container: the
+ * node with that symbol (or ending in it) whose span holds it if any, else the first; with none, the
+ * symbol's own segments (a C++ namespace). crg's hash suffix on repeated names (`A.m:S<hash>`) is
+ * ignored when comparing symbols, so spans decide between same-named classes. Two bare definitions
+ * on one span (a one-line nested function) cannot be told apart and stay unnested.
  */
 function qualify(nodes: SnapshotNode[]) {
   const byFile = new Map<string, SnapshotNode[]>();
   for (const n of nodes) if (n.kind !== 'file') (byFile.get(n.file) ?? byFile.set(n.file, []).get(n.file)).push(n);
   for (const list of byFile.values()) {
-    const bySymbol = new Map<string, SnapshotNode>();
-    for (const n of list) if (!bySymbol.has(symbol(n.id))) bySymbol.set(symbol(n.id), n);
+    const sym = new Map(list.map((n) => [n, symbol(n.id)]));
+    const segs = new Map(list.map((n) => [n, segments(sym.get(n))]));
+    const spans = (o: SnapshotNode, n: SnapshotNode) => o.start <= n.start && n.end <= o.end;
+    // 1. span parents, by a stack walk
+    const parent = new Map<SnapshotNode, SnapshotNode>();
+    const sorted = [...list].sort((a, b) => a.start - b.start || b.end - a.end || segs.get(a).length - segs.get(b).length);
+    const stack: SnapshotNode[] = [];
+    for (const n of sorted) {
+      const holds = (o: SnapshotNode) => spans(o, n) && (o.start !== n.start || o.end !== n.end || sym.get(n).startsWith(`${sym.get(o)}.`));
+      while (stack.length && !holds(stack[stack.length - 1])) stack.pop();
+      if (stack.length) parent.set(n, stack[stack.length - 1]);
+      stack.push(n);
+    }
+    // 2. chains; a node with no span parent falls back to the container its crg symbol names
     const done = new Map<SnapshotNode, string>();
     const chain = (n: SnapshotNode, seen: Set<SnapshotNode>): string => {
       if (done.has(n)) return done.get(n);
       if (seen.has(n)) return n.name; // a cycle cannot happen by construction; never loop on bad input
       seen.add(n);
-      const segs = segments(symbol(n.id));
       let outer: string | null = null;
-      if (segs.length > 1) {
-        const owner = bySymbol.get(segs.slice(0, -1).join('.'));
-        outer = owner && owner !== n ? chain(owner, seen) : segs.slice(0, -1).map((x) => x.replace(/\(.*\)$/, '')).join('::');
-      } else {
-        let best: SnapshotNode | null = null;
-        for (const o of list) {
-          if (o === n || o.start > n.start || o.end < n.end || (o.start === n.start && o.end === n.end)) continue;
-          if (!best || o.end - o.start < best.end - best.start || (o.end - o.start === best.end - best.start && o.start > best.start)) best = o;
-        }
-        if (best) outer = chain(best, seen);
+      const p = parent.get(n);
+      if (p) outer = chain(p, seen);
+      else if (segs.get(n).length > 1) {
+        const prefix = segs.get(n).slice(0, -1).join('.');
+        const owners = list.filter((o) => o !== n && (sym.get(o) === prefix || sym.get(o).endsWith(`.${prefix}`)));
+        const owner = owners.find((o) => spans(o, n)) ?? owners[0];
+        outer = owner ? chain(owner, seen) : segs.get(n).slice(0, -1).map((x) => x.replace(/\(.*\)$/, '')).join('::');
       }
       const q = outer ? `${outer}::${n.name}` : n.name;
       done.set(n, q);

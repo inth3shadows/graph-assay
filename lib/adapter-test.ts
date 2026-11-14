@@ -133,6 +133,14 @@ db.close();\n`, { mode: 0o755 });
     const again = crg.index(work, probe, { home, args: ['build'] });
     assert.equal(again.ok, true, again.output);
     assert.notEqual(fs.readFileSync(path.join(work, '.graph-assay', 'crg.db'), 'utf8').slice(0, 5), 'stale', 'args [build] left a stale extract');
+    // crg's update ignores CRG_REPO_ROOT, so it needs --repo too; an explicit --repo is kept as given
+    assert.equal(crg.index(work, probe, { home, args: ['update'] }).ok, true);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
+    assert.equal(crg.index(work, probe, { home, args: ['update', '--repo', work] }).ok, true);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
+    // the `env` option adds switches but never re-roots crg
+    assert.equal(crg.index(work, probe, { home, env: { CRG_REPO_ROOT: '/elsewhere' } }).ok, true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).env.CRG_REPO_ROOT, work);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
@@ -174,6 +182,25 @@ check('code-review-graph extract: leading repo prefix only, given or resolved pa
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
+check('code-review-graph extract: paths inside JSON that Python escaped (non-ASCII root); a failed extract leaves no file', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-')));
+  try {
+    const root = path.join(tmp, 'répo "q"'); fs.mkdirSync(root);
+    // Python json.dumps (ensure_ascii): non-ASCII as \uXXXX, quotes escaped
+    const pyJson = (v: unknown) => JSON.stringify(v).replace(/[\u0080-\uffff]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    const src = path.join(tmp, 'graph.db'); const out = path.join(tmp, 'crg.db');
+    crgStore(src, [['Function', 'f', `${root}/a.py::f`, `${root}/a.py`, 1, 1, 'python', null]],
+      [[1, 'CALLS', `${root}/a.py::f`, 'g', `${root}/a.py`, 1, pyJson({ ambiguous_targets: [`${root}/a.py::g`, 'other'] }), 'AMBIGUOUS', 'unresolved']]);
+    { const d = new DatabaseSync(src, { readOnly: true }); try { assert((d.prepare('SELECT extra FROM edges').get() as any).extra.includes('r\\u00e9po'), 'the source extra must hold the escaped form'); } finally { d.close(); } }
+    crg.extract(src, out, root);
+    const db = new DatabaseSync(out, { readOnly: true });
+    try { assert.deepEqual(JSON.parse((db.prepare('SELECT extra FROM edges').get() as any).extra), { ambiguous_targets: ['a.py::g', 'other'] }); } finally { db.close(); }
+    const bad = path.join(tmp, 'bad.db'); new DatabaseSync(bad).close(); // no tables: the copy fails
+    assert.throws(() => crg.extract(bad, out, root));
+    assert(!fs.existsSync(out), 'a failed extract left a crg.db behind');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
 check('code-review-graph snapshot: container chains from crg symbols and spans; ambiguous calls become guessed edges', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
   try {
@@ -190,6 +217,15 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
       ['Class', 'Greeter', 'app.py::Greeter', 'app.py', 6, 10, 'python', null], ['Function', 'greet', 'app.py::Greeter.greet', 'app.py', 7, 9, 'python', 'Greeter'],
       ['Function', 'helper', 'app.py::helper', 'app.py', 8, 8, 'python', null], ['Function', 'helper', 'app.py::helper:Sab12:2', 'app.py', 11, 11, 'python', null],
       ['Function', 'g', 'app.py::g', 'app.py', 12, 12, 'python', null], ['Function', 'g', 'app.py::g:Scd34', 'app.py', 12, 12, 'python', null],
+      F('n.py', 20), ['Class', 'Outer', 'n.py::Outer', 'n.py', 1, 4, 'python', null], ['Class', 'Inner', 'n.py::Outer.Inner', 'n.py', 2, 4, 'python', 'Outer'],
+      ['Function', 'm', 'n.py::Inner.m', 'n.py', 3, 4, 'python', 'Inner'],
+      ['Class', 'C', 'n.py::C', 'n.py', 5, 9, 'python', null], ['Function', 'm', 'n.py::C.m', 'n.py', 6, 9, 'python', 'C'],
+      ['Function', 'helper', 'n.py::C.helper', 'n.py', 7, 8, 'python', 'C'],
+      ['Function', 'f', 'n.py::f', 'n.py', 10, 13, 'python', null], ['Class', 'A', 'n.py::A', 'n.py', 11, 13, 'python', null],
+      ['Function', 'm', 'n.py::A.m', 'n.py', 12, 13, 'python', 'A'],
+      ['Function', 'g', 'n.py::g', 'n.py', 14, 17, 'python', null], ['Class', 'A', 'n.py::A:S77aa', 'n.py', 15, 17, 'python', null],
+      ['Function', 'm', 'n.py::A.m:S88bb', 'n.py', 16, 17, 'python', 'A'],
+      F('late.go', 9), ['Function', 'Run', 'late.go::Srv.Run', 'late.go', 2, 3, 'go', 'Srv'], ['Class', 'Srv', 'late.go::Srv', 'late.go', 8, 9, 'go', null],
     ], [
       [1, 'CALLS', 'app.py::version_option', 'g', 'app.py', 4, JSON.stringify({ ambiguous_targets: ['app.py::g', 'app.py::g:Scd34'] }), 'AMBIGUOUS', 'unresolved'],
       [2, 'CALLS', 'app.py::version_option', 'nowhere', 'app.py', 5, JSON.stringify({ ambiguous_targets: ['x.py::nowhere'] }), 'AMBIGUOUS', 'unresolved'],
@@ -198,6 +234,8 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
     const s = crg.snapshot(tmp);
     assert.deepEqual(validateSnapshot(s), []);
     const q = Object.fromEntries(s.nodes.map((x) => [x.id, x.qname]));
+    assert.deepEqual([q['n.py::Outer.Inner'], q['n.py::Inner.m'], q['n.py::C.helper'], q['n.py::A.m'], q['n.py::A.m:S88bb'], q['late.go::Srv.Run']],
+      ['Outer::Inner', 'Outer::Inner::m', 'C::m::helper', 'f::A::m', 'g::A::m', 'Srv::Run']);
     assert.deepEqual([q['r.go::Router.Host'], q['c.ts::K.m'], q['c.ts::L.n'], q['i.cpp::ns.I.m(a.b)']], ['Router::Host', 'K::m', 'L::n', 'ns::I::m']);
     assert.deepEqual([q['app.py::callback'], q['app.py::Greeter.greet'], q['app.py::helper'], q['app.py::helper:Sab12:2']],
       ['version_option::callback', 'Greeter::greet', 'Greeter::greet::helper', 'helper']);

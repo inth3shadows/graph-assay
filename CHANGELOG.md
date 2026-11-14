@@ -11,9 +11,10 @@ All notable changes to this project are recorded here. The format follows
   sandboxed HOME and data dir with Jedi enrichment off, and maps the graph's nodes and edges (paths
   made relative) to a snapshot v1 with site lines and unresolved calls; an ambiguous call becomes a
   guessed edge to each of crg's candidates. The repo root is pinned to the indexed dir. Members take
-  their containers from crg's symbols, nested functions from crg's spans. `tools/setup.sh` installs
-  it from `docker/crg-requirements.lock` with `--require-hashes` into a fresh venv (Python 3.11+,
-  Linux or macOS; `--no-crg` skips). `lib/adapter-test.ts` gains a golden mapping test, a sandbox
+  their containers from the nesting of crg's spans, or, where no span holds them, from crg's symbols. `tools/setup.sh` installs
+  it from `docker/crg-requirements.lock` with `--require-hashes` into a fresh per-lock venv that
+  replaces the old one only once installed (Python 3.11+, Linux or macOS; `--no-crg` skips). Setup
+  now checks every part's platform before installing anything. `lib/adapter-test.ts` gains a golden mapping test, a sandbox
   probe, and hermetic checks of path stripping and container chains.
 - A third subject, codebase-memory-mcp 0.12.1 (`lib/subjects/codebase-memory-mcp.ts`): indexes in a
   sandboxed HOME and cache with the repo as the allowed root, and maps the graph's nodes and edges to
