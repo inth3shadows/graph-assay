@@ -1,6 +1,6 @@
 {
  "build": "f72c9d2efb14454ff4f9fd7b8460abd82f19a287",
- "generated": "2026-11-12",
+ "generated": "2026-11-14",
  "fixtures": {
   "a": {
    "issue": 3034,
@@ -178,14 +178,51 @@
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
+  "issue-3271": {
+   "issue": 3271,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|exact-match|function>method": 1
+   }
+  },
   "j1-java-overload": {
    "issue": 3040,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
+  "java-fq-static-receiver": {
+   "issue": null,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "java-typed-var-wildcard": {
+   "issue": null,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
   "kmp-22": {
    "issue": 3033,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "laravel-route-fq-class": {
+   "issue": null,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "laravel-route-group-use": {
+   "issue": null,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "laravel-route-namespace-use": {
+   "issue": null,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
@@ -282,13 +319,6 @@
    "shapes": {
     "receiver-fallback|calls|import|constant>term": 1,
     "missing|receiver-fallback|ts|term@decl>method": 1
-   }
-  },
-  "issue-3271": {
-   "issue": 3271,
-   "lang": "ts",
-   "shapes": {
-    "external|calls|exact-match|function>method": 1
    }
   }
  }
