@@ -4,7 +4,7 @@ Minimal repros of code-graph-rag's top `graph-assay triage` shapes and function-
 SPEC v1.0 run over the dev corpus. They stay out of `fixtures/oracle-candidates/`, which is
 codegraph's regression set and the input of the canonical replay.
 
-    node fixtures/replay.mjs --subject code-graph-rag --root fixtures/cgr-candidates default
+    node fixtures/replay.mts --subject code-graph-rag --root fixtures/cgr-candidates default
 
 | fixture | triage shape | sites | 0.5.0 | main cbbef181 | upstream |
 |---|---|---|---|---|---|

@@ -127,8 +127,8 @@ if (isMain(import.meta.url)) {
     console.log(lines.join('\n'));
   }
   const corpusName = runName.replace(/^pub-/, '');
-  const row = (await import('../differential/builds.mjs')).readRepos(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'corpus', 'v2.txt'), 'all').find((r) => r.name === corpusName);
+  const row = (await import('../differential/builds.ts')).readRepos(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'corpus', 'v2.txt'), 'all').find((r) => r.name === corpusName);
   console.log('\nre-run this repo\'s oracle (seconds once its SCIP index is cached):');
-  if (row) console.log(`  node differential/builds.mjs --fetch <dest> corpus/v2.txt all   # ${row.name} @ ${row.sha.slice(0, 12)}`);
+  if (row) console.log(`  node differential/builds.ts --fetch <dest> corpus/v2.txt all   # ${row.name} @ ${row.sha.slice(0, 12)}`);
   for (const [subj] of subjects) console.log(`  CGQA_SUBJECT=${subj} ORACLE_ALLSITES=1 bash oracle/run.sh ${runName} ${row ? `<dest>/${row.name}` : '<src repo>'} ${row ? LANG[row.language] : '<ts|python|go>'}`);
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Hermetic test of the PyCG scorer (part of `graph-assay check`): the real benchmarks/pycg.mjs runs
+// Hermetic test of the PyCG scorer (part of `graph-assay check`): the real benchmarks/pycg.ts runs
 // in a scratch tree against fabricated snippets and a stub subject whose snapshots are fixed, so the
 // mapping (dotted names -> definition spans), hits, guesses, extras and failed indexes are pinned.
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ const write = (f, text) => { fs.mkdirSync(path.dirname(f), { recursive: true });
 
 try {
   const fake = path.join(tmp, 'qa');
-  for (const f of [...ADAPTER_SHARED, 'lib/spec.ts', 'benchmarks/pycg.mjs']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
+  for (const f of [...ADAPTER_SHARED, 'lib/spec.ts', 'benchmarks/pycg.ts']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
   write(path.join(fake, 'lib/subjects/codegraph.ts'), '// stub\n');
   // main.py: f (lines 1-2) calls g (lines 3-4); the module calls f.
   const src = 'def f():\n    g()\ndef g():\n    pass\nf()\n';
@@ -45,7 +45,7 @@ export const subject = () => ({ name: 'codegraph',
   }
   const build = path.join(tmp, 'build.js'); write(build, '');
   const out = path.join(tmp, 'pycg.json');
-  const r = spawnSync(process.execPath, [path.join(fake, 'benchmarks/pycg.mjs'), build, '--json', out],
+  const r = spawnSync(process.execPath, [path.join(fake, 'benchmarks/pycg.ts'), build, '--json', out],
     { encoding: 'utf8', env: { ...process.env, PYCG_DIR: bench, NODE_NO_WARNINGS: '1' } });
   const res = Object.fromEntries((fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')).results : []).map((x) => [x.name.split('/').pop(), x]));
 

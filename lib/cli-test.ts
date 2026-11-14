@@ -42,7 +42,7 @@ try {
   check('replay exits 2 on an unknown or path-like fixture name', () => {
     const build = path.join(tmp, 'build.js'); fs.writeFileSync(build, '');
     for (const name of ['no-such-fixture', '../oracle-candidates']) {
-      const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mjs'), build, name]);
+      const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), build, name]);
       assert.equal(r.status, 2, `${name}: ${r.stdout}${r.stderr}`);
     }
   });

@@ -3,7 +3,7 @@
 // non-match, for each subject, clustered by shape across repositories and ranked by the macro headline
 // points it costs. Model-free and reproducible: it reads finished oracle work dirs and runs nothing.
 //
-// Usage: node bench/triage.mjs [--work <oracle work dir>] [--corpus corpus/v1.txt] [--split dev]
+// Usage: node bench/triage.ts [--work <oracle work dir>] [--corpus corpus/v1.txt] [--split dev]
 //                              [--t3 <dir with meta-cg.json / meta-cgr.json>] [--t1 <dir with replay-cg.json>]
 //                              [--known fixtures/known-shapes.json] [--top 15] [--md out.md] [--json out.json]
 //   --known: each fixture's shapes (tools/triage/tag-fixtures.mjs); a codegraph shape whose key a fixture of
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { config } from '../lib/config.ts';
-import { CORPUS, readRepos } from '../differential/builds.mjs';
+import { CORPUS, readRepos } from '../differential/builds.ts';
 import { forward, missing } from '../lib/scores.ts';
 import { isMain } from '../lib/main.ts';
 
@@ -54,7 +54,7 @@ export function rankShapes(rows) {
   const shapes = new Map();
   const precisionRepos = rows.filter((r) => forward(r.fwd).strict[1] > 0).length;
   const recallRepos = rows.filter((r) => missing(r.miss).strict[1] > 0).length;
-  const noise = {};
+  const noise: Record<string, any> = {};
   for (const r of rows) {
     const [, pn] = forward(r.fwd).strict; const [, rn] = missing(r.miss).strict;
     const add = (dir, key, n, denom, groups) => {
@@ -66,11 +66,11 @@ export function rankShapes(rows) {
       for (const g of groups ?? []) s.groups.push({ repo: r.repo, workDir: r.workDir, ...g });
       shapes.set(`${dir}:${key}`, s);
     };
-    for (const [key, n] of Object.entries(r.fwd.buckets)) {
+    for (const [key, n] of Object.entries<any>(r.fwd.buckets)) {
       if (key.startsWith('noise:')) { noise[key.split('|')[0]] = (noise[key.split('|')[0]] ?? 0) + n; continue; }
       if (FORWARD_BAD.test(`${key}|`)) add('precision', key, n, pn, r.fwd.groups?.[key]);
     }
-    for (const [key, n] of Object.entries(r.miss.buckets)) if (key.split('|')[1] !== 'found') add('recall', key, n, rn, r.miss.groups?.[key]);
+    for (const [key, n] of Object.entries<any>(r.miss.buckets)) if (key.split('|')[1] !== 'found') add('recall', key, n, rn, r.miss.groups?.[key]);
     // Call sites per shape (ORACLE_ALLSITES lists), so shapes that are one cause seen from both
     // directions (a wrong edge here is the missed call there) can be linked.
     for (const [dir, list] of [['precision', r.fwd.sites], ['recall', r.miss.sites]]) {
@@ -99,11 +99,11 @@ const LANG = { python: 'python', go: 'go', typescript: 'ts', javascript: 'ts', t
 /** Fixtures (tagged by tools/triage/tag-fixtures.mjs) whose bug produces this shape in one of its languages. */
 export function knownFor(shape, known, verdicts = {}) {
   const langs = new Set(shape.langs.map((l) => LANG[l]));
-  return Object.entries(known?.fixtures ?? {}).filter(([, f]) => f.shapes && f.shapes[shape.key] && langs.has(LANG[f.lang]))
+  return Object.entries<any>(known?.fixtures ?? {}).filter(([, f]) => f.shapes && f.shapes[shape.key] && langs.has(LANG[f.lang]))
     .map(([name, f]) => ({ fixture: name, issue: f.issue, verdict: verdicts[name] ?? null }));
 }
 
-/** Decoy captures and losses from a T3 result (metamorphic/run.mjs --json). */
+/** Decoy captures and losses from a T3 result (metamorphic/run.ts --json). */
 export function decoyFindings(meta) {
   const out = { seeds: 0, changed: 0, captured: [], lost: [] };
   for (const r of meta ?? []) {
@@ -121,7 +121,7 @@ if (isMain(import.meta.url)) {
   const repos = readRepos(corpus, split);
   const known = fs.existsSync(knownFile) ? readJson(knownFile) : null;
   const result = { work, corpus: path.basename(corpus), split, subjects: {} };
-  for (const [subj, { sfx, tag }] of Object.entries(SUBJECTS)) {
+  for (const [subj, { sfx, tag }] of Object.entries<any>(SUBJECTS)) {
     const rows = [];
     const notRun = [];
     for (const r of repos) {
@@ -138,10 +138,10 @@ if (isMain(import.meta.url)) {
   }
 
   const md = [`# Bug triage: corpus ${result.corpus}, split \`${split}\``, '',
-    `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/triage.mjs\` from ${work}.`,
+    `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/triage.ts\` from ${work}.`,
     'Shapes are ranked by headline points at stake: how much the subject\'s macro strict precision or recall would rise if every unit of the shape were right. It is an upper bound, since a fix can create other errors.',
     known ? `Filed fixtures come from ${path.basename(knownFile)} (codegraph ${String(known.build).slice(0, 8)}, ${known.generated}): a fixture listed for a shape produces that shape in the same language, which makes it a candidate match, not proof, since one shape can hold several bugs. BROKEN means the bug is still present at this run's build.` : 'No fixture shape file: filed fixtures are not matched.', ''];
-  for (const [subj, v] of Object.entries(result.subjects)) {
+  for (const [subj, v] of Object.entries<any>(result.subjects)) {
     md.push(`## ${subj}`, '', `Results recorded under: ${v.specs.map((s) => s ?? 'unrecorded').join(', ')}.${v.notRun.length ? ` Not run: ${v.notRun.join(', ')}.` : ''}`, '',
       `| rank | points | track | sites | repos | shape | same calls as |${v.shapes[0]?.known ? ' filed fixtures with this shape |' : ''}`, `|---|---|---|---|---|---|---|${v.shapes[0]?.known ? '---|' : ''}`);
     const knownCell = (s) => (s.known ? ` ${s.known.map((k) => `${k.issue ? `#${k.issue}` : 'unfiled'} ${k.fixture}${k.verdict ? ` (${k.verdict})` : ''}`).join(', ') || 'none: new'} |` : '');
@@ -156,7 +156,7 @@ if (isMain(import.meta.url)) {
       }
       md.push('');
     });
-    if (Object.keys(v.noise).length) md.push(`Left out as oracle noise (SPEC §5): ${Object.entries(v.noise).map(([k, n]) => `${k} ${n}`).join(', ')}.`, '');
+    if (Object.keys(v.noise).length) md.push(`Left out as oracle noise (SPEC §5): ${Object.entries<any>(v.noise).map(([k, n]) => `${k} ${n}`).join(', ')}.`, '');
     if (v.decoy) {
       md.push(`Decoy relation (T3): ${v.decoy.changed} of ${v.decoy.seeds} seeds changed; ${v.decoy.captured.length} calls captured by an unimported decoy, ${v.decoy.lost.length} correct edges lost.`);
       for (const c of v.decoy.captured.slice(0, 5)) md.push(`- seed ${c.seed}: \`${c.edge}\``);

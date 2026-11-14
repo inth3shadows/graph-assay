@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch the third-party call-graph benchmarks at pinned commits (not vendored).
 # Usage: tools/fetch-benchmarks.sh   -> ${XDG_CACHE_HOME:-~/.cache}/graph-assay/oracle/bench/<name>
-#   pycg  PyCG micro-benchmark (Apache-2.0), scored by benchmarks/pycg.mjs
+#   pycg  PyCG micro-benchmark (Apache-2.0), scored by benchmarks/pycg.ts
 # The checkouts are data: nothing in them is run.
 set -euo pipefail
 bench=${XDG_CACHE_HOME:-$HOME/.cache}/graph-assay/oracle/bench

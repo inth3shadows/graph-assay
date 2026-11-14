@@ -5,8 +5,8 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { canonical, diffCanonical } from './modes.mjs';
-import { lineDiff } from './shadow.mjs';
+import { canonical, diffCanonical } from './modes.ts';
+import { lineDiff } from './shadow.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const base = JSON.parse(fs.readFileSync(path.join(here, '..', 'oracle/test/ts-forward/snapshot.json'), 'utf8'));
@@ -21,7 +21,7 @@ function renumber(s) {
   return s;
 }
 
-const cases = [
+const cases: [string, (s: any) => void, string[]][] = [
   ['renumbered + reordered', (s) => renumber(s), []],
   ['edge line moved', (s) => { s.edges[0].line += 1; }, ['edges']],
   ['edge duplicated', (s) => { s.edges.push({ ...s.edges[0] }); }, ['edges']],
@@ -46,7 +46,7 @@ for (const [name, mutate, want] of cases) {
   if (!ok) failed++;
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(24)} ${got.join(',') || '(equal)'}`);
 }
-// shadow.mjs's line diff: applying it must turn a into b, and equal texts give no changes.
+// shadow.ts's line diff: applying it must turn a into b, and equal texts give no changes.
 const texts = [['a\nb\nc', 'a\nb\nc'], ['a\nb\nc', 'a\nx\nc'], ['', 'a\nb'], ['a\nb', ''], ['x\na\nb', 'a\nb\ny']];
 let n = cases.length;
 for (const [a, b] of texts) {

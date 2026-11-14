@@ -1,5 +1,5 @@
 {
- "note": "Pinned agent-facing questions for differential/shadow.mjs. repo: an oracle/targets.txt name or a path relative to the qa root. q: codegraph CLI arguments (the CLI prints what the MCP tools return).",
+ "note": "Pinned agent-facing questions for differential/shadow.ts. repo: an oracle/targets.txt name or a path relative to the qa root. q: codegraph CLI arguments (the CLI prints what the MCP tools return).",
  "questions": [
   { "repo": "mux", "q": ["explore", "Router ServeHTTP", "--max-files", "2"] },
   { "repo": "mux", "q": ["explore", "Route Match regexp", "--max-files", "2"] },

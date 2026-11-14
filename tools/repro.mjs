@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { CORPUS, readRepos, fetchRepos } from '../differential/builds.mjs';
+import { CORPUS, readRepos, fetchRepos } from '../differential/builds.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
@@ -67,7 +67,7 @@ for (const dir of ['lib', 'oracle', 'bench', 'benchmarks', 'fixtures', 'schema',
   };
   walk(dir);
 }
-for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.mjs', 'differential/modes.mjs']) manifest.files[f] = hash(path.join(qa, f));
+for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.mjs', 'differential/modes.ts']) manifest.files[f] = hash(path.join(qa, f));
 const save = () => fs.writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 save();
 try {
@@ -89,7 +89,7 @@ try {
   }
   fetchRepos(out, [{ name: 'pycg', url: 'https://github.com/vitsalis/PyCG.git', sha: manifest.pycg }]);
   for (const [subj, tag] of [['codegraph', 'cg'], ['code-graph-rag', 'cgr']]) {
-    for (const [stage, script] of [['replay', 'fixtures/replay.mjs'], ['pycg', 'benchmarks/pycg.mjs']]) {
+    for (const [stage, script] of [['replay', 'fixtures/replay.mts'], ['pycg', 'benchmarks/pycg.ts']]) {
       const json = path.join(out, 't1', `${stage}-${tag}.json`);
       run('node', [script, '--subject', subj, 'default', ...(stage === 'replay' && subj === 'codegraph' ? ['--canary'] : []), '--json', json], `${stage}-${tag}`);
       // PyCG reports indexing errors in JSON but currently exits zero; never publish partial T1.
@@ -98,7 +98,7 @@ try {
     }
   }
   for (const [subj, tag] of [['codegraph', 'cg'], ['code-graph-rag', 'cgr']]) {
-    run('node', ['metamorphic/run.mjs', '--subject', subj, 'default', 'fixtures', '--relations', 'decoy,shift,repeat', '--json', path.join(out, 't3', `meta-${tag}.json`)],
+    run('node', ['metamorphic/run.ts', '--subject', subj, 'default', 'fixtures', '--relations', 'decoy,shift,repeat', '--json', path.join(out, 't3', `meta-${tag}.json`)],
       `t3-${tag}`, { allowedExitCodes: [0, 1] });
   }
   // A subset gets its own corpus, so it cannot masquerade as the full dev table.
@@ -107,7 +107,7 @@ try {
   const data = path.join(qa, 'labels', 'data');
   const samples = fs.readdirSync(data).sort().flatMap((d) => [path.join(data, d, 'items.jsonl'), path.join(data, d)]);
   run('node', ['labels/noise.mjs', ...samples, '--protocol', path.join(qa, 'labels', 'protocol.json'), '--json', path.join(out, 'noise.json')], 'noise');
-  run('node', ['bench/tables.mjs', '--canonical', '--corpus', corpus, '--split', 'dev', '--t1', path.join(out, 't1'), '--t3', path.join(out, 't3'), '--seed', '1',
+  run('node', ['bench/tables.ts', '--canonical', '--corpus', corpus, '--split', 'dev', '--t1', path.join(out, 't1'), '--t3', path.join(out, 't3'), '--seed', '1',
     '--noise', path.join(out, 'noise.json'), '--md', path.join(out, 'tables.md'), '--json', path.join(out, 'tables.json')], 'tables');
   const table = JSON.parse(fs.readFileSync(path.join(out, 'tables.json'), 'utf8'));
   if (table.missingRuns.length) throw new Error(`Missing oracle runs: ${table.missingRuns.join(', ')}`);

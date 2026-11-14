@@ -1,6 +1,6 @@
 # Build edge diff: build two codegraph commits (from colbymchenry/codegraph, or the `repo` input), index the
 # corpus's dev repos (corpus/v1.txt) with each, and diff the graphs
-# (differential/builds.mjs). The result goes to the job summary and an artifact; nothing is posted.
+# (differential/builds.ts). The result goes to the job summary and an artifact; nothing is posted.
 # Run it by hand with a PR number of that repo (its merge base vs its head) or two commits. On a PR that
 # touches this pipeline it runs once on the known pair 60b0d7a9 -> f72c9d2e as a self-test.
 name: edgediff
@@ -26,8 +26,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/edgediff.yml
-      - differential/builds.mjs
-      - differential/modes.mjs
+      - differential/builds.ts
+      - differential/modes.ts
       - corpus/v1.txt
       - lib/subjects/codegraph.ts
       - tools/build-codegraph.sh
@@ -84,10 +84,10 @@ jobs:
           echo "OLD_JS=$(tools/build-codegraph.sh "$OLD" ~/graph-assay-builds/"$OLD" | tail -1)" >> "$GITHUB_ENV"
           echo "NEW_JS=$(tools/build-codegraph.sh "$NEW" ~/graph-assay-builds/"$NEW" | tail -1)" >> "$GITHUB_ENV"
       - name: Fetch pinned public repos
-        run: node differential/builds.mjs --fetch ~/graph-assay-repos
+        run: node differential/builds.ts --fetch ~/graph-assay-repos
       - name: Diff
         run: |
-          node differential/builds.mjs "$OLD_JS" "$NEW_JS" ~/graph-assay-repos/* --md edgediff.md --json edgediff.json || true
+          node differential/builds.ts "$OLD_JS" "$NEW_JS" ~/graph-assay-repos/* --md edgediff.md --json edgediff.json || true
           cat edgediff.md >> "$GITHUB_STEP_SUMMARY"
           # DIFFER is the answer, not a failure; a repo that failed to index fails the job
           node -e 'const r=require("./edgediff.json").results.filter(x=>x.verdict==="FAILED");for(const x of r)console.error(x.repo, x.error);process.exit(r.length?1:0)'

@@ -4,7 +4,7 @@
 // tools return), and diff the answers. Edge diffs say what changed in the graph; this says what an
 // agent reading the answers would see change.
 //
-// Usage: node differential/shadow.mjs <old codegraph.js> <new codegraph.js> [questions.json] [--json out] [--show N]
+// Usage: node differential/shadow.ts <old codegraph.js> <new codegraph.js> [questions.json] [--json out] [--show N]
 //   questions.json defaults to differential/questions.json.
 // Each question is asked twice per build; an answer that differs between the two asks is UNSTABLE
 // (reported, never diffed). Verdicts: SAME, CHANGED (diff printed, N lines, default 40), UNSTABLE,
@@ -88,19 +88,19 @@ if (isMain(import.meta.url)) {
   const jsonOut = opt('--json');
   const show = Number(opt('--show') ?? 40);
   const [oldB, newB, qfile = path.join(here, 'questions.json')] = args;
-  if (!oldB || !newB) { console.error('usage: shadow.mjs <old codegraph.js> <new codegraph.js> [questions.json] [--json out] [--show N]'); process.exit(2); }
+  if (!oldB || !newB) { console.error('usage: shadow.ts <old codegraph.js> <new codegraph.js> [questions.json] [--json out] [--show N]'); process.exit(2); }
   const { questions } = JSON.parse(fs.readFileSync(qfile, 'utf8'));
   const byRepo = new Map();
   for (const q of questions) { if (!byRepo.has(q.repo)) byRepo.set(q.repo, []); byRepo.get(q.repo).push(q.q); }
 
   const results = [];
-  const tally = {};
+  const tally: Record<string, any> = {};
   for (const [repo, qs] of byRepo) {
     const src = resolveRepo(repo);
     const sides = [open(oldB, src), open(newB, src)];
     try {
       for (const q of qs) {
-        const row = { repo, q };
+        const row: Record<string, any> = { repo, q };
         const err = sides.find((s) => s.error)?.error;
         if (err) { row.verdict = 'FAILED'; row.error = err; } else {
           const [a1, a2, b1, b2] = [sides[0].ask(q), sides[0].ask(q), sides[1].ask(q), sides[1].ask(q)];
@@ -121,6 +121,6 @@ if (isMain(import.meta.url)) {
     }
   }
   if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ old: oldB, new: newB, adapterSha256: adapterHash('codegraph'), results }, null, 1));
-  console.log(`\n${Object.entries(tally).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  console.log(`\n${Object.entries<any>(tally).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   process.exit(Object.keys(tally).every((k) => k === 'SAME') ? 0 : 1);
 }

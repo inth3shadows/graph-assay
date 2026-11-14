@@ -29,11 +29,11 @@ export function summarizeRobustness(rows, subject) {
     const counts = result.relations[relation] ??= empty(); counts.total++;
     if (row.error !== undefined) { if (typeof row.error !== 'string' || !row.error) throw new Error('invalid T3 error evidence'); counts.errors++; continue; }
     if (row.notApplicable === true || (relation === 'decoy' && row.decoys === 0)) {
-      if ((row.diffs != null && (typeof row.diffs !== 'object' || Array.isArray(row.diffs))) || (row.notApplicable && (typeof row.reason !== 'string' || !row.reason)) || Object.values(row.diffs ?? {}).some((v) => !Array.isArray(v) || v.length)) throw new Error('invalid T3 precondition evidence');
+      if ((row.diffs != null && (typeof row.diffs !== 'object' || Array.isArray(row.diffs))) || (row.notApplicable && (typeof row.reason !== 'string' || !row.reason)) || Object.values<any>(row.diffs ?? {}).some((v) => !Array.isArray(v) || v.length)) throw new Error('invalid T3 precondition evidence');
       counts.notApplicable++; continue;
     }
-    if (!row.diffs || typeof row.diffs !== 'object' || Array.isArray(row.diffs) || Object.values(row.diffs).some((v) => !Array.isArray(v))) throw new Error('invalid T3 diff evidence');
-    const changed = Object.values(row.diffs).some((v) => v.length);
+    if (!row.diffs || typeof row.diffs !== 'object' || Array.isArray(row.diffs) || Object.values<any>(row.diffs).some((v) => !Array.isArray(v))) throw new Error('invalid T3 diff evidence');
+    const changed = Object.values<any>(row.diffs).some((v) => v.length);
     if (changed && row.byteIdentical === true) throw new Error('byte-identical T3 result has graph differences');
     if (!row.challengeSha256) { counts.unverified++; continue; }
     counts[changed ? 'changed' : 'clean']++;
@@ -43,7 +43,7 @@ export function summarizeRobustness(rows, subject) {
       else counts.rawUnknown++;
     }
   }
-  for (const counts of Object.values(result.relations)) {
+  for (const counts of Object.values<any>(result.relations)) {
     counts.eligible = counts.total - counts.notApplicable - counts.unverified;
     counts.passRate = counts.eligible ? counts.clean / counts.eligible : null;
   }
@@ -69,14 +69,14 @@ export function robustnessMarkdown(subjects, comparison) {
   const md = ['## T3 robustness (seed runs)', '',
     '| subject | relation | clean / eligible | changed | errors | not applicable | unverified | repeat: raw identical / graph-only / unknown |',
     '|---|---|---|---|---|---|---|---|'];
-  for (const [name, summary] of Object.entries(subjects)) {
-    for (const [relation, c] of Object.entries(summary.relations)) {
+  for (const [name, summary] of Object.entries<any>(subjects)) {
+    for (const [relation, c] of Object.entries<any>(summary.relations)) {
       const score = c.eligible ? `${c.clean}/${c.eligible}` : c.total ? 'N/A' : 'NOT RUN';
       md.push(`| ${name} | ${relation} | ${score} | ${c.changed} | ${c.errors} | ${c.notApplicable} | ${c.unverified} | ${relation === 'repeat' ? `${c.byteIdentical} / ${c.graphOnly} / ${c.rawUnknown}` : '-'} |`);
     }
   }
   md.push('', 'Errors remain in the eligible denominator; unsupported or empty transformations are not applicable. Legacy evidence without challenge fingerprints is unverified and excluded from eligible counts. Clean repeat runs have the same canonical graph; raw id/order drift is reported separately.',
     `Shared challenge fingerprints: ${comparison.matched.length} matched, ${comparison.mismatched.length} mismatched, ${comparison.unknown.length} unknown, ${comparison.unpaired.length} unpaired. Unknown or unmatched evidence does not establish a paired subject comparison.`);
-  for (const [name, summary] of Object.entries(subjects)) md.push(`${name} T3 adapter hashes: ${summary.adapterHashes.length ? summary.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}.`);
+  for (const [name, summary] of Object.entries<any>(subjects)) md.push(`${name} T3 adapter hashes: ${summary.adapterHashes.length ? summary.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}.`);
   return md;
 }

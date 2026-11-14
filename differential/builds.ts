@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Build edge diff: index each repo with two codegraph builds and diff the graphs canonically
-// (multisets of files, nodes, joined edges with every column, unresolved refs; see modes.mjs).
+// (multisets of files, nodes, joined edges with every column, unresolved refs; see modes.ts).
 // Repeated edges count and every column is compared.
 //
-// Usage: node differential/builds.mjs <old codegraph.js> <new codegraph.js> <dir ...> [--json out] [--md out] [--show N]
-//        node differential/builds.mjs --fetch <dest dir> [corpus file] [split]   clone the corpus (corpus/v1.txt,
+// Usage: node differential/builds.ts <old codegraph.js> <new codegraph.js> <dir ...> [--json out] [--md out] [--show N]
+//        node differential/builds.ts --fetch <dest dir> [corpus file] [split]   clone the corpus (corpus/v1.txt,
 //          split dev by default; `all` for every repo) at its pins
 // Exit 0 = every repo the same graph, 1 = some differ or failed, 2 = usage.
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { canonical, diffCanonical } from './modes.mjs';
+import { canonical, diffCanonical } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -70,7 +70,7 @@ const gained = (d) => d.reduce((n, x) => n + Math.max(0, x.b - x.a), 0);
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args[0] === '--fetch') {
-    if (!args[1]) { console.error('usage: builds.mjs --fetch <dest dir> [corpus file] [split]'); process.exit(2); }
+    if (!args[1]) { console.error('usage: builds.ts --fetch <dest dir> [corpus file] [split]'); process.exit(2); }
     for (const d of fetchRepos(args[1], readRepos(args[2] || CORPUS, args[3] ?? 'dev'))) console.log(d);
     process.exit(0);
   }
@@ -81,20 +81,20 @@ if (isMain(import.meta.url)) {
   };
   const jsonOut = opt('--json'); const mdOut = opt('--md'); const show = Number(opt('--show') ?? 10);
   const [oldB, newB, ...dirs] = args;
-  if (!oldB || !newB || !dirs.length) { console.error('usage: builds.mjs <old codegraph.js> <new codegraph.js> <dir ...> [--json out] [--md out] [--show N]'); process.exit(2); }
+  if (!oldB || !newB || !dirs.length) { console.error('usage: builds.ts <old codegraph.js> <new codegraph.js> <dir ...> [--json out] [--md out] [--show N]'); process.exit(2); }
 
   const results = [];
   for (const dir of dirs) {
     const a = graph(oldB, dir); const b = graph(newB, dir);
-    const row = { repo: path.basename(path.resolve(dir)), old: a.size ?? null, new: b.size ?? null, ms: [a.ms, b.ms] };
+    const row: Record<string, any> = { repo: path.basename(path.resolve(dir)), old: a.size ?? null, new: b.size ?? null, ms: [a.ms, b.ms] };
     if (a.error || b.error) { row.verdict = 'FAILED'; row.error = a.error ? `old: ${a.error}` : `new: ${b.error}`; } else {
       row.diff = diffCanonical(a.canon, b.canon);
       row.verdict = Object.keys(row.diff).length ? 'DIFFER' : 'SAME';
     }
     results.push(row);
-    const counts = Object.entries(row.diff ?? {}).map(([c, d]) => `${c} -${lost(d)} +${gained(d)}`).join(', ');
+    const counts = Object.entries<any>(row.diff ?? {}).map(([c, d]) => `${c} -${lost(d)} +${gained(d)}`).join(', ');
     console.log(`${row.verdict.padEnd(7)} ${row.repo.padEnd(12)} ${row.old ? `${row.old.edges} -> ${row.new.edges} edges` : ''}  ${counts}${row.error ? row.error : ''}`);
-    for (const [c, d] of Object.entries(row.diff ?? {})) for (const x of d.slice(0, show)) console.log(`          ${c} ${x.a} -> ${x.b}  ${x.key}`);
+    for (const [c, d] of Object.entries<any>(row.diff ?? {})) for (const x of d.slice(0, show)) console.log(`          ${c} ${x.a} -> ${x.b}  ${x.key}`);
   }
 
   if (mdOut) {

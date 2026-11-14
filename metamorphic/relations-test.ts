@@ -4,14 +4,14 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { applyRelation, DECOY_DIR, SHIFT, shiftFiles } from './relations.mjs';
+import { applyRelation, DECOY_DIR, SHIFT, shiftFiles } from './relations.ts';
 
 let n = 0;
 const check = (name, fn) => { n++; try { fn(); } catch (e) { console.error(`FAIL ${name}\n${e.message}`); process.exitCode = 1; } };
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-relations-test-'));
 const repo = (files) => {
   const dir = fs.mkdtempSync(path.join(tmp, 'r-'));
-  for (const [f, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), text); }
+  for (const [f, text] of Object.entries<any>(files)) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), text); }
   return dir;
 };
 const read = (dir, f) => fs.readFileSync(path.join(dir, f), 'utf8');
