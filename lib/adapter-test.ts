@@ -151,10 +151,28 @@ const crgStore = (file: string, nodes: unknown[][], edges: unknown[][]) => {
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE nodes (kind, name, qualified_name, file_path, line_start, line_end, language, parent_name);
            CREATE TABLE edges (id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier, target_resolution);`);
-  for (const n of nodes) db.prepare('INSERT INTO nodes VALUES (?,?,?,?,?,?,?,?)').run(...(n as any[]));
-  for (const e of edges) db.prepare('INSERT INTO edges VALUES (?,?,?,?,?,?,?,?,?)').run(...(e as any[]));
+  db.exec('BEGIN');
+  const pn = db.prepare('INSERT INTO nodes VALUES (?,?,?,?,?,?,?,?)'); const pe = db.prepare('INSERT INTO edges VALUES (?,?,?,?,?,?,?,?,?)');
+  for (const n of nodes) pn.run(...(n as any[]));
+  for (const e of edges) pe.run(...(e as any[]));
+  db.exec('COMMIT');
   db.close();
 };
+
+check('code-review-graph index: a store extract() cannot read is a failed index, not a crash', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
+  try {
+    const probe = path.join(tmp, 'probe.mjs'); // writes a graph.db without crg's tables (a schema change)
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs'; import { DatabaseSync } from 'node:sqlite';
+fs.mkdirSync(process.env.CRG_DATA_DIR, { recursive: true }); new DatabaseSync(process.env.CRG_DATA_DIR + '/graph.db').close();\n`, { mode: 0o755 });
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
+    const r = crg.index(work, probe);
+    assert.equal(r.ok, false);
+    assert.match(r.output, /\[graph-assay\] extract failed: /);
+    assert(!fs.existsSync(path.join(work, '.graph-assay', 'crg.db')));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
 
 check('code-review-graph extract: leading repo prefix only, given or resolved path, also inside edge metadata', () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-')));
@@ -253,9 +271,17 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
       // a nested A listed before the top-level A; A.m (a Go-style member declared apart) belongs to the top-level one
       F('o.go', 9), ['Class', 'Outer', 'o.go::Outer', 'o.go', 1, 3, 'go', null], ['Class', 'A', 'o.go::Outer.A', 'o.go', 2, 3, 'go', 'Outer'],
       ['Class', 'A', 'o.go::A', 'o.go', 4, 5, 'go', null], ['Function', 'm', 'o.go::A.m', 'o.go', 7, 9, 'go', 'A'],
+      // crg names some nodes with dotted text (JS prototype and CommonJS assignments, test descriptions)
+      F('e.js', 9), ['Function', 'Foo.prototype.bar', 'e.js::Foo.prototype.bar', 'e.js', 1, 1, 'javascript', null],
+      ['Function', 'module.exports', 'e.js::module.exports', 'e.js', 2, 4, 'javascript', null], ['Function', 'a', 'e.js::a', 'e.js', 3, 3, 'javascript', null],
+      ['Test', 'it:serves index.html@L6', 'e.js::it:serves index.html@L6', 'e.js', 6, 8, 'javascript', null], ['Function', 'h', 'e.js::h', 'e.js', 7, 7, 'javascript', null],
+      // Rust: impl Foo { fn t(&self) { fn helper(){} struct Local; impl Local { fn lm(){} } } }, struct Foo declared below
+      F('t.rs', 20), ['Function', 't', 't.rs::Foo.t', 't.rs', 2, 14, 'rust', 'Foo'], ['Function', 'helper', 't.rs::Foo.helper', 't.rs', 5, 5, 'rust', 'Foo'],
+      ['Class', 'Local', 't.rs::Foo.Local', 't.rs', 11, 11, 'rust', 'Foo'], ['Function', 'lm', 't.rs::Local.lm', 't.rs', 13, 13, 'rust', 'Local'],
+      ['Class', 'Foo', 't.rs::Foo', 't.rs', 18, 18, 'rust', null],
       F('late.go', 9), ['Function', 'Run', 'late.go::Srv.Run', 'late.go', 2, 3, 'go', 'Srv'], ['Class', 'Srv', 'late.go::Srv', 'late.go', 8, 9, 'go', null],
     ], [
-      [1, 'CALLS', 'app.py::version_option', 'g', 'app.py', 4, JSON.stringify({ ambiguous_targets: ['app.py::g', 'app.py::g:Scd34'] }), 'AMBIGUOUS', 'unresolved'],
+      [1, 'CALLS', 'app.py::version_option', 'g', 'app.py', 4, JSON.stringify({ ambiguous_targets: ['app.py::g', 'app.py::g:Scd34', 'app.py::g'] }), 'AMBIGUOUS', 'unresolved'],
       [2, 'CALLS', 'app.py::version_option', 'nowhere', 'app.py', 5, JSON.stringify({ ambiguous_targets: ['x.py::nowhere'] }), 'AMBIGUOUS', 'unresolved'],
       [3, 'CALLS', 'r.go::use', 'r.go::Router.Host', 'r.go', 3, '{}', 'EXTRACTED', 'direct'],
     ]);
@@ -269,6 +295,10 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
       ['version_option::callback', 'Greeter::greet', 'Greeter::greet::helper', 'helper']);
     assert.deepEqual([q['Main.java::Main.N.b'], q['Main.java::Main.a'], q['a.ts::K.m'], q['a.ts::L.n'], q['r.rs::A.m'], q['o.go::A.m']],
       ['Main::N::b', 'Main::a', 'f::K::m', 'f::L::n', 'A::m', 'A::m']);
+    assert.deepEqual([q['e.js::Foo.prototype.bar'], q['e.js::module.exports'], q['e.js::a'], q['e.js::it:serves index.html@L6'], q['e.js::h']],
+      ['Foo.prototype.bar', 'module.exports', 'module.exports::a', 'it:serves index.html@L6', 'it:serves index.html@L6::h']);
+    assert.deepEqual([q['t.rs::Foo.t'], q['t.rs::Foo.helper'], q['t.rs::Foo.Local'], q['t.rs::Local.lm']],
+      ['Foo::t', 'Foo::t::helper', 'Foo::t::Local', 'Foo::t::Local::lm']);
     const guessed = s.edges.filter((e) => e.provenance).map((e) => `${e.src}>${e.dst}:${e.provenance}`).sort();
     assert.deepEqual(guessed, ['app.py::version_option>app.py::g:Scd34:ambiguous', 'app.py::version_option>app.py::g:ambiguous']);
     assert.deepEqual(s.unresolved.map((u) => `${u.line}:${u.name}`), ['5:nowhere']);
@@ -287,7 +317,8 @@ check('code-review-graph snapshot: container chains stay linear in the number of
     const s = crg.snapshot(tmp);
     const ms = Date.now() - t0;
     assert.equal(s.nodes.find((x) => x.id === `m.go::Srv.M${N - 1}`).qname, `Srv::M${N - 1}`);
-    assert(ms < 5000, `snapshot of ${N} methods took ${ms} ms`);
+    // linear here takes about 0.2 s, the quadratic 4b431e8 about 20 s; the bound leaves room for a loaded runner
+    assert(ms < 10_000, `snapshot of ${N} methods took ${ms} ms`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 

@@ -68,7 +68,10 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     if (ok && indexing) {
       const store = path.join(data, 'graph.db');
       if (!fs.existsSync(store)) { ok = false; output += '\n[graph-assay] crg wrote no graph.db'; }
-      else { fs.mkdirSync(out, { recursive: true }); extract(store, path.join(out, DB), dir); }
+      else {
+        fs.mkdirSync(out, { recursive: true });
+        try { extract(store, path.join(out, DB), dir); } catch (e) { ok = false; output += `\n[graph-assay] extract failed: ${e.message}`; }
+      }
     }
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
@@ -162,7 +165,15 @@ function qualify(nodes: SnapshotNode[]) {
   const spans = (o: SnapshotNode, n: SnapshotNode) => o.start <= n.start && n.end <= o.end;
   const same = (o: SnapshotNode, n: SnapshotNode) => o.start === n.start && o.end === n.end;
   for (const list of byFile.values()) {
-    const segs = new Map(list.map((n) => [n, segments(symbol(n.id))]));
+    // A name crg writes with dots (`Foo.prototype.bar`, `module.exports`, a test description) is one
+    // segment: only what precedes it in the symbol names an owner.
+    const segsOf = (n: SnapshotNode) => {
+      const sym = symbol(n.id);
+      if (!n.name.includes('.')) return segments(sym);
+      if (sym === n.name) return [sym];
+      return sym.endsWith(`.${n.name}`) ? [...segments(sym.slice(0, -n.name.length - 1)), n.name] : segments(sym);
+    };
+    const segs = new Map(list.map((n) => [n, segsOf(n)]));
     // every node under its symbol, and under each dotted tail of it (`Outer.Inner` also as `Inner`)
     const exact = new Map<string, SnapshotNode[]>(); const tail = new Map<string, SnapshotNode[]>();
     const add = (m: Map<string, SnapshotNode[]>, k: string, n: SnapshotNode) => (m.get(k) ?? m.set(k, []).get(k)).push(n);
@@ -193,7 +204,12 @@ function qualify(nodes: SnapshotNode[]) {
         const first = (c: SnapshotNode[] | undefined) => c?.find((o) => o !== n) ?? null;
         const owner = pick(n, exact.get(prefix)) ?? pick(n, tail.get(prefix)) ?? first(exact.get(prefix)) ?? first(tail.get(prefix));
         if (!owner) outer = s.slice(0, -1).map((x) => x.replace(/\(.*\)$/, '')).join('::');
-        else outer = chain(h && h !== owner && spans(owner, h) && !same(owner, h) ? h : owner, seen);
+        else {
+          // a definition nested deeper under the owner holds the node more tightly: the method `m`
+          // around `C.helper`, or around Rust's `Foo.helper` where `struct Foo` is declared apart
+          const o = chain(owner, seen);
+          outer = h && h !== owner && chain(h, seen).startsWith(`${o}::`) ? chain(h, seen) : o;
+        }
       } else if (h) outer = chain(h, seen);
       const q = outer ? `${outer}::${n.name}` : n.name;
       done.set(n, q);
@@ -241,7 +257,7 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       if (!byId.has(e.dst)) {
         // An ambiguous call names a bare target and lists the candidates it could not choose between:
         // one guessed edge to each candidate the snapshot holds.
-        const candidates = e.tier === 'AMBIGUOUS' && Array.isArray(x.ambiguous_targets) ? x.ambiguous_targets.filter((t) => byId.has(t)) : [];
+        const candidates = e.tier === 'AMBIGUOUS' && Array.isArray(x.ambiguous_targets) ? [...new Set(x.ambiguous_targets)].filter((t: any) => byId.has(t)) : [];
         for (const t of candidates) edges.push({ kind: KIND[e.kind] ?? e.kind.toLowerCase(), src: e.src, dst: t, line, col: null, ref,
           resolvedBy: e.tier, provenance: 'ambiguous' });
         if (candidates.length) continue;
