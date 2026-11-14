@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
+  that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
+  `java-fq-static-receiver` (`com.x.b.Util.log(...)` in a file that imports `com.x.a.*`, so only
+  honouring the qualifier gives `com.x.b`), `java-typed-var-wildcard` (`Util u = new Util(); u.run();`
+  under `import com.x.b.*`; `right` also pins the `new` to `com.x.b`), and three Laravel route forms
+  that still link the top-level controller: `laravel-route-group-use`, `laravel-route-namespace-use`
+  and `laravel-route-fq-class`. Their sources copy the parent fixture (`issue-2976` or `issue-2975`)
+  except the caller file; each `expect.json` has `issue: null`, a note, and only the edges of its own
+  form. `known-shapes.json` lists them untagged (no oracle indexer for Java or PHP).
 - Fixture `issue-3271` for colbymchenry/codegraph#3271: an import of a package that `package.json`
   doesn't list but `node_modules` holds links to an unrelated project export of the same name.
 - A fixture whose bug depends on installed packages keeps them in `node_modules.fixture/`. Every copy
@@ -26,6 +35,8 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- `replay` prints `unfiled` for a fixture with no upstream issue (`issue` null or 0), as `bench/triage.mjs`
+  does, and sizes the name column to the longest fixture name.
 - `lib/` is TypeScript: every `lib/**/*.mjs` is now `.ts`, run by Node's type stripping with no build
   step, so the Node floor is 22.18 (`engines.node`: `>=22.18.0 <25`). `lib/types.ts` types the
   snapshot and expectation schemas once, and the scorers and adapters import it. Callers outside
