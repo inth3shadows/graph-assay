@@ -21,9 +21,9 @@ try{
  const context=path.join(tmp,'context');fs.mkdirSync(context);
  const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(!allowed(f))continue;const target=path.join(context,f);if(e.isDirectory()){fs.mkdirSync(target,{recursive:true});copy(f);}else if(e.isFile()){fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
  check('Docker runtime context includes T3 imports and executes the actual tables CLI',()=>{
-  // Every script tools/repro.mjs runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
+  // Every script tools/repro.ts runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
   for(const f of ['bench/robustness.ts','bench/tables.ts','metamorphic/run.ts','metamorphic/relations.ts','fixtures/replay.mts','benchmarks/pycg.ts','differential/builds.ts','differential/modes.ts','oracle/oracle.ts','oracle/run.sh',
-    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/repro.ts','tools/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
   // The real noise step verifies the pinned labelling protocol inside the image's file set (SPEC §9).
   {const d=path.join(context,'labels','data');const samples=fs.readdirSync(d).sort().flatMap(x=>[path.join(d,x,'items.jsonl'),path.join(d,x)]);
    const r=spawnSync(process.execPath,[path.join(context,'labels','noise.ts'),...samples,'--protocol',path.join(context,'labels','protocol.json'),'--json',path.join(tmp,'noise-context.json')],{encoding:'utf8'});
@@ -34,7 +34,7 @@ try{
  const bin=path.join(tmp,'bin');fs.mkdirSync(bin);
  const shim=(name,code)=>{const f=path.join(bin,name);write(f,`#!${process.execPath}\n${code}\n`);fs.chmodSync(f,0o755);};
  shim('unshare','process.exit(17);');
- const run=(root,out,extra={})=>spawnSync(process.execPath,[path.join(root,'tools/repro.mjs'),'--repo','mux','--out',out],{cwd:root,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`,...extra}});
+ const run=(root,out,extra={})=>spawnSync(process.execPath,[path.join(root,'tools/repro.ts'),'--repo','mux','--out',out],{cwd:root,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`,...extra}});
  check('manifest fingerprints the real repeat comparator before any external command',()=>{
   const out=path.join(tmp,'init');const r=run(qa,out);assert.equal(r.status,1);const m=read(path.join(out,'manifest.json'));
   const expected=createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/modes.ts'))).digest('hex');

@@ -5,7 +5,7 @@
 //
 // Usage: node bench/tables.ts [--corpus corpus/v1.txt] [--split dev] [--t1 <dir>] [--noise <noise.json>] [--t3 <dir>]
 //                              [--md out.md] [--json out.json] [--seed 1] [--canonical]
-//   --canonical: tools/repro.mjs passes it inside the Docker image; only those tables are canonical
+//   --canonical: tools/repro.ts passes it inside the Docker image; only those tables are canonical
 //   (SPEC §10). Without it the banner marks a development run.
 //   Oracle results are read from the work dirs run.sh leaves: w-pub-<name> (or w-<name>), plus
 //   w-…-code-graph-rag. --t1 <dir>: replay-<tag>.json and pycg-<tag>.json (tag cg / cgr).
@@ -117,7 +117,7 @@ result.diagnostic = Object.fromEntries(diagnostic);
 
 const md = [`# Benchmark tables v1 — corpus ${result.corpus}, split \`${split}\``, '',
   'Edge tiers lead (decision 2026-11-05); T0 question accuracy is experimental and not shown here. Both T2 tracks (SPEC §3), side by side, never combined.',
-  `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/tables.ts\`. ${canonical ? 'Canonical: reproduced in the Docker image by `tools/repro.mjs` (`manifest.json` records every input; SPEC §10).' : 'Development run: canonical tables come only from `tools/repro.mjs` in the Docker image (SPEC §10); this machine\'s Python environment can resolve the standard library differently.'}`, ''];
+  `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/tables.ts\`. ${canonical ? 'Canonical: reproduced in the Docker image by `tools/repro.ts` (`manifest.json` records every input; SPEC §10).' : 'Development run: canonical tables come only from `tools/repro.ts` in the Docker image (SPEC §10); this machine\'s Python environment can resolve the standard library differently.'}`, ''];
 md.push('Adapter hashes (from recorded inputs): ' + Object.entries<any>(result.subjects).map(([s, v]) => `${s}: ${v.adapterHashes.length ? v.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}`).join('; '), '');
 if (result.missingRuns.length) md.push(`**Not run (left out of every subject's averages):** ${result.missingRuns.join(', ')}`, '');
 for (const [s, v] of Object.entries<any>(result.subjects)) if (v.failed.length) md.push(`**${s} failed (scored as misses, SPEC §8):** ${v.failed.join(', ')}`, '');

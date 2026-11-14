@@ -12,7 +12,7 @@ import { CORPUS, readRepos, fetchRepos } from '../differential/builds.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
-const usage = 'usage: tools/repro.mjs [--split dev] [--repo mux|requests|click|ky|express] [--out /results]';
+const usage = 'usage: tools/repro.ts [--split dev] [--repo mux|requests|click|ky|express] [--out /results]';
 if (args.includes('--help')) { console.log(usage); process.exit(0); }
 const opts = { '--split': 'dev', '--out': '/results' };
 while (args.length) {
@@ -50,7 +50,7 @@ const hash = (file) => createHash('sha256').update(fs.readFileSync(file)).digest
 const note = 'Oracle noise is recomputed from the committed labels snapshot (labels/data/); no labeller runs here, and it covers the whole labelled sample whatever --repo selects.';
 // SPEC §10 run identity beyond the per-file hashes: corpus version, effective subject timeout,
 // expectation schema and labelling protocol (each oracle output records its position encodings).
-const manifest = { schema: 'graph-assay/repro@1', spec: SPEC_VERSION, snapshotSchema: 'graph-assay/snapshot@1', expectationSchema: 'graph-assay/expect@1',
+const manifest: Record<string, any> = { schema: 'graph-assay/repro@1', spec: SPEC_VERSION, snapshotSchema: 'graph-assay/snapshot@1', expectationSchema: 'graph-assay/expect@1',
   corpus: { file: path.relative(qa, CORPUS), sha256: hash(CORPUS) }, subjectTimeoutMs: 600_000,
   labellingProtocol: hash(path.join(qa, 'labels', 'protocol.json')),
   adapters: Object.fromEntries(['codegraph', 'code-graph-rag'].map((name) => [name, adapterHash(name)])),
@@ -67,7 +67,7 @@ for (const dir of ['lib', 'oracle', 'bench', 'benchmarks', 'fixtures', 'schema',
   };
   walk(dir);
 }
-for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.mjs', 'differential/modes.ts', 'differential/package.json']) manifest.files[f] = hash(path.join(qa, f));
+for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.ts', 'differential/modes.ts', 'differential/package.json', 'tools/package.json']) manifest.files[f] = hash(path.join(qa, f));
 const save = () => fs.writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 save();
 try {

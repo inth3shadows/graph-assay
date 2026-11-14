@@ -4,7 +4,7 @@
 // Each fixture is indexed with the given codegraph build and its language's SCIP indexer, and the
 // oracle runs both directions on it; a fixture's shapes are its strict non-match bucket keys.
 //
-// Usage: node tools/triage/tag-fixtures.mjs <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
+// Usage: node tools/triage/tag-fixtures.ts <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
 //   Named fixtures are updated in the existing file (same build only); with none, every fixture is re-tagged.
 // Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures are listed as not tagged:
 // the oracle has no indexer wired for them here.
@@ -24,7 +24,7 @@ const args = process.argv.slice(2);
 const ai = args.indexOf('--allow-failures'); const allowFailures = ai >= 0; if (allowFailures) args.splice(ai, 1);
 const oi = args.indexOf('--out'); const out = oi >= 0 ? args.splice(oi, 2)[1] : path.join(qa, 'fixtures', 'known-shapes.json');
 const [build, ...only] = args;
-if (!build || !fs.existsSync(build)) { console.error('usage: tag-fixtures.mjs <codegraph.js> [--out file] [--allow-failures] [fixture ...]'); process.exit(2); }
+if (!build || !fs.existsSync(build)) { console.error('usage: tag-fixtures.ts <codegraph.js> [--out file] [--allow-failures] [fixture ...]'); process.exit(2); }
 const FORWARD_BAD = /^(wrong-target|external|local-shadow|cross-file-unimported|receiver-fallback)\|/;
 
 const run = (cmd, argv, opts = {}) => {

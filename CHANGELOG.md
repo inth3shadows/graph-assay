@@ -82,6 +82,11 @@ All notable changes to this project are recorded here. The format follows
   `qualification.items` (`labels/qualify-items.mjs`). Changing them would make a new protocol, so the
   next deliberate `--update` should fix all three. Third phase of #14,
   third PR.
+- `tools/` is TypeScript too: `tools/repro.ts` (the Docker image's entry point, now
+  `ENTRYPOINT ["node", "tools/repro.ts"]`), `tools/repro-test.ts` and `tools/triage/tag-fixtures.ts`.
+  `tools/package.json` marks them as ES modules, and the repro manifest hashes it. Type fixes are
+  annotations only. Every script outside `bin/` now runs as TypeScript. `bin/graph-assay` stays an
+  extensionless JavaScript entry point. Third phase of #14, last PR.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
   count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
