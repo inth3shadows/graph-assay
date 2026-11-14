@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { joinedEdges } from './snapshot.ts';
-import { definedNames, present as hasEdge } from './expect.ts';
+import { chainMatch, definedNames, present as hasEdge } from './expect.ts';
 import { placeFixtureInstall } from './fixture-install.ts';
 
 export { FIXTURE_INSTALL, placeFixtureInstall } from './fixture-install.ts';
@@ -57,7 +57,8 @@ export function markerLeaks(snapshot, marker) {
 const show = (e) => `${e.from} -${e.kind}-> ${e.to}${e.toLine ? `@${e.toLine}` : ''}`;
 /** Same endpoint/provenance rules for ordinary replay and its canary, with no subject-specific names. */
 export function scoreFixture(snapshot, expect) {
-  const have = joinedEdges(snapshot); const defined = definedNames(snapshot);
+  const have = joinedEdges(snapshot);
+  const defined = definedNames(snapshot);
   const present = (x) => hasEdge(x, have, defined);
   const asserted = have.filter((h) => h.prov === null);
   const wrong = expect.wrong.filter((x) => hasEdge(x, asserted, defined));
@@ -69,7 +70,10 @@ export function scoreFixture(snapshot, expect) {
   // (a failed parse, a subject missing a language) must not read as a fix.
   const names = new Set(snapshot.nodes.map((n) => n.name));
   const lastName = (q) => q.split('::').pop().replace(/\(.*\)$/, '');
-  const absent = [...new Set([...expect.wrong, ...expect.right].map((x) => x.from).filter((f) => !names.has(lastName(f))))];
+  // A caller also counts when its qualified name matches `from` the way an edge's source does: a
+  // codegraph route node is named `GET /api/...`, so only its qualified name ends in `route:/...` (#29).
+  const byQname = (f) => snapshot.nodes.some((n) => n.qname && chainMatch(n.qname, f, defined(n.file)));
+  const absent = [...new Set([...expect.wrong, ...expect.right].map((x) => x.from).filter((f) => !names.has(lastName(f)) && !byQname(f)))];
   let verdict = wrong.length || (!expect.wrong.length && missing.length) ? 'BROKEN' : guessed.length ? 'GUESSED' : missing.length ? 'CHANGED' : 'FIXED';
   if (verdict === 'FIXED' && absent.length) verdict = 'CHANGED';
   const detail = verdict === 'CHANGED' && !missing.length ? `caller not in graph: ${absent.join(', ')}` : wrong.length ? wrong.map(show).join('; ') : guessed.length ? `guessed ${guessed.map(show).join('; ')}` : missing.length ? `missing ${missing.map(show).join('; ')}${guessOnly.length ? ` (only guessed: ${guessOnly.map(show).join('; ')})` : ''}` : '';

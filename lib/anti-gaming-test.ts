@@ -71,6 +71,20 @@ try {
     assert.equal(onlyGuessed.verdict, 'BROKEN'); assert.equal(onlyGuessed.guessOnly.length, 1);
     assert.deepEqual(scoreFixture(snap, expect).guessOnly, []);
   });
+  check('a caller found by qualified name counts as present (route node named GET /..., #29)', () => {
+    // codegraph names a Laravel route node `GET /api/admin/users/{id}`; only its qualified name ends
+    // in `route:/admin/users/{id}`, which is what a fixture's `from` is written as.
+    const from = 'routes/api.php::route:/admin/users/{id}';
+    const route = { id: 'r', name: 'GET /api/admin/users/{id}', qname: from, kind: 'route', file: 'routes/api.php', start: 4, end: 4 };
+    const admin = { id: 'a', name: 'show', qname: 'App\\Admin::UserController::show', kind: 'method', file: 'Admin.php', start: 3, end: 3 };
+    const top = { id: 't', name: 'show', qname: 'App::UserController::show', kind: 'method', file: 'User.php', start: 3, end: 3 };
+    const routeSnap = { ...snap, nodes: [route, admin, top], edges: [{ kind: 'references', src: 'r', dst: 'a', line: 4, col: 0, provenance: null }] };
+    const routeExpect = { issue: 2975, wrong: [{ from, kind: 'references', to: 'User.php:App::UserController::show' }],
+      right: [{ from, kind: 'references', to: 'Admin.php:App\\Admin::UserController::show' }] };
+    assert.equal(scoreFixture(routeSnap, routeExpect).verdict, 'FIXED');
+    // the safeguard stays: a graph without the caller at all is not a fix
+    assert.equal(scoreFixture({ ...routeSnap, nodes: [admin, top], edges: [] }, { ...routeExpect, right: [] }).verdict, 'CHANGED');
+  });
   const seed = path.join(tmp, 'seed'); write(path.join(seed, 'main.js'), 'export function f() {}\nf();\n');
   write(path.join(seed, 'main.py'), '#!/usr/bin/env python3\nfrom __future__ import annotations\ndef f(): pass\nf()\n');
   for (const file of ['expect.json', 'nested/expect.json', '.codegraph/stale', '.claude/control', '.env', 'AGENTS.md']) write(path.join(seed, file), 'CGQA_EVALUATION_ONLY_MARKER');
