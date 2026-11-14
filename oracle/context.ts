@@ -33,6 +33,9 @@ export interface Options {
 }
 
 export const LANG_VALUES = ['ts', 'python', 'go', 'jvm'];
+/** Why `lang` is refused, or null for a known one (or unset). */
+export const langError = (lang?: string) => lang && !LANG_VALUES.includes(lang)
+  ? `ORACLE_LANG=${lang}: expected ts (or unset) for TS/JS, python, go or jvm` : null;
 
 /** The options oracle.ts reads from its command line and environment. */
 export function optionsFromEnv(argv: string[], env: typeof process.env): Options {
@@ -59,6 +62,8 @@ export type Context = ReturnType<typeof createContext>;
 
 export function createContext(opts: Options) {
   const { repo, lang } = opts;
+  // An unknown language would otherwise read as TS/JS and filter every edge out (#30 review F5).
+  if (langError(lang)) throw new Error(langError(lang));
   const on = (rule: string) => !opts.disabled.has(rule);
   // The SCIP index: binary .scip, or decoded .json. The subject's graph: a snapshot v1 file
   // (ORACLE_SNAPSHOT), or else exported from <repo>/.codegraph by the codegraph adapter.

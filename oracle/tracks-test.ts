@@ -6,6 +6,7 @@ import { forward } from './forward.ts';
 import { missing } from './missing.ts';
 import { result } from './report.ts';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,10 +43,34 @@ for (const name of ['ts-forward', 'py-forward', 'ts-missing']) {
 const keyAt = (sites, at, name) => sites.find((s) => s.site === at && s.name === name)?.key ?? '';
 const on = run('ts-forward');
 const off = run('ts-forward', ['noise:scip-shorthand-property']);
+// Every other site keeps its key, and no site appears or disappears (#30 review F2).
+const rest = (sites) => JSON.stringify(sites.filter((s) => s.site !== 'api.ts:10').map((s) => [s.site, s.name, s.key]));
 check('a rule switched off through Options changes only its own verdict',
   keyAt(on.ctx.allSites, 'api.ts:10', 'buildMember').startsWith('noise:scip-shorthand-property')
   && !keyAt(off.ctx.allSites, 'api.ts:10', 'buildMember').startsWith('noise:')
-  && on.ctx.allSites.filter((s) => s.site !== 'api.ts:10').every((s, i) => s.key === off.ctx.allSites.filter((x) => x.site !== 'api.ts:10')[i]?.key));
+  && on.ctx.allSites.length === off.ctx.allSites.length && rest(on.ctx.allSites) === rest(off.ctx.allSites));
+
+// F5 (#30 review): an unknown language is refused in-process too, not read as TS/JS.
+const tsOpts = (lang: string): Options => ({ repo: path.join(here, 'test', 'ts-forward'), scipFile: path.join(here, 'test', 'ts-forward', 'index.scip.json'), lang,
+  missing: false, redact: false, allSites: false, show: 0, disabled: new Set(), exclude: '', snapshot: path.join(here, 'test', 'ts-forward', 'snapshot.json') });
+let refused = '';
+try { createContext(tsOpts('java')); } catch (e) { refused = String(e?.message); }
+check('createContext refuses an unknown language', /ORACLE_LANG=java/.test(refused));
+
+// F10 (#30 review): --mutate reads rules only from modules the oracle imports, never from other scripts.
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-rules-'));
+try {
+  fs.writeFileSync(path.join(tmp, 'oracle.ts'), "import { a } from './a.ts';\n");
+  fs.writeFileSync(path.join(tmp, 'a.ts'), "import { b } from './b.ts';\nexport const a = on('rule-a');\n");
+  fs.writeFileSync(path.join(tmp, 'b.ts'), "export const b = on('rule-b') && on('rule-a');\n");
+  fs.writeFileSync(path.join(tmp, 'site.ts'), "// on('not-a-rule')\n");
+  const { oracleRules } = await import('./test/rules.ts');
+  check('--mutate rules come from the modules the oracle imports', JSON.stringify(oracleRules(path.join(tmp, 'oracle.ts'))) === '["rule-a","rule-b"]');
+  const real = oracleRules(path.join(here, 'oracle.ts'));
+  check('the real oracle has 22 rules, corpus-exclude and skip-framework-self-site among them', real.length === 22 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
+} catch (e) {
+  check(`--mutate rule discovery (${e?.message})`, false);
+} finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 
 const red = run('ts-forward', [], true);
 const out = result(red.ctx, red.tally).out;

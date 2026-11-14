@@ -47,7 +47,8 @@ All notable changes to this project are recorded here. The format follows
   - `report.ts`: output;
   - `symbols.ts`: shared helpers.
 
-  `oracle/tracks-test.ts` drives them in-process. `--mutate` finds rules in every module. Output is
+  `oracle/tracks-test.ts` drives them in-process. `--mutate` finds rules in every module that
+  `oracle.ts` imports. `createContext` refuses an unknown `ORACLE_LANG`, as the command line does. Output is
   byte-identical, with one exception: missing mode no longer calls `process.exit(0)`, so Node's SQLite
   warning now reaches stderr, as it already did in forward mode.
 - The scorer manifest (`manifest.scorers`) hashes oracle/'s `.ts` scripts and `oracle/package.json`,

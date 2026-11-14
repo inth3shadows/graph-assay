@@ -40,7 +40,7 @@
 // context.ts (options, SCIP and snapshot loading, shared state), forward.ts (this check), missing.ts
 // (ORACLE_MODE=missing), pairs.ts (the SPEC §3 function-pair track), braces.ts (its brace-matched
 // caller ranges), report.ts (out.json and stdout) and symbols.ts (SCIP symbol helpers).
-import { LANG_VALUES, createContext, optionsFromEnv } from './context.ts';
+import { createContext, langError, optionsFromEnv } from './context.ts';
 import { forward } from './forward.ts';
 import { missing } from './missing.ts';
 import { report } from './report.ts';
@@ -52,8 +52,6 @@ if (opts.redact) {
     process.exit(1);
   });
 }
-if (opts.lang && !LANG_VALUES.includes(opts.lang)) {
-  console.error(`ORACLE_LANG=${opts.lang}: expected ts (or unset) for TS/JS, python, go or jvm`); process.exit(2);
-}
+if (langError(opts.lang)) { console.error(langError(opts.lang)); process.exit(2); }
 const ctx = createContext(opts);
 report(ctx, opts.missing ? missing(ctx) : forward(ctx));

@@ -8,7 +8,7 @@
 //     Prints what changed: bucket counts, groups (one cause each) that appeared or vanished,
 //     fixture verdicts, PyCG categories and metamorphic diff counts.
 //
-// A group's signature is (codegraph target, SCIP definition), the same grouping oracle.ts uses.
+// A group's signature is (codegraph target, SCIP definition), the same grouping oracle/report.ts uses.
 // Checkouts are cached at one HEAD per repo, so signatures are comparable across builds.
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';

@@ -23,13 +23,14 @@
 //   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
 //   one with "provenance").
 // --dump: print every site's bucket per case (for writing expectations), then exit.
-// --mutate: re-run every case once per rule in the oracle's modules (each `on('<rule>')`) with that rule
+// --mutate: re-run every case once per rule in the modules oracle.ts imports (each `on('<rule>')`, see rules.ts) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { oracleRules } from './rules.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const oracle = path.join(here, '..', 'oracle.ts');
@@ -121,10 +122,8 @@ try {
     failed += fails.length;
   }
   if (mutate && failed === 0) {
-    // Rules live in every oracle module (oracle.ts is only the command line), so read them all.
-    const modules = fs.readdirSync(path.dirname(oracle)).filter((n) => n.endsWith('.ts') && !n.endsWith('-test.ts'));
-    const source = modules.map((n) => fs.readFileSync(path.join(path.dirname(oracle), n), 'utf8')).join('\n');
-    const rules = [...new Set([...source.matchAll(/\bon\('([^']+)'\)/g)].map((m) => m[1]))].sort();
+    // Rules live in the modules oracle.ts imports (it is only the command line): rules.ts follows them.
+    const rules = oracleRules(oracle);
     console.log(`\nmutation: ${rules.length} rules, each disabled in turn`);
     const survivors = [];
     for (const rule of rules) {

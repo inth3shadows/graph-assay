@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import { config } from '../lib/config.ts';
 import { isMain } from '../lib/main.ts';
 
-/** What each bucket's first segment means (oracle.ts; SPEC §9 maps them to match / mismatch / unaligned). */
+/** What each bucket's first segment means (oracle/forward.ts, oracle/missing.ts; SPEC §9 maps them to match / mismatch / unaligned). */
 export const MEANING = {
   ok: "the subject's target is SCIP's definition",
   'ok-other-column': "another SCIP reference on the line resolves to the subject's target",
@@ -44,7 +44,7 @@ export const MEANING = {
 };
 export const meaningOf = (key) => {
   const parts = key.split('|'); const cause = parts[0] === 'missing' ? parts[1] : parts[0];
-  return MEANING[cause] ?? (cause.startsWith('noise:') ? MEANING.noise : '(no description: see oracle/oracle.ts)');
+  return MEANING[cause] ?? (cause.startsWith('noise:') ? MEANING.noise : '(no description: see oracle/forward.ts or oracle/missing.ts)');
 };
 
 /**

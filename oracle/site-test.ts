@@ -8,7 +8,7 @@ const check = (name, ok) => { n++; if (!ok) failed++; console.log(`${ok ? 'ok  '
 check('meaning: forward key reads its first segment', meaningOf('wrong-target|calls|exact-match|function>term') === MEANING['wrong-target']);
 check('meaning: missing key reads its cause', meaningOf('missing|no-ref|py|function') === MEANING['no-ref']);
 check('meaning: any noise:* rule', meaningOf('noise:scip-unresolved-module|calls|-|function>module') === MEANING.noise);
-check('meaning: unknown cause points at the oracle', /oracle\.ts/.test(meaningOf('brand-new|calls')));
+check('meaning: unknown cause points at the oracle', /oracle\/forward\.ts/.test(meaningOf('brand-new|calls')));
 
 const rec = { site: 'a.js:3', name: 'f', key: 'wrong-target|calls|exact-match|function>term', target: 'b.js:f:9', scip: 'npm x a.js/f.' };
 const lines = explainSite({ subject: 'codegraph', site: 'a.js:3', name: 'f', records: { forward: [rec], missing: [] }, source: 'f(1)',
