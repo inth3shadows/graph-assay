@@ -5,7 +5,7 @@
 ```
             ┌──────────────── a checkout of some repo ───────────────┐
             │                                                        │
-   subject tool (lib/subjects/<tool>.mjs)                   SCIP indexer (tsc, pyright, go, javac)
+   subject tool (lib/subjects/<tool>.ts)                    SCIP indexer (tsc, pyright, go, javac)
             │                                                        │
    snapshot v1 (schema/snapshot.v1.json)                        index.scip
             │                                                        │

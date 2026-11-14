@@ -20,7 +20,7 @@ try {
   check('a CLI runs from a checkout path with a space in it', () => {
     const dir = path.join(tmp, 'path with space', 'lib');
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['config.ts', 'main.ts']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
+    for (const f of ['config.ts', 'main.ts', 'package.json']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
     const r = run(process.execPath, [path.join(dir, 'config.ts'), 'tools']);
     assert.equal(r.status, 0, r.stderr); assert.notEqual(r.stdout.trim(), '', 'the main guard did not fire');
   });

@@ -156,7 +156,7 @@ try {
 
   // Actual replay CLI with a stub subject; the stub refuses any indexed copy containing answers.
   const fake = path.join(tmp, 'qa');
-  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/expect.ts', 'lib/fixture.ts', 'lib/fixture-install.ts', 'lib/spec.ts', 'fixtures/replay.mts']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
+  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/expect.ts', 'lib/fixture.ts', 'lib/fixture-install.ts', 'lib/spec.ts', 'lib/package.json', 'fixtures/replay.mts']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
   const fixture = path.join(fake, 'fixtures/oracle-candidates/issue-canary');
   write(path.join(fixture, 'main.js'), 'export function f() {}\nf();\n'); write(path.join(fixture, 'expect.json'), expect);
   write(path.join(fake, 'lib/subjects/index.ts'), `import * as fs from 'node:fs'; import * as path from 'node:path';

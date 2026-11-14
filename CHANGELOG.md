@@ -61,7 +61,7 @@ All notable changes to this project are recorded here. The format follows
   and triage give byte-identical JSON on the cached oracle runs. Their Markdown differs only in the
   script name they print. The scripts that need a codegraph build were checked through their hermetic
   tests and their usage paths. The scorer manifest `sha256` changes again, for the renamed paths and
-  the `differential/package.json` it now hashes. `corpus/v2.txt` is preregistered and keeps its comment
+  the `package.json` markers it now hashes: `differential/package.json` by name, and the `metamorphic/` and `benchmarks/` ones through their directories. `corpus/v2.txt` is preregistered and keeps its comment
   naming `differential/builds.mjs`. Third phase of #14, second PR.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
