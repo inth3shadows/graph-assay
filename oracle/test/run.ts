@@ -23,7 +23,7 @@
 //   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
 //   one with "provenance").
 // --dump: print every site's bucket per case (for writing expectations), then exit.
-// --mutate: re-run every case once per rule in oracle.ts (each `on('<rule>')`) with that rule
+// --mutate: re-run every case once per rule in the oracle's modules (each `on('<rule>')`) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -121,7 +121,10 @@ try {
     failed += fails.length;
   }
   if (mutate && failed === 0) {
-    const rules = [...new Set([...fs.readFileSync(oracle, 'utf8').matchAll(/\bon\('([^']+)'\)/g)].map((m) => m[1]))].sort();
+    // Rules live in every oracle module (oracle.ts is only the command line), so read them all.
+    const modules = fs.readdirSync(path.dirname(oracle)).filter((n) => n.endsWith('.ts') && !n.endsWith('-test.ts'));
+    const source = modules.map((n) => fs.readFileSync(path.join(path.dirname(oracle), n), 'utf8')).join('\n');
+    const rules = [...new Set([...source.matchAll(/\bon\('([^']+)'\)/g)].map((m) => m[1]))].sort();
     console.log(`\nmutation: ${rules.length} rules, each disabled in turn`);
     const survivors = [];
     for (const rule of rules) {

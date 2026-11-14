@@ -63,7 +63,12 @@ counts-and-sites comparison there.
 
 | File | What it does |
 |---|---|
-| `oracle/oracle.ts` | Reads `scip print --json` output and codegraph's DB (non-heuristic `calls`/`instantiates` edges). It joins them per call site and prints bucket counts, with every disagreement (grouped by cause) in an optional JSON file. |
+| `oracle/oracle.ts` | Reads `scip print --json` output and codegraph's DB (non-heuristic `calls`/`instantiates` edges). It joins them per call site and prints bucket counts, with every disagreement (grouped by cause) in an optional JSON file. The file is the command line only: it turns argv and `ORACLE_*` into options and runs one of the tracks below (#7). |
+| `oracle/context.ts` | `optionsFromEnv` (argv and `ORACLE_*` as typed options) and `createContext`: loads the SCIP index and the subject's snapshot and holds what every track shares (definitions and references, source lines, the `on(rule)` switch, skip counts, the coverage waterfall). Nothing runs at import time. |
+| `oracle/forward.ts`, `oracle/missing.ts` | The forward check (verdicts and refinements, per subject edge) and the missing check (`ORACLE_MODE=missing`, per SCIP call-site reference). Each returns a tally for `report.ts`; `missing.ts` also runs the function-pair track. |
+| `oracle/pairs.ts`, `oracle/braces.ts` | The SPEC §3 function-pair track, and the brace matching that gives it caller ranges where SCIP records no `enclosing_range` (Go/JVM methods, TS/JS `function` expressions). |
+| `oracle/report.ts`, `oracle/symbols.ts` | `out.json` and stdout from a tally (grouping, `ORACLE_REDACT`, `ORACLE_SHOW`), and the pure SCIP symbol helpers (`scipKind`, `defName`, `rangeOf`, ...). |
+| `oracle/tracks-test.ts` | Drives self-test cases through `createContext` and the tracks in-process, with no child process, and switches a rule off through the options. Part of `graph-assay check`. |
 | `oracle/scip-python.sh` | Indexes a Python repo with scip-python (see above). Needs `--project-version`, without which scip-python crashes on some modules. |
 | `oracle/oracle.ts` (`ORACLE_MODE=missing`) | The inverse check: every SCIP reference at a call site (`name(`, `new name`) to a project symbol needs a `calls`/`instantiates` edge from that line to a node holding the definition. Buckets are `missing\|cause\|language\|SCIP kind[@decl][>target node kind]`; see "Missing-edge causes". |
 | `oracle/site.ts` (`graph-assay site`) | `<name \| work dir> <file:line> [called name] [--subject s\|all] [--no-scip]`: one call site from a finished work dir (`ORACLE_ALLSITES=1`), per subject: the forward and missing records with each bucket's meaning (`MEANING`), the subject's `calls`/`instantiates` edges on the line, SCIP's definition(s) with their source lines (from the cached index), the skip counts when there is no record, and the `run.sh` command that re-runs the repo. Runs nothing. `oracle/site-test.ts` pins the core (part of `graph-assay check`). |
@@ -79,7 +84,7 @@ counts-and-sites comparison there.
 | `lib/provenance.ts` | `adapterHash` hashes adapter/shared implementation bytes without Git or installation paths. `recordedAdapterHash` preserves legacy unknown provenance. Snapshots, measurement JSON and manifests carry `adapterSha256`; baseline/table inputs retain their original hashes. |
 | `lib/fixture-install.ts`, `lib/fixture-install-test.ts` | A fixture whose bug depends on installed packages commits them as `node_modules.fixture/` at its root (no ignore file or copy filter drops that name). `copySeed` is how every script copies a fixture or seed for a subject to index: for a fixture (a dir holding `expect.json`) it skips a stray `node_modules/` and renames `node_modules.fixture/` to `node_modules/`; any other tree is copied as it is. The labeller's copy (`labels/questions.mjs`) hides both, as `labels/protocol.json` says. The test fails if a script (any `.mjs`, and the `.ts` files in `lib/`) copies with `fs.cpSync` outside a short exempt list. |
 | `lib/fixture.ts`, `lib/anti-gaming-test.ts` | Isolated source copies, unchanged fixture scoring and marker-leak detection. Replay `--canary` repeats under an anonymous directory with appended marker comments; `canaries` records PASS/FAIL/ERROR separately. Hermetic hash, isolation, CLI and propagation checks run in `graph-assay check` (SPEC §11). |
-| `oracle/test/run.ts` | Oracle self-tests: each case under `oracle/test/` holds sources, `case.json` (per-site expected bucket, or `absent` for a skipped site; `pairs` / `pairCounts` for the function-pair track) and frozen inputs (`snapshot.json` = the subject's graph as snapshot v1, `index.scip.json` = decoded SCIP), so the tests pin the oracle rather than codegraph's current behavior. `--mutate` disables each `on('<rule>')` in `oracle.ts` in turn and fails if any rule's removal breaks no test; `--dump` prints every site's bucket. `ORACLE_DISABLE` and `ORACLE_ALLSITES=1` are the oracle switches it uses. |
+| `oracle/test/run.ts` | Oracle self-tests: each case under `oracle/test/` holds sources, `case.json` (per-site expected bucket, or `absent` for a skipped site; `pairs` / `pairCounts` for the function-pair track) and frozen inputs (`snapshot.json` = the subject's graph as snapshot v1, `index.scip.json` = decoded SCIP), so the tests pin the oracle rather than codegraph's current behavior. `--mutate` disables each `on('<rule>')` found in any oracle module in turn and fails if any rule's removal breaks no test; `--dump` prints every site's bucket. `ORACLE_DISABLE` and `ORACLE_ALLSITES=1` are the oracle switches it uses. |
 | `oracle/ts-cover.ts` | Writes the TS/JS oracle's covering project for a repo with a root `tsconfig.json`: it sits at the repo root (so the repo's `types` resolve), extends that tsconfig and lists every tracked TS/JS file, so the oracle indexes test folders the repo's include leaves out (SPEC §7). `oracle/ts-cover-test.ts` pins it. |
 | `oracle/test/regen.ts` | Rebuilds a case's `snapshot.json` and `index.scip.json` from its sources with a given codegraph build and the SCIP tools. Run it after editing a case, then re-check the expectations. |
 | `metamorphic/run.mjs`, `metamorphic/relations.mjs` | Runs shared source-derived `decoy`, `shift` and full-snapshot `repeat` checks for either subject; every result records a challenge fingerprint and validated applicability. Decoy/shift compare edge multisets by spans; repeat uses modes' canonical graph and raw payload hash. Exit 1 on differences, 2 on execution errors. `fixtures` selects every oracle-candidate seed; `META_SHOW=N` limits details. |
@@ -520,13 +525,13 @@ about 0.3 s per fixture; export via `cgr export -o g.json --repo-path <repo>`.
 --t3 -> bench/tables.mjs
 CGQA_HARNESS -> labels/labellers.mjs
 CODEGRAPH_BUILD -> oracle/run.sh
-ORACLE_LANG -> oracle/oracle.ts
+ORACLE_LANG -> oracle/context.ts
 ORACLE_SCIP_CACHE -> oracle/run.sh
-ORACLE_SHOW -> oracle/oracle.ts
+ORACLE_SHOW -> oracle/context.ts
 ORACLE_TARGETS -> differential/shadow.mjs
 SCIP_BIN -> lib/config.ts
 adapterSha256 -> lib/provenance.ts
 challengeSha256 -> metamorphic/relations.mjs
-outside-scip -> oracle/oracle.ts
-receiver-fallback -> oracle/oracle.ts
+outside-scip -> oracle/forward.ts
+receiver-fallback -> oracle/forward.ts
 -->

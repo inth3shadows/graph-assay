@@ -39,6 +39,17 @@ All notable changes to this project are recorded here. The format follows
   marker never reaches a case's sources. Oracle output is byte-identical: the same results on every
   self-test case, with each rule disabled in turn, and on a cached excalidraw run in both modes. Third
   phase of #14.
+- `oracle/oracle.ts` is now only the command line (#7). The work moves to modules that do nothing at
+  import time:
+  - `context.ts`: options and loading;
+  - `forward.ts`, `missing.ts`, `pairs.ts`: the checks;
+  - `braces.ts`: caller ranges;
+  - `report.ts`: output;
+  - `symbols.ts`: shared helpers.
+
+  `oracle/tracks-test.ts` drives them in-process. `--mutate` finds rules in every module. Output is
+  byte-identical, with one exception: missing mode no longer calls `process.exit(0)`, so Node's SQLite
+  warning now reaches stderr, as it already did in forward mode.
 - The scorer manifest (`manifest.scorers`) hashes oracle/'s `.ts` scripts and `oracle/package.json`,
   so its `sha256` changes. It no longer hashes `oracle/test/ts-forward/helper.mjs`, a self-test case
   source that git's `oracle/*.mjs` pathspec matched across directories.
