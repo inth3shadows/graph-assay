@@ -19,10 +19,10 @@ you point the oracle at. Treat every indexed repository as untrusted input. What
 - **Labelling** (`labels/`, optional) sends call-site snippets and repository excerpts to the model
   providers you configure (third-party model APIs). Never label a repository whose code may not leave your machine. The
   labellers' file tools are not confined to the repository copy, so a prompt injection in a corpus
-  file could steer one to read other local files. `labels/run.mjs` therefore refuses to start unless
+  file could steer one to read other local files. `labels/run.ts` therefore refuses to start unless
   `GRAPH_ASSAY_LABEL_SANDBOX=1` says it runs in a container or VM, or `--unsafe-host` accepts the
   risk. Labeller processes get a minimal environment, and `graph-assay check` fails if any committed
-  labelling file contains a home path or a credential pattern (`labels/data-scan-test.mjs`).
+  labelling file contains a home path or a credential pattern (`labels/data-scan-test.ts`).
 
 Run graph-assay on code you are allowed to share with those tools, in an account without
 credentials you would not hand to that code. The Docker reproduction (`Dockerfile`) is the

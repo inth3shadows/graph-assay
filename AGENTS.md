@@ -15,7 +15,7 @@ Read [README.md](README.md) for what graph-assay is and [TECHNICAL.md](TECHNICAL
 
 - `SPEC.md` semantics: bump `SPEC_VERSION` in `lib/spec.ts` and SPEC.md together (`lib/spec-test.ts`).
 - `corpus/v1.txt`, `corpus/v2.txt`: preregistered; their sha256 is recorded in reproduction manifests.
-- `labels/protocol.json` and the files it pins: `node labels/protocol.mjs` must exit 0; `--update` makes
+- `labels/protocol.json` and the files it pins: `node labels/protocol.ts` must exit 0; `--update` makes
   a new protocol.
 - `schema/*.json`: the snapshot and expectation contracts every scorer and adapter relies on.
 

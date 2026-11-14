@@ -66,7 +66,7 @@ try {
 
   check('labellers refuse to run outside a declared sandbox', () => {
     const env = { ...process.env }; delete env.GRAPH_ASSAY_LABEL_SANDBOX;
-    const r = run(process.execPath, [path.join(qa, 'labels/run.mjs'), 'items.jsonl', tmp], { env });
+    const r = run(process.execPath, [path.join(qa, 'labels/run.ts'), 'items.jsonl', tmp], { env });
     assert.equal(r.status, 2); assert.match(r.stderr, /sandbox/i);
   });
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

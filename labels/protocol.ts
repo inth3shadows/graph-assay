@@ -4,16 +4,16 @@
 // qualification items and every committed labelling file with its sha256. The protocol's identity
 // is the sha256 of protocol.json itself, so it pins every file it lists. Tables show it.
 //
-//   node labels/protocol.mjs            verify (exit 1 on any mismatch) and print the summary
-//   node labels/protocol.mjs --update   rewrite the `files` hashes and the prompt hash in place
+//   node labels/protocol.ts            verify (exit 1 on any mismatch) and print the summary
+//   node labels/protocol.ts --update   rewrite the `files` hashes and the prompt hash in place
 //                                       (only after a deliberate change; it is a new protocol)
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { LABELLERS } from './labellers.mjs';
-import { correct, question } from './questions.mjs';
-import { wilson } from './score.mjs';
+import { LABELLERS } from './labellers.ts';
+import { correct, question } from './questions.ts';
+import { wilson } from './score.ts';
 import { isMain } from '../lib/main.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,10 +39,10 @@ export function loadProtocol(file = PROTOCOL) {
   const p = JSON.parse(text);
   const problems = [];
   if (p.prompt.templateSha256 !== promptTemplateSha256()) problems.push(`prompt template changed: ${promptTemplateSha256()} != pinned ${p.prompt.templateSha256}`);
-  for (const [name, l] of Object.entries(p.labellers)) {
+  for (const [name, l] of Object.entries<any>(p.labellers)) {
     const live = LABELLERS[name];
-    if (!live) problems.push(`labeller ${name} is not in labels/labellers.mjs`);
-    else if (live.model !== l.model || live.effort !== l.effort) problems.push(`labeller ${name}: labellers.mjs has ${live.model}/${live.effort}, protocol ${l.model}/${l.effort}`);
+    if (!live) problems.push(`labeller ${name} is not in labels/labellers.ts`);
+    else if (live.model !== l.model || live.effort !== l.effort) problems.push(`labeller ${name}: labellers.ts has ${live.model}/${live.effort}, protocol ${l.model}/${l.effort}`);
   }
   const listed = new Set(Object.keys(p.files));
   for (const f of pinnedFiles()) if (!listed.has(f)) problems.push(`${f} is not pinned`);
@@ -54,11 +54,11 @@ export function loadProtocol(file = PROTOCOL) {
   return { sha256: sha(text), problems, protocol: p, qualification: qualification(p) };
 }
 
-/** Each labeller's accuracy on the known-answer items, as labels/score.mjs counts it. */
+/** Each labeller's accuracy on the known-answer items, as labels/score.ts counts it. */
 function qualification(p) {
   const dir = path.join(qa, p.qualification.dir);
   const items = new Map(readJsonl(path.join(dir, 'items.jsonl')).map((i) => [i.id, i]));
-  const out = {};
+  const out: Record<string, any> = {};
   for (const name of Object.keys(p.labellers)) {
     const f = path.join(dir, `${name}.jsonl`);
     if (!fs.existsSync(f)) continue;
@@ -78,7 +78,7 @@ if (isMain(import.meta.url)) {
   }
   const { sha256, problems, protocol, qualification: q } = loadProtocol();
   console.log(`labelling protocol sha256 ${sha256} (${Object.keys(protocol.files).length} files pinned)`);
-  for (const [name, l] of Object.entries(protocol.labellers)) {
+  for (const [name, l] of Object.entries<any>(protocol.labellers)) {
     const s = q[name];
     console.log(`  ${name.padEnd(8)} ${l.model} (${l.role}); qualification ${s ? `${s.correct}/${s.answered}` : '-'}`);
   }

@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const LEAKS = [
+export const LEAKS: [string, RegExp][] = [
   ['home path', /(?:\/home\/[A-Za-z0-9._-]+\/|\/Users\/[A-Za-z0-9._-]+\/|[A-Za-z]:\\\\?Users\\\\?[A-Za-z0-9._-]+|\/root\/)/],
   ['private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ['AWS key id', /\bAKIA[0-9A-Z]{16}\b/],

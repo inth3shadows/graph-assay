@@ -25,8 +25,8 @@ const HARNESS = process.env.CGQA_HARNESS ?? null;
 const BASE_ENV = /^(PATH|LANG|LC_[A-Z]+|TZ|TMPDIR|HOME|USER|TERM)$/;
 const envWith = (...keys) => Object.fromEntries(Object.entries(process.env).filter(([k]) => BASE_ENV.test(k) || keys.includes(k)));
 
-function sh(cmd, args, { cwd, env, input = '', timeoutMs = 900_000 } = {}) {
-  return new Promise((resolve) => {
+function sh(cmd, args, { cwd, env, input = '', timeoutMs = 900_000 }: { cwd?: string; env?: typeof process.env; input?: string; timeoutMs?: number } = {}) {
+  return new Promise<any>((resolve) => {
     const p = spawn(cmd, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = ''; let err = '';
     // A missing binary or a broken stdin is this labeller's failure, not the whole run's.

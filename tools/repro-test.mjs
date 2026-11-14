@@ -23,10 +23,10 @@ try{
  check('Docker runtime context includes T3 imports and executes the actual tables CLI',()=>{
   // Every script tools/repro.mjs runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
   for(const f of ['bench/robustness.ts','bench/tables.ts','metamorphic/run.ts','metamorphic/relations.ts','fixtures/replay.mts','benchmarks/pycg.ts','differential/builds.ts','differential/modes.ts','oracle/oracle.ts','oracle/run.sh',
-    'lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
   // The real noise step verifies the pinned labelling protocol inside the image's file set (SPEC §9).
   {const d=path.join(context,'labels','data');const samples=fs.readdirSync(d).sort().flatMap(x=>[path.join(d,x,'items.jsonl'),path.join(d,x)]);
-   const r=spawnSync(process.execPath,[path.join(context,'labels','noise.mjs'),...samples,'--protocol',path.join(context,'labels','protocol.json'),'--json',path.join(tmp,'noise-context.json')],{encoding:'utf8'});
+   const r=spawnSync(process.execPath,[path.join(context,'labels','noise.ts'),...samples,'--protocol',path.join(context,'labels','protocol.json'),'--json',path.join(tmp,'noise-context.json')],{encoding:'utf8'});
    assert.equal(r.status,0,`noise --protocol in the Docker context: ${r.stderr}`);}
   const r=spawnSync(process.execPath,[path.join(context,'bench/tables.ts')],{encoding:'utf8',env:{...baseEnv,ORACLE_WORK:path.join(tmp,'no-oracle')}});
   assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/T3 robustness/);
@@ -54,7 +54,7 @@ try{
  if(script==='fixtures/replay.mts')data={subject,adapterSha256:'a'.repeat(64),results:[{name:'f',verdict:'FIXED'}]};
  else if(script==='benchmarks/pycg.ts')data={subject,adapterSha256:'a'.repeat(64),results:[{name:'x',hit:1}],categories:{x:{expected:1,hit:1,extra:0}}};
  else if(script==='metamorphic/run.ts'){const status=Number(process.env.CGQA_T3_REPRO_STATUS??1);data=['decoy','shift','repeat'].map(relation=>({seed:'f',relation,subject,adapterSha256:'a'.repeat(64),challengeSha256:'b'.repeat(64),byteIdentical:relation==='repeat'?true:undefined,diffs:{LOST:status===1&&relation==='decoy'?['changed']:[]},...(status===2?{error:'synthetic index failure'}:{})}));fs.writeFileSync(output,JSON.stringify(data));process.exit(status);}
- else if(script==='labels/noise.mjs')data={table:{},labellers:[],protocol:a.includes('--protocol')?{sha256:'0'.repeat(64),name:'test',promptTemplateSha256:'0'.repeat(64),labellers:{}}:null};else process.exit(9);
+ else if(script==='labels/noise.ts')data={table:{},labellers:[],protocol:a.includes('--protocol')?{sha256:'0'.repeat(64),name:'test',promptTemplateSha256:'0'.repeat(64),labellers:{}}:null};else process.exit(9);
  fs.writeFileSync(output,JSON.stringify(data));`);
  check('canonical orchestrator records exit1 findings and runs actual T1/T2/T3 table code',()=>{
   const out=path.join(tmp,'findings');const r=run(context,out,{CGQA_T3_REPRO_STATUS:'1'});assert.equal(r.status,0,r.stdout+r.stderr);

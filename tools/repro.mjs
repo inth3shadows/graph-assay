@@ -106,7 +106,7 @@ try {
   fs.writeFileSync(corpus, repos.map((r) => [r.name, r.url, r.sha, r.language, r.license, r.split, r.category, r.setup, r.exclude.length ? r.exclude.join(',') : '-'].join(' ')).join('\n') + '\n');
   const data = path.join(qa, 'labels', 'data');
   const samples = fs.readdirSync(data).sort().flatMap((d) => [path.join(data, d, 'items.jsonl'), path.join(data, d)]);
-  run('node', ['labels/noise.mjs', ...samples, '--protocol', path.join(qa, 'labels', 'protocol.json'), '--json', path.join(out, 'noise.json')], 'noise');
+  run('node', ['labels/noise.ts', ...samples, '--protocol', path.join(qa, 'labels', 'protocol.json'), '--json', path.join(out, 'noise.json')], 'noise');
   run('node', ['bench/tables.ts', '--canonical', '--corpus', corpus, '--split', 'dev', '--t1', path.join(out, 't1'), '--t3', path.join(out, 't3'), '--seed', '1',
     '--noise', path.join(out, 'noise.json'), '--md', path.join(out, 'tables.md'), '--json', path.join(out, 'tables.json')], 'tables');
   const table = JSON.parse(fs.readFileSync(path.join(out, 'tables.json'), 'utf8'));

@@ -74,6 +74,14 @@ All notable changes to this project are recorded here. The format follows
   tests and their usage paths. The scorer manifest `sha256` changes again, for the renamed paths and
   the `package.json` markers it now hashes: `differential/package.json` by name, and the `metamorphic/` and `benchmarks/` ones through their directories. `corpus/v2.txt` is preregistered and keeps its comment
   naming `differential/builds.mjs`. Third phase of #14, second PR.
+- `labels/` is TypeScript too: its scripts are `.ts`, and `labels/package.json` marks them as ES
+  modules. Type fixes are annotations only. `labels/protocol.json` is unchanged, so the labelling
+  protocol keeps its identity: `node labels/protocol.ts` prints the same sha256, and the noise tables
+  and qualification scores are byte-identical. The protocol still names the old `.mjs` files in three
+  places: `prompt.source` (`labels/questions.mjs`), `probe` (`labels/run.mjs`) and
+  `qualification.items` (`labels/qualify-items.mjs`). Changing them would make a new protocol, so the
+  next deliberate `--update` should fix all three. Third phase of #14,
+  third PR.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
   count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
