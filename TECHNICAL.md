@@ -295,7 +295,7 @@ image has no harness `.git` directory. Scoring rules and historical results rema
 unchanged. Time, memory and generated dates are observations, not reproducible
 constants; the host kernel also remains visible in the platform record.
 
-T3 provenance also includes `differential/modes.ts`, the repeat comparator, and `differential/package.json`, which makes it load as an ES module. `tools/repro-test.ts`
+T3 provenance also includes `differential/modes.ts`, the repeat comparator, and `differential/package.json`, which makes it load as an ES module; the manifest also hashes `tools/package.json`, the marker for the entry point `tools/repro.ts`. `tools/repro-test.ts`
 checks runtime imports against the Docker allowlist and runs the real canonical orchestrator/table
 code with offline subject shims, including expected differences and failed-index manifests.
 

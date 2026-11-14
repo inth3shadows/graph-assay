@@ -24,6 +24,9 @@ try{
   // Every script tools/repro.ts runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
   for(const f of ['bench/robustness.ts','bench/tables.ts','metamorphic/run.ts','metamorphic/relations.ts','fixtures/replay.mts','benchmarks/pycg.ts','differential/builds.ts','differential/modes.ts','oracle/oracle.ts','oracle/run.sh',
     'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/repro.ts','tools/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+  // The image's entry point names a script the context holds (#39 review L1).
+  {const ep=/^ENTRYPOINT\s+(\[.*\])\s*$/m.exec(fs.readFileSync(path.join(qa,'Dockerfile'),'utf8'));assert(ep,'Dockerfile has no exec-form ENTRYPOINT');
+   const script=JSON.parse(ep[1]).find((a)=>/\.(m?ts|mjs)$/.test(a));assert(script&&fs.existsSync(path.join(context,script)),`Docker ENTRYPOINT script ${script} missing from the context`);}
   // The real noise step verifies the pinned labelling protocol inside the image's file set (SPEC §9).
   {const d=path.join(context,'labels','data');const samples=fs.readdirSync(d).sort().flatMap(x=>[path.join(d,x,'items.jsonl'),path.join(d,x)]);
    const r=spawnSync(process.execPath,[path.join(context,'labels','noise.ts'),...samples,'--protocol',path.join(context,'labels','protocol.json'),'--json',path.join(tmp,'noise-context.json')],{encoding:'utf8'});
@@ -40,7 +43,9 @@ try{
   const expected=createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/modes.ts'))).digest('hex');
   assert.equal(m.files['differential/modes.ts'],expected,'repeat comparator missing from scorer provenance');
   // Its package.json decides how it loads, as lib/manifest.ts's scorer hash already records (#35 review G1).
-  assert.equal(m.files['differential/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/package.json'))).digest('hex'),'differential/package.json missing from scorer provenance');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
+  assert.equal(m.files['differential/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/package.json'))).digest('hex'),'differential/package.json missing from scorer provenance');
+  // tools/package.json decides how the entry point loads (#39 review L2).
+  assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json missing from scorer provenance');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
  });
  shim('unshare','process.exit(0);');
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
