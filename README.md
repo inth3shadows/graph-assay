@@ -17,8 +17,9 @@ built on it confidently wrong, and these defects rarely show up in the tool's ow
 TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 43 codegraph
 repros, 39 of which reproduce an issue filed upstream, plus 4 for code-graph-rag. Adapters for
 [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) and
-[code-review-graph](https://github.com/tirth8205/code-review-graph) replay the fixtures but have not
-had an oracle run yet. Benchmark tables
+[code-review-graph](https://github.com/tirth8205/code-review-graph) replay the fixtures
+(codebase-memory-mcp also has 2 repros of its own; code-review-graph none yet) but have not had an
+oracle run yet. Benchmark tables
 are not published yet: each tool's maintainers see their results first.
 
 **Intent.** graph-assay is built for tool maintainers first. Run it on a pull request, replay the

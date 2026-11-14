@@ -11,7 +11,8 @@ All notable changes to this project are recorded here. The format follows
   sandboxed HOME and data dir with Jedi enrichment off, and maps the graph's nodes and edges (paths
   made relative) to a snapshot v1 with site lines and unresolved calls; an ambiguous call becomes a
   guessed edge to each of crg's candidates. The repo root is pinned to the indexed dir. Members take
-  their containers from the nesting of crg's spans, or, where no span holds them, from crg's symbols. `tools/setup.sh` installs
+  their containers from crg's symbols (`Router.Host`, `Main.N.b`), and a definition nested deeper
+  under that owner (by crg's spans) holds them more tightly; a bare name takes its innermost span. `tools/setup.sh` installs
   it from `docker/crg-requirements.lock` with `--require-hashes` into a fresh per-lock venv that
   replaces the old one only once installed (Python 3.11+, Linux or macOS; `--no-crg` skips). Setup
   now checks every part's platform before installing anything. `lib/adapter-test.ts` gains a golden mapping test, a sandbox

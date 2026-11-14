@@ -42,10 +42,13 @@ Design decisions:
   `extra.ambiguous_targets`, and the adapter links it to each candidate as a guessed edge. Other
   calls to a bare name become unresolved references. The repo root is pinned (`--repo`,
   `CRG_REPO_ROOT`; `update` honours only `--repo`); crg otherwise walks up to the nearest `.git`.
-  Container chains come from the nesting of crg's spans (`Outer::Inner::m`, `C::m::helper`,
-  `scanD::skipString`). A node no span holds takes the container its crg symbol names: Go receiver
-  methods (`Router::Host`), members of one-line classes (`K::m`), C++ namespaces (`ns::I::m`). Two
-  bare definitions on one line stay unnested.
+  Container chains come first from crg's symbol, which names a member's owner: Go receiver methods
+  (`Router::Host`), nested classes (`Main::N::b`), members of one-line classes (`K::m`), C++
+  namespaces with no node (`ns::I::m`). A definition nested deeper under that owner by crg's spans is
+  the tighter container (`C::m::helper`, Rust `Foo::t::helper`). A bare name (a function, a nested
+  function) takes the innermost span that holds it (`scanD::skipString`). A dotted crg name
+  (`Foo.prototype.bar`, `module.exports`) is one segment. Two bare definitions on one line stay
+  unnested.
   `lib/subjects/index.ts`
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
