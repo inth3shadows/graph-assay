@@ -1,0 +1,243 @@
+{
+ "schema": "graph-assay/snapshot@1",
+ "subject": {
+  "name": "codebase-memory-mcp",
+  "adapterSha256": "<hash>",
+  "version": "<version>",
+  "config": {
+   "mode": "full"
+  }
+ },
+ "capabilities": {
+  "siteLines": false,
+  "siteColumns": false,
+  "columnEncoding": null,
+  "unresolved": false,
+  "provenance": true,
+  "edgeKinds": [
+   "calls",
+   "contains"
+  ]
+ },
+ "files": [
+  {
+   "path": "app.py",
+   "language": "python"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "4",
+   "kind": "file",
+   "name": "app.py",
+   "qname": "app.py",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 24
+  },
+  {
+   "id": "5",
+   "kind": "function",
+   "name": "echo",
+   "qname": "echo",
+   "file": "app.py",
+   "language": "python",
+   "start": 1,
+   "end": 2
+  },
+  {
+   "id": "6",
+   "kind": "class",
+   "name": "Greeter",
+   "qname": "Greeter",
+   "file": "app.py",
+   "language": "python",
+   "start": 5,
+   "end": 11
+  },
+  {
+   "id": "7",
+   "kind": "method",
+   "name": "greet",
+   "qname": "Greeter::greet",
+   "file": "app.py",
+   "language": "python",
+   "start": 6,
+   "end": 8
+  },
+  {
+   "id": "8",
+   "kind": "method",
+   "name": "loud",
+   "qname": "Greeter::loud",
+   "file": "app.py",
+   "language": "python",
+   "start": 10,
+   "end": 11
+  },
+  {
+   "id": "9",
+   "kind": "function",
+   "name": "version_option",
+   "qname": "version_option",
+   "file": "app.py",
+   "language": "python",
+   "start": 14,
+   "end": 18
+  },
+  {
+   "id": "10",
+   "kind": "function",
+   "name": "main",
+   "qname": "main",
+   "file": "app.py",
+   "language": "python",
+   "start": 21,
+   "end": 23
+  }
+ ],
+ "edges": [
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "5",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "6",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "7",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "6",
+   "dst": "7",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "8",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "6",
+   "dst": "8",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "9",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "contains",
+   "src": "4",
+   "dst": "10",
+   "line": null,
+   "col": null,
+   "ref": null,
+   "resolvedBy": null,
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "7",
+   "dst": "5",
+   "line": 7,
+   "col": null,
+   "ref": "echo",
+   "resolvedBy": "lsp_direct",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "7",
+   "dst": "8",
+   "line": 8,
+   "col": null,
+   "ref": "self.loud",
+   "resolvedBy": "lsp_method",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "4",
+   "dst": "5",
+   "line": 16,
+   "col": null,
+   "ref": "echo",
+   "resolvedBy": "same_module",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "10",
+   "dst": "7",
+   "line": 22,
+   "col": null,
+   "ref": "Greeter().greet",
+   "resolvedBy": "lsp_method",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "10",
+   "dst": "6",
+   "line": 22,
+   "col": null,
+   "ref": "Greeter",
+   "resolvedBy": "lsp_constructor",
+   "provenance": null
+  },
+  {
+   "kind": "calls",
+   "src": "10",
+   "dst": "9",
+   "line": 23,
+   "col": null,
+   "ref": "version_option",
+   "resolvedBy": "lsp_direct",
+   "provenance": null
+  }
+ ],
+ "unresolved": []
+}

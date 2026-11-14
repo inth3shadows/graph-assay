@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Hermetic adapter tests (part of `graph-assay check`):
 //   1. mapping: each adapter's snapshot of a frozen index (lib/test/adapters/<subject>/: the source,
-//      plus codegraph's .codegraph DB or code-graph-rag's export) equals the committed golden
+//      plus codegraph's .codegraph DB, code-graph-rag's export or codebase-memory-mcp's extract) equals the committed golden
 //      snapshot. A change to how an adapter maps a tool's output shows up as a diff here.
-//   2. sandbox: what a codegraph index process can see (environment, HOME, network).
+//   2. sandbox: what a codegraph or codebase-memory-mcp index process can see (environment, HOME, network).
 //   node lib/adapter-test.ts --update   rewrites the golden snapshots (after a deliberate change)
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as codegraph from './subjects/codegraph.ts';
 import * as cgr from './subjects/code-graph-rag.ts';
+import * as cbm from './subjects/codebase-memory-mcp.ts';
 import { validateSnapshot } from './snapshot.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,7 +22,7 @@ const check = (name, fn) => { n++; try { fn(); } catch (e) { console.error(`FAIL
 
 // Fields that name the adapter build or the machine, not the mapping.
 const normalize = (s) => JSON.parse(JSON.stringify({ ...s, subject: { ...s.subject, adapterSha256: '<hash>', version: '<version>' } }));
-for (const [name, adapter] of [['codegraph', codegraph], ['code-graph-rag', cgr]] as const) {
+for (const [name, adapter] of [['codegraph', codegraph], ['code-graph-rag', cgr], ['codebase-memory-mcp', cbm]] as const) {
   const dir = path.join(here, 'test', 'adapters', name);
   const golden = path.join(here, 'test', 'adapters', `${name}.snapshot.json`);
   check(`${name}: snapshot of the frozen index matches the golden snapshot`, () => {
@@ -53,6 +54,32 @@ fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), h
     assert(seen.keys.includes('CODEGRAPH_TEST_SWITCH'), "codegraph's own switches must pass");
     assert.notEqual(seen.home, os.homedir());
     if (codegraph.canIsolateNetwork()) assert.equal(seen.ifaces, 0, 'the index process has a network interface');
+    else console.log('note: unshare unavailable here; network isolation not checked');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('codebase-memory-mcp sandbox: allowlisted env, private HOME and cache, root confined, no network where unshare works', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
+  try {
+    // A stand-in binary: records what the index process sees.
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs'; import * as os from 'node:os';
+const ifaces = Object.entries(os.networkInterfaces()).filter(([k]) => k !== 'lo').length;
+fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces }));\n`, { mode: 0o755 });
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
+    process.env.GRAPH_ASSAY_TEST_SECRET = 'x'; process.env.CBM_WORKERS = '2'; process.env.CBM_DOWNLOAD_URL = 'http://example.invalid';
+    const r = cbm.index(work, probe, { args: [] });
+    delete process.env.GRAPH_ASSAY_TEST_SECRET; delete process.env.CBM_WORKERS; delete process.env.CBM_DOWNLOAD_URL;
+    assert.equal(r.ok, true, r.output);
+    const seen = JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8'));
+    assert(!seen.keys.includes('GRAPH_ASSAY_TEST_SECRET'), 'a caller variable reached the index');
+    assert(!seen.keys.includes('CBM_DOWNLOAD_URL'), 'a cbm setting outside the allowlist reached the index');
+    assert.equal(seen.env.CBM_WORKERS, '2', "cbm's tuning switches must pass");
+    assert.notEqual(seen.env.HOME, os.homedir());
+    assert(seen.env.CBM_CACHE_DIR.startsWith(seen.env.HOME), 'the cache must live in the sandbox HOME');
+    assert.equal(seen.env.CBM_ALLOWED_ROOT, work);
+    if (cbm.canIsolateNetwork()) assert.equal(seen.ifaces, 0, 'the index process has a network interface');
     else console.log('note: unshare unavailable here; network isolation not checked');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });

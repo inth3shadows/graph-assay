@@ -15,7 +15,9 @@ built on it confidently wrong, and these defects rarely show up in the tool's ow
 [codegraph](https://github.com/colbymchenry/codegraph) and
 [code-graph-rag](https://github.com/vitali87/code-graph-rag). The compiler oracle covers
 TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 43 codegraph
-repros, 39 of which reproduce an issue filed upstream, plus 4 for code-graph-rag. Benchmark tables
+repros, 39 of which reproduce an issue filed upstream, plus 4 for code-graph-rag. A third adapter,
+for [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), replays its own 2
+fixtures but has not had an oracle run yet. Benchmark tables
 are not published yet: each tool's maintainers see their results first.
 
 **Intent.** graph-assay is built for tool maintainers first. Run it on a pull request, replay the
@@ -86,7 +88,7 @@ variable or `~/.config/graph-assay/config.json`.
 | `lib/` | Shared code: paths (`config.ts`), the snapshot contract, one adapter per tool (`subjects/`), SCIP reading, fixture expectations, run manifests, adapter conformance |
 | `schema/` | JSON Schemas for snapshots and fixture expectations |
 | `oracle/` | The compiler oracle, per-language SCIP wrappers, and self-tests with a mutation pass (`oracle/test/`) |
-| `fixtures/` | Bug repros: `oracle-candidates/` (codegraph), `cgr-candidates/` (code-graph-rag) |
+| `fixtures/` | Bug repros: `oracle-candidates/` (codegraph), `cgr-candidates/` (code-graph-rag), `cbm-candidates/` (codebase-memory-mcp) |
 | `metamorphic/`, `differential/` | Graph-must-not-change checks, execution-mode and build-vs-build diffs |
 | `corpus/` | The preregistered public corpus: pinned commits, licenses, dev / held-out split |
 | `benchmarks/`, `bench/` | Third-party benchmark scorers, tables, robustness and triage |
@@ -105,5 +107,6 @@ variable or `~/.config/graph-assay/config.json`.
 CGQA_SUBJECT -> oracle/run.sh
 --dry-run -> tools/setup.sh
 cgr-candidates -> fixtures/replay.mts
+cbm-candidates -> fixtures/replay.mts
 node:sqlite -> lib/subjects/codegraph.ts
 -->
