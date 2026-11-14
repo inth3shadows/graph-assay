@@ -3,7 +3,7 @@
 // vendored: tools/fetch-benchmarks.sh). Each snippet dir holds Python files and a callgraph.json
 // of the edges a call graph must have: {"main.A.f": ["main.B.g", "<builtin>.print"], ...}.
 //
-// Usage: node benchmarks/pycg.mjs [--subject name] <build | default> [category[/snippet] ...] [--json out.json]
+// Usage: node benchmarks/pycg.ts [--subject name] <build | default> [category[/snippet] ...] [--json out.json]
 // Guessed edges (any provenance) never count as hits or extras (SPEC §4); an expected edge a guess
 // alone would satisfy is reported in its own `guessOnly` column.
 //
@@ -34,7 +34,7 @@ const build = buildArg && buildFor(subj, buildArg);
 const bench = process.env.PYCG_DIR ?? path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'graph-assay/oracle/bench/pycg');
 const snippets = path.join(bench, 'micro-benchmark/snippets');
 if (!build || !fs.existsSync(build) || !fs.existsSync(snippets)) {
-  console.error('usage: node benchmarks/pycg.mjs [--subject name] <build | default> [category[/snippet] ...]  (run tools/fetch-benchmarks.sh first)');
+  console.error('usage: node benchmarks/pycg.ts [--subject name] <build | default> [category[/snippet] ...]  (run tools/fetch-benchmarks.sh first)');
   process.exit(2);
 }
 const all = fs.readdirSync(snippets).sort().flatMap((c) => fs.readdirSync(path.join(snippets, c)).sort().map((s) => `${c}/${s}`))
@@ -81,7 +81,7 @@ try {
       }
       return null;
     };
-    const pairs = Object.entries(cg).flatMap(([src, dsts]) => dsts.map((dst) => [src, dst])).filter(([s, t]) => moduleOf(s) && moduleOf(t));
+    const pairs = Object.entries<any>(cg).flatMap(([src, dsts]) => dsts.map((dst) => [src, dst])).filter(([s, t]) => moduleOf(s) && moduleOf(t));
     const r = subj.index(dir, build);
     // SPEC §9: a snippet whose indexing failed counts every expected edge as a miss.
     if (!r.ok) { results.push({ name, error: r.output.trim().split('\n').slice(-2).join(' | '), expected: pairs.length, hit: 0, misses: pairs.map(([s, t]) => `${s} -> ${t} (index failed)`), guessOnly: [], extra: [] }); continue; }
@@ -104,7 +104,7 @@ try {
       const inFile = nodes.filter((n) => n.file === file && paths.has(n.id));
       return (inFile.find((n) => same(paths.get(n.id))) ?? inFile.find((n) => tail(paths.get(n.id))))?.id ?? `missing-node:${dotted}`;
     };
-    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const byId = new Map<any, any>(nodes.map((n) => [n.id, n]));
     const label = (id) => { const n = byId.get(id); return n ? (n.kind === 'file' ? n.file.replace(/\.py$/, '') : `${n.file.replace(/\.py$/, '')}:${(paths.get(n.id) ?? [n.name]).join('.')}`) : id; };
     // Module-level code: the subject's source is the file node, or a top-level non-definition node
     // the code sits in (codegraph: the variable an assignment binds, `b = B()` -> variable b).
@@ -156,7 +156,7 @@ try {
   fs.rmSync(work, { recursive: true, force: true });
 }
 
-const cats = {};
+const cats: Record<string, any> = {};
 for (const r of results) {
   const c = (cats[r.name.split('/')[0]] ??= { snippets: 0, pass: 0, expected: 0, hit: 0, guessOnly: 0, extra: 0, errors: 0 });
   c.snippets++;
@@ -176,7 +176,7 @@ for (const r of results) {
 }
 console.log('\ncategory        snippets  pass  recall        extra  guess-only');
 const tot = { snippets: 0, pass: 0, expected: 0, hit: 0, guessOnly: 0, extra: 0, errors: 0 };
-for (const [c, v] of Object.entries(cats)) {
+for (const [c, v] of Object.entries<any>(cats)) {
   for (const k of Object.keys(tot)) tot[k] += v[k];
   console.log(`${c.padEnd(15)} ${String(v.snippets).padStart(8)}  ${String(v.pass).padStart(4)}  ${`${v.hit}/${v.expected}`.padStart(7)} ${v.expected ? `${Math.round((100 * v.hit) / v.expected)}%`.padStart(5) : '    -'}  ${String(v.extra).padStart(5)}  ${String(v.guessOnly).padStart(10)}${v.errors ? `  (${v.errors} errors)` : ''}`);
 }

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Hermetic checks for bench/triage.mjs: shapes rank by macro headline points (not raw sites), noise is
+// Hermetic checks for bench/triage.ts: shapes rank by macro headline points (not raw sites), noise is
 // left out, shapes that share call sites are linked, and decoy findings are counted.
 import assert from 'node:assert/strict';
-import { decoyFindings, describe, knownFor, rankShapes } from './triage.mjs';
+import { decoyFindings, describe, knownFor, rankShapes } from './triage.ts';
 
 let n = 0;
 const check = (name, fn) => { fn(); n++; console.log(`ok    ${name}`); };
 const WRONG = 'wrong-target|calls|exact-match|method>method';
 const FALLBACK = 'receiver-fallback|calls|import|constant>term';
 const MISSED = 'missing|receiver-fallback|ts|term@decl>method';
-const row = (repo, fwdBuckets, missBuckets, sites = {}) => ({ repo, workDir: `/w/w-${repo}`,
+const row = (repo, fwdBuckets, missBuckets, sites: any = {}): any => ({ repo, workDir: `/w/w-${repo}`,
   fwd: { buckets: fwdBuckets, skipped: {}, groups: {}, sites: sites.fwd ?? [] },
   miss: { buckets: missBuckets, groups: {}, sites: sites.miss ?? [] } });
 

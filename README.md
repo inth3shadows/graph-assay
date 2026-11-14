@@ -42,7 +42,7 @@ Every check compares a tool's graph with something independent and reports where
 - **Benchmarks and tables** (`benchmarks/`, `bench/`): the PyCG micro-benchmark, plus tables that
   score call sites and (caller, callee) pairs with confidence intervals and an oracle-noise
   estimate from a blind-labelled sample (`labels/`).
-- **Triage** (`bench/triage.mjs`): ranks a tool's bug shapes by how many headline points they
+- **Triage** (`bench/triage.ts`): ranks a tool's bug shapes by how many headline points they
   cost, and matches them to fixtures already filed.
 
 Tools plug in through one adapter per subject (`lib/subjects/`). The adapter indexes a directory in
@@ -104,6 +104,6 @@ variable or `~/.config/graph-assay/config.json`.
 <!-- docvet:anchors
 CGQA_SUBJECT -> oracle/run.sh
 --dry-run -> tools/setup.sh
-cgr-candidates -> fixtures/replay.mjs
+cgr-candidates -> fixtures/replay.mts
 node:sqlite -> lib/subjects/codegraph.ts
 -->

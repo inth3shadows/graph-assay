@@ -10,29 +10,29 @@ const qa = path.dirname(path.dirname(fs.realpathSync(fileURLToPath(import.meta.u
 const p = (...x) => path.join(qa, ...x);
 const COMMANDS = {
   setup: ['bash', p('tools/setup.sh'), '[--codegraph <commit>] [--no-codegraph] [--no-cgr] [--no-scip] [--dry-run]: SCIP tools and a build of each subject, where config looks'],
-  replay: ['node', p('fixtures/replay.mjs'), '<codegraph.js> [fixture ...] [--json out] [--canary]: fixture verdicts and optional anonymous canary replay'],
+  replay: ['node', p('fixtures/replay.mts'), '<codegraph.js> [fixture ...] [--json out] [--canary]: fixture verdicts and optional anonymous canary replay'],
   oracle: ['bash', p('oracle/run.sh'), '<name> <src repo> <ts|python|go|jvm> [ts dirs...]: index + SCIP + oracle, forward and missing'],
   'oracle-all': ['bash', p('oracle/run-all.sh'), '[targets file]: oracle on every target'],
-  meta: ['node', p('metamorphic/run.mjs'), '<codegraph.js> <seed dir|fixtures ...> [--relations decoy,shift,repeat] [--json out]'],
-  pycg: ['node', p('benchmarks/pycg.mjs'), '<codegraph.js> [category ...] [--json out]: PyCG micro-benchmark'],
+  meta: ['node', p('metamorphic/run.ts'), '<codegraph.js> <seed dir|fixtures ...> [--relations decoy,shift,repeat] [--json out]'],
+  pycg: ['node', p('benchmarks/pycg.ts'), '<codegraph.js> [category ...] [--json out]: PyCG micro-benchmark'],
   selftest: ['node', p('oracle/test/run.ts'), '[--mutate] [--dump] [case ...]: hermetic oracle self-tests'],
   baseline: ['node', p('oracle/baseline.ts'), 'save <dir> | diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--json gate.json]'],
   snapshot: ['node', p('lib/subjects/codegraph.ts'), 'snapshot <dir> <out.json> [codegraph.js] | index <dir> <codegraph.js>'],
   expect: ['node', p('lib/expect.ts'), '[dir ...]: validate every expect.json'],
   config: ['node', p('lib/config.ts'), '[key]: resolved paths'],
   conformance: ['node', p('lib/conformance.ts'), '<codegraph.js>: is the adapter faithful, and how does the subject handle awkward cases'],
-  modes: ['node', p('differential/modes.mjs'), '<codegraph.js> <dir ...> [--modes ..] [--json out]: execution modes (kernel, workers, sync, repeat) diffed against base'],
-  builds: ['node', p('differential/builds.mjs'), '<old codegraph.js> <new codegraph.js> <dir ...> [--md out] [--json out] | --fetch <dest>: two builds, canonical graph diff'],
-  triage: ['node', p('bench/triage.mjs'), '[--work <oracle work dir>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],
+  modes: ['node', p('differential/modes.ts'), '<codegraph.js> <dir ...> [--modes ..] [--json out]: execution modes (kernel, workers, sync, repeat) diffed against base'],
+  builds: ['node', p('differential/builds.ts'), '<old codegraph.js> <new codegraph.js> <dir ...> [--md out] [--json out] | --fetch <dest>: two builds, canonical graph diff'],
+  triage: ['node', p('bench/triage.ts'), '[--work <oracle work dir>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],
   site: ['node', p('oracle/site.ts'), '<name | work dir> <file:line> [called name] [--subject s|all] [--no-scip]: one call site explained (records, meaning, SCIP definition, edges) and its re-run command'],
-  shadow: ['node', p('differential/shadow.mjs'), '<old codegraph.js> <new codegraph.js> [questions.json] [--show N] [--json out]: agent-facing answers (explore, callers, ...) diffed between builds'],
+  shadow: ['node', p('differential/shadow.ts'), '<old codegraph.js> <new codegraph.js> [questions.json] [--show N] [--json out]: agent-facing answers (explore, callers, ...) diffed between builds'],
 };
 
 const [cmd, ...args] = process.argv.slice(2);
 if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
   console.log('usage: graph-assay <command> [args]\n');
   for (const [k, [, , help]] of Object.entries(COMMANDS)) console.log(`  ${k.padEnd(11)} ${help}`);
-  console.log(`  ${'check'.padEnd(11)} syntax-check every script, type-check lib/ and oracle/, validate fixtures, self-tests with --mutate (what CI runs; needs 'npm ci --ignore-scripts' first)`);
+  console.log(`  ${'check'.padEnd(11)} syntax-check every script, type-check the TypeScript scripts, validate fixtures, self-tests with --mutate (what CI runs; needs 'npm ci --ignore-scripts' first)`);
   process.exit(cmd ? 0 : 2);
 }
 
@@ -40,13 +40,13 @@ if (cmd === 'check') {
   const files = (spawnSync('git', ['ls-files'], { cwd: qa, encoding: 'utf8' }).stdout ?? '').split('\n').filter(Boolean);
   // Outside a git checkout the file list is empty and every syntax check would be skipped silently.
   if (!files.length) { console.error('check needs a git checkout (git ls-files listed nothing)'); process.exit(2); }
-  const listed = ['lib/expect.ts', 'oracle/test/run.ts', 'differential/test.mjs', 'labels/test.mjs', 'oracle/site-test.ts',
-    'oracle/ts-cover-test.ts', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.mjs',
-    'bench/tables-test.mjs', 'bench/triage-test.mjs', 'tools/repro-test.mjs'];
-  // A new *-test.mjs, or *-test.ts in lib/ or oracle/'s own scripts, runs without anyone remembering to
-  // list it. Only those .ts are scripts: elsewhere (oracle/test/<case>/, conformance, fixtures) a .ts is
-  // an indexed test source.
-  const scriptTs = (f) => f.endsWith('.ts') && (f.startsWith('lib/') || /^oracle\/(test\/)?[^/]+\.ts$/.test(f));
+  const listed = ['lib/expect.ts', 'oracle/test/run.ts', 'differential/test.ts', 'labels/test.mjs', 'oracle/site-test.ts',
+    'oracle/ts-cover-test.ts', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.ts',
+    'bench/tables-test.ts', 'bench/triage-test.ts', 'tools/repro-test.mjs'];
+  // A new *-test.mjs, or *-test.ts among the TypeScript scripts, runs without anyone remembering to list
+  // it. Only these .ts are scripts (the same set as tsconfig.json's include): elsewhere (oracle/test/<case>/,
+  // conformance, fixtures) a .ts is an indexed test source.
+  const scriptTs = (f) => f.endsWith('.ts') && (f.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/)[^/]+\.ts$/.test(f));
   const discovered = files.filter((f) => (f.endsWith('-test.mjs') || (scriptTs(f) && f.endsWith('-test.ts'))) && !listed.includes(f));
   const steps = [
     // .mjs only: node --check parses a .ts file as plain JS. The .ts scripts get their syntax check from tsc,
@@ -55,16 +55,16 @@ if (cmd === 'check') {
     ...files.filter((f) => f.endsWith('.sh')).map((f) => ['bash', '-n', p(f)]),
     ['node', p('lib/expect.ts')],
     ['node', p('oracle/test/run.ts'), '--mutate'],
-    ['node', p('differential/test.mjs')],
+    ['node', p('differential/test.ts')],
     ['node', p('labels/test.mjs')],
     ['node', p('oracle/site-test.ts')],
     ['node', p('oracle/ts-cover-test.ts')],
     ['node', p('lib/scores-test.ts')],
     ['node', p('lib/spec-test.ts')],
     ['node', p('lib/anti-gaming-test.ts')],
-    ['node', p('bench/robustness-test.mjs')],
-    ['node', p('bench/tables-test.mjs')],
-    ['node', p('bench/triage-test.mjs')],
+    ['node', p('bench/robustness-test.ts')],
+    ['node', p('bench/tables-test.ts')],
+    ['node', p('bench/triage-test.ts')],
     ['node', p('tools/repro-test.mjs')],
     ...discovered.map((f) => ['node', p(f)]),
   ];

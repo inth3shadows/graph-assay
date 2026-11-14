@@ -4,7 +4,7 @@
 // same graph (store worker, parse pool, resolver pool, fast init), so any canonical difference is
 // a bug in codegraph or in that claim.
 //
-// Usage: node differential/modes.mjs <codegraph.js> <dir ...> [--modes repeat,native,...] [--json out]
+// Usage: node differential/modes.ts <codegraph.js> <dir ...> [--modes repeat,native,...] [--json out]
 //
 // Two levels per mode, against base:
 //   raw        snapshot bytes (ids and row order included), subject.config excluded
@@ -67,7 +67,7 @@ const count = (keys) => { const m = new Map(); for (const k of keys) m.set(k, (m
 export function canonical(s) {
   const byId = new Map(s.nodes.map((n) => [n.id, n]));
   // An edge whose endpoint is not a node is a graph defect to report, not a crash.
-  const id = (n, ref) => (n ? JSON.stringify([n.kind, n.file, n.start, n.end, n.language ?? null]) : JSON.stringify(['<dangling>', ref ?? null]));
+  const id = (n, ref?) => (n ? JSON.stringify([n.kind, n.file, n.start, n.end, n.language ?? null]) : JSON.stringify(['<dangling>', ref ?? null]));
   return {
     files: count(s.files.map((f) => JSON.stringify([f.path, f.language ?? null]))),
     nodes: count(s.nodes.map(id)),
@@ -80,7 +80,7 @@ export function canonical(s) {
 
 /** Per category: entries whose count differs, as {key, a, b}. */
 export function diffCanonical(a, b) {
-  const out = {};
+  const out: Record<string, any> = {};
   for (const cat of Object.keys(a)) {
     const d = [];
     for (const k of new Set([...a[cat].keys(), ...b[cat].keys()])) {
@@ -97,7 +97,7 @@ export const rawHash = (s) => createHash('sha256').update(JSON.stringify([s.capa
 /** Run `modes` on one source dir. Returns {dir, results: [{mode, verdict, ms, diff?, error?}]}. */
 export function runDir(build, src, modes) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-modes-'));
-  const runs = {};
+  const runs: Record<string, any> = {};
   try {
     for (const mode of ['base', ...modes.filter((m) => m !== 'base')]) {
       const work = path.join(tmp, mode);
@@ -116,8 +116,8 @@ export function runDir(build, src, modes) {
   }
   const base = runs.base;
   const results = [];
-  for (const [mode, r] of Object.entries(runs)) {
-    const row = { mode, ms: r.ms, size: r.size };
+  for (const [mode, r] of Object.entries<any>(runs)) {
+    const row: Record<string, any> = { mode, ms: r.ms, size: r.size };
     if (r.error) row.verdict = 'FAILED', row.error = r.error;
     else if (mode === 'base') row.verdict = 'BASE';
     else if (base.error) row.verdict = 'FAILED', row.error = 'base failed';
@@ -146,7 +146,7 @@ if (isMain(import.meta.url)) {
   if (!modes.some((m) => m !== 'base')) { console.error('nothing to compare: name at least one mode besides base'); process.exit(2); }
   const unknown = modes.filter((m) => !MODES[m]);
   if (!build || !dirs.length || unknown.length) {
-    console.error(`usage: modes.mjs <codegraph.js> <dir ...> [--modes ${Object.keys(MODES).join(',')}] [--json out]`);
+    console.error(`usage: modes.ts <codegraph.js> <dir ...> [--modes ${Object.keys(MODES).join(',')}] [--json out]`);
     if (unknown.length) console.error(`unknown mode(s): ${unknown.join(', ')}`);
     process.exit(2);
   }
@@ -160,7 +160,7 @@ if (isMain(import.meta.url)) {
       const size = r.size ? `${r.size.nodes}n ${r.size.edges}e ${r.size.unresolved}u` : '';
       console.log(`${r.verdict.padEnd(10)} ${r.mode.padEnd(20)} ${String(r.ms).padStart(7)}ms  ${size}${r.error ? `  ${r.error}` : ''}`);
       if (r.verdict === 'DIFFER' || r.verdict === 'FAILED') bad++;
-      for (const [cat, d] of Object.entries(r.diff ?? {})) {
+      for (const [cat, d] of Object.entries<any>(r.diff ?? {})) {
         console.log(`           ${cat}: ${d.length} differ (base -> ${r.mode})`);
         for (const x of d.slice(0, 5)) console.log(`             ${x.a} -> ${x.b}  ${x.key}`);
       }

@@ -2,7 +2,7 @@
 // Metamorphic checks: change a project in a way that must not change its graph,
 // re-index, and diff the edges. No oracle needed: the original index is the reference.
 //
-// Usage: node metamorphic/run.mjs [--subject name] <build | default> <seed dir...> [--relations decoy,shift,repeat] [--json out.json]
+// Usage: node metamorphic/run.ts [--subject name] <build | default> <seed dir...> [--relations decoy,shift,repeat] [--json out.json]
 //   A seed is any project dir (it is copied; .git, .codegraph and node_modules are skipped).
 //   `fixtures` as a seed expands to every fixtures/oracle-candidates/* dir.
 //
@@ -20,8 +20,8 @@
 // Exit code: 0 when every seed is clean, 1 when any diff was found, 2 on usage / index errors.
 import { fileURLToPath } from 'node:url';
 import { joinedEdges } from '../lib/snapshot.ts';
-import { canonical, diffCanonical, rawHash } from '../differential/modes.mjs';
-import { applyRelation, RELATIONS, SKIP, DECOY_DIR, SHIFT } from './relations.mjs';
+import { canonical, diffCanonical, rawHash } from '../differential/modes.ts';
+import { applyRelation, RELATIONS, SKIP, DECOY_DIR, SHIFT } from './relations.ts';
 import { buildFor, subject } from '../lib/subjects/index.ts';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
@@ -42,7 +42,7 @@ const subj = subject(opt('--subject', 'codegraph'));
 const [buildArg, ...seedArgs] = args;
 const build = buildArg && buildFor(subj, buildArg);
 if (!build || !fs.existsSync(build) || seedArgs.length === 0 || relations.some((r) => !RELATIONS.includes(r)) || new Set(relations).size !== relations.length) {
-  console.error('usage: node metamorphic/run.mjs [--subject name] <build | default> <seed dir...> [--relations decoy,shift,repeat] [--json out.json]');
+  console.error('usage: node metamorphic/run.ts [--subject name] <build | default> <seed dir...> [--relations decoy,shift,repeat] [--json out.json]');
   process.exit(2);
 }
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -97,7 +97,7 @@ try {
     for (const rel of relations) {
       const dir = path.join(work, `${slot}-${rel}`);
       copy(seed, dir);
-      const res = { seed: name, relation: rel, edges: base.edges.length, diffs: {} };
+      const res: Record<string, any> = { seed: name, relation: rel, edges: base.edges.length, diffs: {} };
       try {
         Object.assign(res, applyRelation(dir, rel));
         if (res.notApplicable) { results.push(res); continue; }
@@ -118,10 +118,10 @@ try {
           const after = index(dir).snapshot;
           res.byteIdentical = rawHash(base.snapshot) === rawHash(after);
           const diff = diffCanonical(canonical(base.snapshot), canonical(after));
-          res.diffs.REPEAT = Object.entries(diff).flatMap(([category, entries]) => entries.map((x) => `${category}: ${x.a} -> ${x.b} ${x.key}`));
+          res.diffs.REPEAT = Object.entries<any>(diff).flatMap(([category, entries]) => entries.map((x) => `${category}: ${x.a} -> ${x.b} ${x.key}`));
         }
       } catch (err) { res.error = String(err.message); errors++; }
-      for (const v of Object.values(res.diffs)) if (v.length) dirty = true;
+      for (const v of Object.values<any>(res.diffs)) if (v.length) dirty = true;
       results.push(res);
     }
   }
@@ -133,9 +133,9 @@ const limit = Number(process.env.META_SHOW ?? 5);
 for (const r of results) {
   if (r.notApplicable) { console.log(`N/A      ${r.seed} ${r.relation}: ${r.reason}`); continue; }
   if (r.error) { console.log(`ERROR    ${r.seed} ${r.relation}: ${r.error}`); continue; }
-  const counts = Object.entries(r.diffs).filter(([, v]) => v.length).map(([k, v]) => `${k} ${v.length}`);
+  const counts = Object.entries<any>(r.diffs).filter(([, v]) => v.length).map(([k, v]) => `${k} ${v.length}`);
   console.log(`${counts.length ? 'DIFF ' : 'clean'}    ${r.seed.padEnd(28)} ${r.relation.padEnd(6)} edges ${r.edges}${r.decoys != null ? `, decoys ${r.decoys}` : ''}${counts.length ? `  ${counts.join(', ')}` : ''}`);
-  for (const [k, v] of Object.entries(r.diffs)) for (const x of v.slice(0, limit)) console.log(`           ${k.padEnd(8)} ${x}`);
+  for (const [k, v] of Object.entries<any>(r.diffs)) for (const x of v.slice(0, limit)) console.log(`           ${k.padEnd(8)} ${x}`);
 }
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(results.map((r) => ({ ...r, spec: SPEC_VERSION, subject: subj.name, adapterSha256: adapterHash(subj.name) })), null, 1));
 process.exit(errors ? 2 : dirty ? 1 : 0);

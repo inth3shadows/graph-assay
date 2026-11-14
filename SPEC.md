@@ -387,5 +387,5 @@ These are not scored in v1 and carry no published numbers:
 - Held-out rotation and source-file/symbol renaming.
 
 <!-- docvet:anchors
-challengeSha256 -> metamorphic/relations.mjs
+challengeSha256 -> metamorphic/relations.ts
 -->

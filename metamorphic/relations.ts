@@ -91,7 +91,7 @@ function sourceHash(dir) {
 export const RELATIONS = ['decoy', 'shift', 'repeat'];
 export function applyRelation(dir, relation) {
   if (!RELATIONS.includes(relation)) throw new Error(`unknown relation ${relation}`);
-  const before = sourceHash(dir); const result = {};
+  const before = sourceHash(dir); const result: Record<string, any> = {};
   if (relation === 'decoy') {
     result.decoys = writeDecoys(dir);
     if (!result.decoys) Object.assign(result, { notApplicable: true, reason: 'no supported source call/class names' });

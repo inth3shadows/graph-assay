@@ -176,11 +176,11 @@ try {
   check('tables retain mixed/legacy input provenance instead of stamping the current adapter', () => {
     const corpus = path.join(tmp, 'corpus.txt'); const output = path.join(tmp, 'tables.json');
     write(corpus, 'tiny https://example.invalid/tiny aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa typescript MIT dev small none\n');
-    let r = run(path.join(qa, 'bench/tables.mjs'), ['--corpus', corpus, '--json', output], { ORACLE_WORK: work });
+    let r = run(path.join(qa, 'bench/tables.ts'), ['--corpus', corpus, '--json', output], { ORACLE_WORK: work });
     assert.equal(r.status, 0, r.stderr); let data = read(output).subjects.codegraph;
     assert.deepEqual(data.adapterHashes, [hashA, hashB]); assert.equal(data.adapterSha256, null);
     const legacy = { ...miss }; delete legacy.adapterSha256; write(path.join(work, 'w-tiny/out-missing.json'), legacy);
-    r = run(path.join(qa, 'bench/tables.mjs'), ['--corpus', corpus, '--json', output], { ORACLE_WORK: work });
+    r = run(path.join(qa, 'bench/tables.ts'), ['--corpus', corpus, '--json', output], { ORACLE_WORK: work });
     assert.equal(r.status, 0, r.stderr); data = read(output).subjects.codegraph;
     assert.deepEqual(data.adapterHashes, [hashA, null]); assert.match(r.stdout, /unknown \(legacy\)/);
   });
@@ -194,7 +194,7 @@ try {
 
   // Actual replay CLI with a stub subject; the stub refuses any indexed copy containing answers.
   const fake = path.join(tmp, 'qa');
-  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/expect.ts', 'lib/fixture.ts', 'lib/fixture-install.ts', 'lib/spec.ts', 'fixtures/replay.mjs']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
+  for (const file of [...ADAPTER_SHARED, 'lib/subjects/codegraph.ts', 'lib/expect.ts', 'lib/fixture.ts', 'lib/fixture-install.ts', 'lib/spec.ts', 'lib/package.json', 'fixtures/replay.mts']) write(path.join(fake, file), fs.readFileSync(path.join(qa, file), 'utf8'));
   const fixture = path.join(fake, 'fixtures/oracle-candidates/issue-canary');
   write(path.join(fixture, 'main.js'), 'export function f() {}\nf();\n'); write(path.join(fixture, 'expect.json'), expect);
   write(path.join(fake, 'lib/subjects/index.ts'), `import * as fs from 'node:fs'; import * as path from 'node:path';
@@ -212,7 +212,7 @@ export const subject = () => ({ name:'codegraph',
   return s; }
 });\n`);
   const result = path.join(tmp, 'replay.json');
-  const replay = (mode = 'stable', canary = true, names = []) => run(path.join(fake, 'fixtures/replay.mjs'), [path.join(fake, 'lib/subjects/codegraph.ts'), ...names, '--json', result, ...(canary ? ['--canary'] : [])], { CGQA_TEST_MODE: mode });
+  const replay = (mode = 'stable', canary = true, names = []) => run(path.join(fake, 'fixtures/replay.mts'), [path.join(fake, 'lib/subjects/codegraph.ts'), ...names, '--json', result, ...(canary ? ['--canary'] : [])], { CGQA_TEST_MODE: mode });
   check('replay CLI isolates answers, writes hash, and reports stable canary PASS', () => {
     const r = replay(); assert.equal(r.status, 0, r.stdout + r.stderr);
     const out = read(result); assert.match(out.adapterSha256, /^[a-f0-9]{64}$/); assert.equal(out.results[0].verdict, 'FIXED');

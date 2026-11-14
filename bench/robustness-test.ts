@@ -6,8 +6,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.mjs';
-import { applyRelation } from '../metamorphic/relations.mjs';
+import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.ts';
+import { applyRelation } from '../metamorphic/relations.ts';
 import { ADAPTER_SHARED } from '../lib/provenance.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
 
@@ -82,7 +82,7 @@ try {
 
   // The actual runner sees deliberately different subject graphs; challenge files must still match.
   const fake=path.join(tmp,'qa');
-  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.ts','lib/subjects/code-graph-rag.ts','differential/modes.mjs','metamorphic/run.mjs','metamorphic/relations.mjs','lib/spec.ts','lib/fixture-install.ts'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
+  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.ts','lib/subjects/code-graph-rag.ts','differential/modes.ts','metamorphic/run.ts','metamorphic/relations.ts','lib/spec.ts','lib/fixture-install.ts','lib/package.json','differential/package.json','metamorphic/package.json'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
   const fixture=path.join(fake,'fixtures/oracle-candidates/shared');fs.cpSync(seed,fixture,{recursive:true});write(path.join(fixture,'expect.json'),{secret:'EVALUATOR_ONLY'});
   const trace=path.join(tmp,'trace.jsonl');
   write(path.join(fake,'lib/subjects/index.ts'),`import * as fs from 'node:fs';import * as path from 'node:path';
@@ -99,11 +99,11 @@ export const subject=(name)=>({name,
  if(dir.endsWith('-repeat')){if(process.env.CGQA_T3_MODE==='reorder'){s.nodes.reverse();for(const n of s.nodes)n.id='x'+n.id;for(const e of s.edges){e.src='x'+e.src;e.dst='x'+e.dst;}}
  if(process.env.CGQA_T3_MODE==='changed')s.edges=[];}return s;}});\n`);
   const outA=path.join(tmp,'meta-cg.json');const outB=path.join(tmp,'meta-cgr.json');
-  const meta=(subject='codegraph',mode='stable',output=outA)=>run(path.join(fake,'metamorphic/run.mjs'),['--subject',subject,path.join(fake,'lib/subjects/codegraph.ts'),'fixtures','--json',output],{CGQA_T3_TRACE:trace,CGQA_T3_MODE:mode});
+  const meta=(subject='codegraph',mode='stable',output=outA)=>run(path.join(fake,'metamorphic/run.ts'),['--subject',subject,path.join(fake,'lib/subjects/codegraph.ts'),'fixtures','--json',output],{CGQA_T3_TRACE:trace,CGQA_T3_MODE:mode});
   check('actual runner shares challenges across subjects with different graphs and isolates expectations',()=>{
     let r=meta();assert.equal(r.status,0,r.stdout+r.stderr);r=meta('code-graph-rag','stable',outB);assert.equal(r.status,0,r.stdout+r.stderr);
     const a=read(outA),b=read(outB);assert.equal(a.length,3);assert.deepEqual(a.map(x=>x.challengeSha256),b.map(x=>x.challengeSha256));
-    const traces=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);assert.deepEqual(traces[0].files,traces[1].files);assert(!JSON.stringify(traces).includes('rogueNameFromSubject'));
+    const traces=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse as (s: string) => any);assert.deepEqual(traces[0].files,traces[1].files);assert(!JSON.stringify(traces).includes('rogueNameFromSubject'));
     assert.equal(a.find(x=>x.relation==='repeat').byteIdentical,true);
   });
   check('repeat raw drift is graph-stable; changed graphs exit1 and index errors exit2',()=>{
@@ -117,15 +117,15 @@ export const subject=(name)=>({name,
     const output=path.join(tmp,'tables.json');const args=['--corpus',corpus,'--json',output];
     // canonical tables need every T2 run (SPEC §8), so the canonical cases get one per subject
     const work=path.join(tmp,'work');for(const sfx of ['','-code-graph-rag']){write(path.join(work,`w-pub-tiny${sfx}`,'out.json'),{buckets:{'ok|calls':1},skipped:{},spec:SPEC_VERSION});write(path.join(work,`w-pub-tiny${sfx}`,'out-missing.json'),{buckets:{'missing|found|ts|method':1},spec:SPEC_VERSION});}
-    let r=run(path.join(qa,'bench/tables.mjs'),args,{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/NOT RUN/);assert.equal(read(output).missingT3Runs.length,2);
-    r=run(path.join(qa,'bench/tables.mjs'),[...args,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0,'canonical output requires T3 even without --t3');
+    let r=run(path.join(qa,'bench/tables.ts'),args,{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/NOT RUN/);assert.equal(read(output).missingT3Runs.length,2);
+    r=run(path.join(qa,'bench/tables.ts'),[...args,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0,'canonical output requires T3 even without --t3');
     const t3=path.join(tmp,'t3');write(path.join(t3,'meta-cg.json'),[row()]);write(path.join(t3,'meta-cgr.json'),[row({subject:'code-graph-rag'})]);
-    r=run(path.join(qa,'bench/tables.mjs'),[...args,'--t3',t3],{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);let data=read(output);assert.equal(data.t3Comparison.matched.length,1);assert.deepEqual(data.subjects.codegraph.robustness.adapterHashes,[hash]);
-    r=run(path.join(qa,'bench/tables.mjs'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0,'partial matching relation files are not complete canonical T3');
+    r=run(path.join(qa,'bench/tables.ts'),[...args,'--t3',t3],{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);let data=read(output);assert.equal(data.t3Comparison.matched.length,1);assert.deepEqual(data.subjects.codegraph.robustness.adapterHashes,[hash]);
+    r=run(path.join(qa,'bench/tables.ts'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0,'partial matching relation files are not complete canonical T3');
     for(const [name,tag] of [['codegraph','cg'],['code-graph-rag','cgr']])write(path.join(t3,`meta-${tag}.json`),['decoy','shift','repeat'].map(relation=>row({subject:name,relation,byteIdentical:relation==='repeat'?true:undefined})));
-    r=run(path.join(qa,'bench/tables.mjs'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.equal(r.status,0,r.stderr);
+    r=run(path.join(qa,'bench/tables.ts'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.equal(r.status,0,r.stderr);
     write(path.join(t3,'meta-cgr.json'),[row({subject:'code-graph-rag',challengeSha256:other})]);
-    r=run(path.join(qa,'bench/tables.mjs'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0);assert.match(r.stderr,/mismatched canonical T3/);
+    r=run(path.join(qa,'bench/tables.ts'),[...args,'--t3',t3,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0);assert.match(r.stderr,/mismatched canonical T3/);
   });
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
 console.log(`${n}/${n} robustness checks`);

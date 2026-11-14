@@ -2,7 +2,7 @@
 // Re-index every oracle-candidate fixture with a given codegraph build and
 // report whether each fixture's wrong edge is still there.
 //
-// Usage: node fixtures/replay.mjs [--subject name] [--root dir] <build | default> [fixture ...] [--json out.json] [--canary]
+// Usage: node fixtures/replay.mts [--subject name] [--root dir] <build | default> [fixture ...] [--json out.json] [--canary]
 //   --subject: codegraph (default; build = dist/bin/codegraph.js) or code-graph-rag (build = the cgr binary)
 //   --root: the fixture set (default fixtures/oracle-candidates, codegraph's regression set; code-graph-rag's
 //           own findings live in fixtures/cgr-candidates)
@@ -49,7 +49,7 @@ const adapterSha256 = adapterHash(subj.name);
 const [buildArg, ...only] = args;
 const build = buildArg && buildFor(subj, buildArg);
 if (!build || !fs.existsSync(build)) {
-  console.error('usage: node fixtures/replay.mjs [--subject name] [--root dir] <build | default> [fixture ...] [--json out.json] [--canary]');
+  console.error('usage: node fixtures/replay.mts [--subject name] [--root dir] <build | default> [fixture ...] [--json out.json] [--canary]');
   process.exit(2);
 }
 
@@ -71,7 +71,7 @@ const run = (dir) => {
 };
 try {
   for (const name of names) {
-    const row = { name, issue: null, verdict: 'ERROR', detail: '' };
+    const row: Record<string, any> = { name, issue: null, verdict: 'ERROR', detail: '' };
     results.push(row);
     try {
       const source = path.join(root, name);
@@ -98,12 +98,12 @@ try {
   }
 } finally { fs.rmSync(work, { recursive: true, force: true }); }
 
-// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.mjs does.
+// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.ts does.
 const nameWidth = Math.max(22, ...results.map((r) => r.name.length));
 for (const r of results) console.log(`${r.verdict.padEnd(8)} ${(r.issue ? `#${r.issue}` : 'unfiled').padEnd(7)} ${r.name.padEnd(nameWidth)} ${r.detail}`);
 if (canary) for (const r of results) console.log(`CANARY ${r.canary?.status ?? 'ERROR'} ${r.name}${r.canary?.error ? `: ${r.canary.error}` : ''}`);
 const tally = results.reduce((t, r) => ({ ...t, [r.verdict]: (t[r.verdict] ?? 0) + 1 }), {});
-console.log(Object.entries(tally).map(([k, v]) => `${k} ${v}`).join(', '));
+console.log(Object.entries<any>(tally).map(([k, v]) => `${k} ${v}`).join(', '));
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ spec: SPEC_VERSION, subject: subj.name, adapterSha256, build, results,
   canaries: canary ? Object.fromEntries(results.map((r) => [r.name, r.canary ?? { status: 'ERROR', error: r.detail }])) : null }, null, 1));
 process.exit(!results.length || results.some((r) => r.verdict === 'ERROR' || (canary && r.canary?.status !== 'PASS')) ? 1 : 0);

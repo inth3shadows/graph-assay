@@ -20,7 +20,7 @@ try {
   check('a CLI runs from a checkout path with a space in it', () => {
     const dir = path.join(tmp, 'path with space', 'lib');
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of ['config.ts', 'main.ts']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
+    for (const f of ['config.ts', 'main.ts', 'package.json']) fs.copyFileSync(path.join(qa, 'lib', f), path.join(dir, f));
     const r = run(process.execPath, [path.join(dir, 'config.ts'), 'tools']);
     assert.equal(r.status, 0, r.stderr); assert.notEqual(r.stdout.trim(), '', 'the main guard did not fire');
   });
@@ -42,7 +42,7 @@ try {
   check('replay exits 2 on an unknown or path-like fixture name', () => {
     const build = path.join(tmp, 'build.js'); fs.writeFileSync(build, '');
     for (const name of ['no-such-fixture', '../oracle-candidates']) {
-      const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mjs'), build, name]);
+      const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), build, name]);
       assert.equal(r.status, 2, `${name}: ${r.stdout}${r.stderr}`);
     }
   });

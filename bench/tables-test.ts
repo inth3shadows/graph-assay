@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Hermetic SPEC §8/§9 checks for bench/tables.mjs on fabricated oracle outputs: a failed subject run
+// Hermetic SPEC §8/§9 checks for bench/tables.ts on fabricated oracle outputs: a failed subject run
 // is scored (recall 0, precision left out), averages are macro-first over the repos every subject
 // ran, canonical tables refuse a missing run, and the function-pair track (SPEC §3) is scored.
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { readRepos } from '../differential/builds.mjs';
+import { readRepos } from '../differential/builds.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -18,7 +18,7 @@ const check = (name, fn) => { fn(); n++; console.log(`ok    ${name}`); };
 const write = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v)); };
 const repos = readRepos(undefined, 'dev').map((r) => r.name);
 
-const PAIRS = (o) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
+const PAIRS = (o?) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
   decorators: { total: 0, found: 0 }, unmappedEdges: { caller: 2, target: 1 }, skippedEdges: { 'skip-framework-self-site': 4 }, callerRanges: { enclosing: 5, braces: 0 }, unitsAtFileLevel: 1, ...o });
 function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null } = {}) {
   fs.rmSync(work, { recursive: true, force: true });
@@ -42,7 +42,7 @@ function fabricate(work, { failed = null, missingDir = null, noPairs = null, spe
 }
 const tables = (work, extra = []) => {
   const out = path.join(tmp, 'out.json');
-  const r = spawnSync(process.execPath, [path.join(qa, 'bench/tables.mjs'), '--json', out, '--md', path.join(tmp, 'out.md'), ...extra],
+  const r = spawnSync(process.execPath, [path.join(qa, 'bench/tables.ts'), '--json', out, '--md', path.join(tmp, 'out.md'), ...extra],
     { encoding: 'utf8', env: { ...process.env, ORACLE_WORK: work, NODE_NO_WARNINGS: '1' } });
   return { status: r.status, stderr: r.stderr, json: r.status === 0 ? JSON.parse(fs.readFileSync(out, 'utf8')) : null, md: r.status === 0 ? fs.readFileSync(path.join(tmp, 'out.md'), 'utf8') : '' };
 };
@@ -105,7 +105,7 @@ try {
     assert.match(md, /codegraph: no function-pair results/);
   });
   check('canonical tables refuse results from another spec version; development tables mark them (SPEC §12)', () => {
-    fabricate(work, { spec: 'SPEC v0' === SPEC_VERSION ? 'SPEC v0.9' : 'SPEC v0' });
+    fabricate(work, { spec: 'SPEC v0' === (SPEC_VERSION as string) ? 'SPEC v0.9' : 'SPEC v0' });
     const c = tables(work, ['--canonical']);
     assert.equal(c.status, 2); assert.match(c.stderr, /canonical tables need SPEC v/);
     const d = tables(work);

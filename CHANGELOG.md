@@ -65,6 +65,15 @@ All notable changes to this project are recorded here. The format follows
 - The scorer manifest (`manifest.scorers`) hashes oracle/'s `.ts` scripts and `oracle/package.json`,
   so its `sha256` changes. It no longer hashes `oracle/test/ts-forward/helper.mjs`, a self-test case
   source that git's `oracle/*.mjs` pathspec matched across directories.
+- `bench/`, `metamorphic/`, `benchmarks/` and `differential/` are TypeScript too. Each has a
+  `package.json` marking its scripts as ES modules, and `tsc` checks them. The replay script is
+  `fixtures/replay.mts`: the `.mts` extension makes it an ES module without a `fixtures/package.json`,
+  which would also cover the fixture sources there. Type fixes are annotations only. The bench tables
+  and triage give byte-identical JSON on the cached oracle runs. Their Markdown differs only in the
+  script name they print. The scripts that need a codegraph build were checked through their hermetic
+  tests and their usage paths. The scorer manifest `sha256` changes again, for the renamed paths and
+  the `package.json` markers it now hashes: `differential/package.json` by name, and the `metamorphic/` and `benchmarks/` ones through their directories. `corpus/v2.txt` is preregistered and keeps its comment
+  naming `differential/builds.mjs`. Third phase of #14, second PR.
 - The type check asks tsc itself for the chain of configs `tsconfig.json` extends: relative, absolute
   and package `extends`, JSONC, and past a recoverable syntax error. Errors in any of those configs
   count as config errors, not type errors. It looks up the chain only when tsc fails (#26).
