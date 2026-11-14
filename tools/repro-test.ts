@@ -11,6 +11,23 @@ import { SPEC_VERSION } from '../lib/spec.ts';
 const qa=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'cgqa-repro-test-'));let n=0;
 const check=(name,fn)=>{fn();n++;console.log(`ok    ${name}`);};
+// The script the image's ENTRYPOINT runs, relative to WORKDIR, where `COPY . .` puts the build context
+// (#39 review L1, M1). Docker uses the last ENTRYPOINT and WORKDIR; continuation lines are joined, and both
+// the exec form (a JSON array) and the shell form are read. Anything else is an error with a reason.
+function entrypointScript(dockerfile){
+  const lines=dockerfile.replace(/\\\r?\n/g,' ').split('\n').map((l)=>l.trim());
+  const last=(kw)=>lines.filter((l)=>new RegExp(`^${kw}\\s`,'i').test(l)).pop()?.replace(/^\S+\s+/,'');
+  const ep=last('ENTRYPOINT');if(!ep)return{error:'Dockerfile has no ENTRYPOINT'};
+  let argv;try{argv=ep.startsWith('[')?JSON.parse(ep):ep.split(/\s+/);}catch{return{error:`ENTRYPOINT is not valid exec form: ${ep}`};}
+  if(path.posix.basename(argv[0]??'')!=='node')return{error:`ENTRYPOINT does not run node: ${ep}`};
+  // Node options that take their value as the next argument (`--import x.ts`): the value is not the script.
+  const VALUED=new Set(['-r','--require','--import','--loader','--experimental-loader','-C','--conditions','--env-file','--title']);
+  let script;for(let i=1;i<argv.length;i++){if(VALUED.has(argv[i])){i++;continue;}if(!argv[i].startsWith('-')){script=argv[i];break;}}
+  if(!script)return{error:`ENTRYPOINT names no script: ${ep}`};
+  const workdir=last('WORKDIR')??'/';const rel=path.posix.relative(workdir,path.posix.resolve(workdir,script));
+  if(rel.startsWith('..'))return{error:`ENTRYPOINT script ${script} lies outside WORKDIR ${workdir}`};
+  return{script:rel};
+}
 const write=(f,s)=>{fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,s);};
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
 const baseEnv={...process.env,XDG_CONFIG_HOME:tmp,XDG_CACHE_HOME:tmp,NODE_NO_WARNINGS:'1',CGQA_TEST_SPEC:SPEC_VERSION};
@@ -20,13 +37,28 @@ try{
  const allowed=rel=>{let include=true;for(const raw of rules){const allow=raw.startsWith('!');const glob=(allow?raw.slice(1):raw).replace(/\/$/,'');if(path.matchesGlob(rel,glob))include=allow;}return include;};
  const context=path.join(tmp,'context');fs.mkdirSync(context);
  const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(!allowed(f))continue;const target=path.join(context,f);if(e.isDirectory()){fs.mkdirSync(target,{recursive:true});copy(f);}else if(e.isFile()){fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
+ check('the ENTRYPOINT reader handles exec and shell forms, continuations, the last ENTRYPOINT and WORKDIR',()=>{
+  const W='WORKDIR /opt/graph-assay\nCOPY . .\n';
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT ["node", "tools/repro.ts"]`),{script:'tools/repro.ts'});
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT node tools/repro.ts --split dev`),{script:'tools/repro.ts'});
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT ["node", \\\n  "--no-warnings", \\\n  "tools/repro.js"]`),{script:'tools/repro.js'});
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT ["node", "/opt/graph-assay/tools/repro.ts"]`),{script:'tools/repro.ts'});
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT ["node", "old.ts"]\nENTRYPOINT ["node", "bin/graph-assay"]`),{script:'bin/graph-assay'});
+  assert.deepEqual(entrypointScript(`${W}ENTRYPOINT ["node", "--import", "lib/spec.ts", "tools/repro.ts"]`),{script:'tools/repro.ts'});
+  assert.deepEqual(entrypointScript(`${W}entrypoint ["node", "tools/repro.ts"]`),{script:'tools/repro.ts'});
+  assert.match(entrypointScript(`${W}ENTRYPOINT ["node", tools/repro.ts]`).error,/not valid exec form/);
+  assert.match(entrypointScript(`${W}ENTRYPOINT ["node"]`).error,/names no script/);
+  assert.match(entrypointScript(`${W}ENTRYPOINT ["python3", "x.py"]`).error,/does not run node/);
+  assert.match(entrypointScript(`${W}ENTRYPOINT ["node", "/elsewhere/x.ts"]`).error,/outside WORKDIR/);
+  assert.match(entrypointScript(W).error,/no ENTRYPOINT/);
+ });
  check('Docker runtime context includes T3 imports and executes the actual tables CLI',()=>{
   // Every script tools/repro.ts runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
   for(const f of ['bench/robustness.ts','bench/tables.ts','metamorphic/run.ts','metamorphic/relations.ts','fixtures/replay.mts','benchmarks/pycg.ts','differential/builds.ts','differential/modes.ts','oracle/oracle.ts','oracle/run.sh',
-    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/repro.ts','tools/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
   // The image's entry point names a script the context holds (#39 review L1).
-  {const ep=/^ENTRYPOINT\s+(\[.*\])\s*$/m.exec(fs.readFileSync(path.join(qa,'Dockerfile'),'utf8'));assert(ep,'Dockerfile has no exec-form ENTRYPOINT');
-   const script=JSON.parse(ep[1]).find((a)=>/\.(m?ts|mjs)$/.test(a));assert(script&&fs.existsSync(path.join(context,script)),`Docker ENTRYPOINT script ${script} missing from the context`);}
+  {const ep=entrypointScript(fs.readFileSync(path.join(qa,'Dockerfile'),'utf8'));assert(!ep.error,ep.error);
+   assert(fs.existsSync(path.join(context,ep.script)),`Docker ENTRYPOINT script ${ep.script} missing from the context`);}
   // The real noise step verifies the pinned labelling protocol inside the image's file set (SPEC §9).
   {const d=path.join(context,'labels','data');const samples=fs.readdirSync(d).sort().flatMap(x=>[path.join(d,x,'items.jsonl'),path.join(d,x)]);
    const r=spawnSync(process.execPath,[path.join(context,'labels','noise.ts'),...samples,'--protocol',path.join(context,'labels','protocol.json'),'--json',path.join(tmp,'noise-context.json')],{encoding:'utf8'});
@@ -45,7 +77,7 @@ try{
   // Its package.json decides how it loads, as lib/manifest.ts's scorer hash already records (#35 review G1).
   assert.equal(m.files['differential/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/package.json'))).digest('hex'),'differential/package.json missing from scorer provenance');
   // tools/package.json decides how the entry point loads (#39 review L2).
-  assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json missing from scorer provenance');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
+  assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json (the entry point\'s module marker) missing from the repro manifest');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
  });
  shim('unshare','process.exit(0);');
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
