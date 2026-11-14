@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Save what one codegraph build did across every harness, and diff two saved builds.
 //
-//   node oracle/baseline.mjs save <baseline dir> [--work <ORACLE_WORK dir>] [--targets <targets.txt>]
+//   node oracle/baseline.ts save <baseline dir> [--work <ORACLE_WORK dir>] [--targets <targets.txt>]
 //     Reads w-<name>/out.json and out-missing.json for each target, plus replay.json, pycg.json and
 //     meta.json from <baseline dir> when present, and writes <baseline dir>/baseline.json.
-//   node oracle/baseline.mjs diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--fail-on-incomplete] [--json gate.json]
+//   node oracle/baseline.ts diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--fail-on-incomplete] [--json gate.json]
 //     Prints what changed: bucket counts, groups (one cause each) that appeared or vanished,
 //     fixture verdicts, PyCG categories and metamorphic diff counts.
 //
-// A group's signature is (codegraph target, SCIP definition), the same grouping oracle.mjs uses.
+// A group's signature is (codegraph target, SCIP definition), the same grouping oracle/report.ts uses.
 // Checkouts are cached at one HEAD per repo, so signatures are comparable across builds.
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -31,11 +31,11 @@ const read = (p) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) :
 const canonical = (sites) => sites.map((x) => JSON.stringify(Object.fromEntries(Object.entries(x).sort()))).sort();
 const summarize = (out, sitesFile) => {
   if (!out) return null;
-  const sum = {
+  const sum: Record<string, unknown> = {
     adapterSha256: recordedAdapterHash(out),
     total: out.total,
     buckets: out.buckets,
-    groups: Object.fromEntries(Object.entries(out.groups ?? {}).map(([k, gs]) => [k, Object.fromEntries(gs.map((g) =>
+    groups: Object.fromEntries(Object.entries<any[]>(out.groups ?? {}).map(([k, gs]) => [k, Object.fromEntries(gs.map((g) =>
       [`${g.codegraph}|${g.scipDef ? `${g.scipDef.file}:${g.scipDef.line}` : g.scip}`, g.n]))])),
   };
   if (Array.isArray(out.sites) && sitesFile) {
@@ -77,7 +77,7 @@ if (cmd === 'save') {
     replay: replay && Object.fromEntries(replay.results.map((r) => [r.name, r.verdict])),
     pycg: pycg?.categories ?? null,
     meta: meta && Object.fromEntries(meta.map((r) => [`${r.seed} ${r.relation}`,
-      r.error ? { error: true } : r.notApplicable ? { notApplicable: true } : Object.fromEntries(Object.entries(r.diffs).map(([k, v]) => [k, v.length]))])),
+      r.error ? { error: true } : r.notApplicable ? { notApplicable: true } : Object.fromEntries(Object.entries<unknown[]>(r.diffs).map(([k, v]) => [k, v.length]))])),
   };
   fs.writeFileSync(path.join(a, 'baseline.json'), JSON.stringify(baseline, null, 1));
   console.log(`saved ${path.join(a, 'baseline.json')}: ${Object.keys(repos).length} repos`
@@ -135,7 +135,7 @@ if (cmd === 'save') {
     for (const x of result.incomparable) console.log(`INCOMPARABLE ${x.scope}: ${x.reason}${x.before == null ? '' : ` (${x.before} -> ${x.after})`}`);
     for (const t of result.triggers) {
       const detail = t.metric === 'verdict' ? `${t.before} -> ${t.after}`
-        : `${t.before.join('/')} -> ${t.after.join('/')} (${t.deltaPoints.toFixed(3)} points, ${t.sites} sites)`;
+        : `${(t.before as number[]).join('/')} -> ${(t.after as number[]).join('/')} (${t.deltaPoints.toFixed(3)} points, ${t.sites} sites)`;
       console.log(`${t.verdict} ${t.scope} ${t.metric}: ${detail}`);
     }
     console.log(`VERDICT: ${result.verdict}`);
@@ -151,6 +151,6 @@ if (cmd === 'save') {
 } else usage();
 
 function usage() {
-  console.error('usage: node oracle/baseline.mjs save <baseline dir> [--work dir] [--targets file]\n       node oracle/baseline.mjs diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--fail-on-incomplete] [--json gate.json]');
+  console.error('usage: node oracle/baseline.ts save <baseline dir> [--work dir] [--targets file]\n       node oracle/baseline.ts diff <old baseline.json> <new baseline.json> [--fail-on-regression] [--fail-on-incomplete] [--json gate.json]');
   process.exit(2);
 }

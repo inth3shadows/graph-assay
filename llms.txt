@@ -16,7 +16,7 @@
 - [lib/subjects/index.ts](lib/subjects/index.ts): the subject registry and adapter contract
 - [schema/snapshot.v1.json](schema/snapshot.v1.json): the graph snapshot every scorer reads
 - [schema/expect.v1.json](schema/expect.v1.json): fixture expectations
-- [oracle/oracle.mjs](oracle/oracle.mjs): the compiler oracle
+- [oracle/oracle.ts](oracle/oracle.ts): the compiler oracle
 
 ## Optional
 

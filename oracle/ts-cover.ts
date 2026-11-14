@@ -7,7 +7,7 @@
 // TypeScript looks up `types` and `@types` from the top config's directory, so a project elsewhere
 // loses the repo's type packages (TS2688). The file is untracked; run.sh deletes it after indexing.
 //
-// Usage: node oracle/ts-cover.mjs <repo dir>   (writes coverPath(repo), prints its path)
+// Usage: node oracle/ts-cover.ts <repo dir>   (writes coverPath(repo), prints its path)
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -28,7 +28,7 @@ export function coverTsconfig(repo) {
 
 if (isMain(import.meta.url)) {
   const [repo] = process.argv.slice(2);
-  if (!repo) { console.error('usage: ts-cover.mjs <repo dir>'); process.exit(2); }
+  if (!repo) { console.error('usage: ts-cover.ts <repo dir>'); process.exit(2); }
   const cfg = coverTsconfig(repo);
   fs.writeFileSync(coverPath(repo), `${JSON.stringify(cfg, null, 1)}\n`);
   console.error(`oracle project: ${cfg.files.length} tracked TS/JS files`);

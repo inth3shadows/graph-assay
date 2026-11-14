@@ -120,7 +120,7 @@ try {
     if (hash) frozen.subject.adapterSha256 = hash;
     const input = path.join(tmp, 'snapshot.json'); const output = path.join(tmp, 'oracle.json'); write(input, frozen);
     const dir = path.join(qa, 'oracle/test/ts-forward');
-    const r = run(path.join(qa, 'oracle/oracle.mjs'), [dir, path.join(dir, 'index.scip.json'), output], { ORACLE_SNAPSHOT: input, ORACLE_LANG: 'ts' });
+    const r = run(path.join(qa, 'oracle/oracle.ts'), [dir, path.join(dir, 'index.scip.json'), output], { ORACLE_SNAPSHOT: input, ORACLE_LANG: 'ts' });
     assert.equal(r.status, 0, r.stderr); assert.equal(read(output).adapterSha256, hash ?? null);
   });
   const fwd = { total: 10, buckets: { 'ok|calls': 10 }, groups: {}, adapterSha256: hashA };
@@ -130,7 +130,7 @@ try {
     const dir = path.join(tmp, 'baseline'); const targets = path.join(tmp, 'targets.txt');
     write(targets, 'tiny unused ts\n'); write(path.join(dir, 'replay.json'), { subject: 'codegraph', adapterSha256: hashA, results: [{ name: 'f', verdict: 'FIXED' }], canaries: { f: { status: 'FAIL' } } });
     write(path.join(dir, 'pycg.json'), { adapterSha256: hashB, categories: {} });
-    const r = run(path.join(qa, 'oracle/baseline.mjs'), ['save', dir, '--work', work, '--targets', targets]);
+    const r = run(path.join(qa, 'oracle/baseline.ts'), ['save', dir, '--work', work, '--targets', targets]);
     assert.equal(r.status, 0, r.stderr); const b = read(path.join(dir, 'baseline.json'));
     assert.equal(b.repos.tiny.forward.adapterSha256, hashA); assert.equal(b.repos.tiny.missing.adapterSha256, hashB);
     assert.equal(b.adapters.replay, hashA); assert.equal(b.adapters.pycg, hashB); assert.equal(b.canaries.f.status, 'FAIL');

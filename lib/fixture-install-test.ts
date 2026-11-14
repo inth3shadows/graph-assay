@@ -63,15 +63,15 @@ try {
     'labels/questions.mjs': "the labeller's copy, which hides installs as labels/protocol.json says",
     'lib/conformance.ts': "conformance's own sources, not fixtures",
     'benchmarks/pycg.mjs': 'PyCG snippets, not fixtures',
-    'oracle/test/run.mjs': 'oracle self-test cases, not fixtures',
-    'oracle/test/regen.mjs': 'oracle self-test cases, not fixtures',
+    'oracle/test/run.ts': 'oracle self-test cases, not fixtures',
+    'oracle/test/regen.ts': 'oracle self-test cases, not fixtures',
   };
   const scripts = [];
   const visit = (dir) => {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
       if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (rel.startsWith('lib/') && e.name.endsWith('.ts'))) && !/-test\.(mjs|ts)$/.test(e.name) && e.name !== 'test.mjs') scripts.push(rel); // lib/'s .ts are scripts; elsewhere a .ts is an indexed source
+      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^oracle\/(test\/)?[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && e.name !== 'test.mjs') scripts.push(rel); // lib/'s and oracle/'s own .ts are scripts; elsewhere a .ts is an indexed source
     }
   };
   visit('');
