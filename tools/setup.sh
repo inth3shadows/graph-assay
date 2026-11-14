@@ -106,6 +106,8 @@ if [ "$do_crg" = 1 ]; then
     # an older install may be a plain directory; replace it only now that the new one works
     if [ -d "$crg/venv" ] && [ ! -L "$crg/venv" ]; then run rm -rf "$crg/venv"; fi
     run ln -sfn "venv-$lockid" "$crg/venv"
+    # venvs from earlier locks are no longer linked; remove them
+    for old in "$crg"/venv-*; do [ "$old" = "$target" ] || [ ! -d "$old" ] || run rm -rf "$old"; done
   fi
 fi
 step "done; check with: node $qa/bin/graph-assay config"

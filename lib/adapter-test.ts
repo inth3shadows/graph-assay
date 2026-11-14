@@ -138,6 +138,8 @@ db.close();\n`, { mode: 0o755 });
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
     assert.equal(crg.index(work, probe, { home, args: ['update', '--repo', work] }).ok, true);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
+    assert.equal(crg.index(work, probe, { home, args: ['update', `--repo=${work}`] }).ok, true);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', `--repo=${work}`]);
     // the `env` option adds switches but never re-roots crg
     assert.equal(crg.index(work, probe, { home, env: { CRG_REPO_ROOT: '/elsewhere' } }).ok, true);
     assert.equal(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).env.CRG_REPO_ROOT, work);
@@ -195,6 +197,21 @@ check('code-review-graph extract: paths inside JSON that Python escaped (non-ASC
     crg.extract(src, out, root);
     const db = new DatabaseSync(out, { readOnly: true });
     try { assert.deepEqual(JSON.parse((db.prepare('SELECT extra FROM edges').get() as any).extra), { ambiguous_targets: ['a.py::g', 'other'] }); } finally { db.close(); }
+    // a path as an object key; metadata Python wrote but JSON cannot parse (NaN) still loses the root
+    const src2 = path.join(tmp, 'graph2.db'); const out2 = path.join(tmp, 'crg2.db');
+    crgStore(src2, [], [[1, 'CALLS', 'a', 'b', 'a.py', 1, JSON.stringify({ [`${root}/k.py`]: 1 }), 'EXTRACTED', 'direct'],
+      [2, 'CALLS', 'a', 'b', 'a.py', 1, `{"score": NaN, "path": ${pyJson(`${root}/n.py`)}}`, 'EXTRACTED', 'direct']]);
+    crg.extract(src2, out2, root);
+    const db2 = new DatabaseSync(out2, { readOnly: true });
+    try { assert.deepEqual(db2.prepare('SELECT extra FROM edges ORDER BY id').all().map((r: any) => r.extra), ['{"k.py":1}', '{"score": NaN, "path": "n.py"}']); } finally { db2.close(); }
+    // crg writes a root holding a backslash with a forward slash in its place
+    const bs = path.join(tmp, 'a\\b'); fs.mkdirSync(bs);
+    const src3 = path.join(tmp, 'graph3.db'); const out3 = path.join(tmp, 'crg3.db');
+    const fwd = bs.replace(/\\/g, '/');
+    crgStore(src3, [['Function', 'f', `${fwd}/a.py::f`, `${fwd}/a.py`, 1, 1, 'python', null]], []);
+    crg.extract(src3, out3, bs);
+    const db3 = new DatabaseSync(out3, { readOnly: true });
+    try { assert.deepEqual(Object.values(db3.prepare('SELECT qualified_name, file_path FROM nodes').get()), ['a.py::f', 'a.py']); } finally { db3.close(); }
     const bad = path.join(tmp, 'bad.db'); new DatabaseSync(bad).close(); // no tables: the copy fails
     assert.throws(() => crg.extract(bad, out, root));
     assert(!fs.existsSync(out), 'a failed extract left a crg.db behind');
@@ -225,6 +242,17 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
       ['Function', 'm', 'n.py::A.m', 'n.py', 12, 13, 'python', 'A'],
       ['Function', 'g', 'n.py::g', 'n.py', 14, 17, 'python', null], ['Class', 'A', 'n.py::A:S77aa', 'n.py', 15, 17, 'python', null],
       ['Function', 'm', 'n.py::A.m:S88bb', 'n.py', 16, 17, 'python', 'A'],
+      // crg 2.4.0 shapes: Java one-line nested class; one-line TS classes in a function; Rust impl in a fn
+      F('Main.java', 1), ['Class', 'Main', 'Main.java::Main', 'Main.java', 1, 1, 'java', null], ['Class', 'N', 'Main.java::Main.N', 'Main.java', 1, 1, 'java', 'Main'],
+      ['Function', 'b', 'Main.java::Main.N.b', 'Main.java', 1, 1, 'java', 'N'], ['Function', 'a', 'Main.java::Main.a', 'Main.java', 1, 1, 'java', 'Main'],
+      F('a.ts', 3), ['Function', 'f', 'a.ts::f', 'a.ts', 1, 3, 'typescript', null], ['Class', 'K', 'a.ts::K', 'a.ts', 2, 2, 'typescript', null],
+      ['Function', 'm', 'a.ts::K.m', 'a.ts', 2, 2, 'typescript', 'K'], ['Class', 'L', 'a.ts::L', 'a.ts', 2, 2, 'typescript', null],
+      ['Function', 'n', 'a.ts::L.n', 'a.ts', 2, 2, 'typescript', 'L'],
+      F('r.rs', 6), ['Class', 'A', 'r.rs::A', 'r.rs', 1, 1, 'rust', null], ['Function', 'f', 'r.rs::f', 'r.rs', 2, 6, 'rust', null],
+      ['Function', 'm', 'r.rs::A.m', 'r.rs', 4, 4, 'rust', 'A'],
+      // a nested A listed before the top-level A; A.m (a Go-style member declared apart) belongs to the top-level one
+      F('o.go', 9), ['Class', 'Outer', 'o.go::Outer', 'o.go', 1, 3, 'go', null], ['Class', 'A', 'o.go::Outer.A', 'o.go', 2, 3, 'go', 'Outer'],
+      ['Class', 'A', 'o.go::A', 'o.go', 4, 5, 'go', null], ['Function', 'm', 'o.go::A.m', 'o.go', 7, 9, 'go', 'A'],
       F('late.go', 9), ['Function', 'Run', 'late.go::Srv.Run', 'late.go', 2, 3, 'go', 'Srv'], ['Class', 'Srv', 'late.go::Srv', 'late.go', 8, 9, 'go', null],
     ], [
       [1, 'CALLS', 'app.py::version_option', 'g', 'app.py', 4, JSON.stringify({ ambiguous_targets: ['app.py::g', 'app.py::g:Scd34'] }), 'AMBIGUOUS', 'unresolved'],
@@ -239,9 +267,27 @@ check('code-review-graph snapshot: container chains from crg symbols and spans; 
     assert.deepEqual([q['r.go::Router.Host'], q['c.ts::K.m'], q['c.ts::L.n'], q['i.cpp::ns.I.m(a.b)']], ['Router::Host', 'K::m', 'L::n', 'ns::I::m']);
     assert.deepEqual([q['app.py::callback'], q['app.py::Greeter.greet'], q['app.py::helper'], q['app.py::helper:Sab12:2']],
       ['version_option::callback', 'Greeter::greet', 'Greeter::greet::helper', 'helper']);
+    assert.deepEqual([q['Main.java::Main.N.b'], q['Main.java::Main.a'], q['a.ts::K.m'], q['a.ts::L.n'], q['r.rs::A.m'], q['o.go::A.m']],
+      ['Main::N::b', 'Main::a', 'f::K::m', 'f::L::n', 'A::m', 'A::m']);
     const guessed = s.edges.filter((e) => e.provenance).map((e) => `${e.src}>${e.dst}:${e.provenance}`).sort();
     assert.deepEqual(guessed, ['app.py::version_option>app.py::g:Scd34:ambiguous', 'app.py::version_option>app.py::g:ambiguous']);
     assert.deepEqual(s.unresolved.map((u) => `${u.line}:${u.name}`), ['5:nowhere']);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-review-graph snapshot: container chains stay linear in the number of members', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.graph-assay'));
+    const N = 20_000; // Go receiver methods, declared apart from their type: the symbol names the owner
+    const nodes: unknown[][] = [['File', 'm.go', 'm.go', 'm.go', 1, N + 2, null, null], ['Class', 'Srv', 'm.go::Srv', 'm.go', 1, 1, 'go', null]];
+    for (let i = 0; i < N; i++) nodes.push(['Function', `M${i}`, `m.go::Srv.M${i}`, 'm.go', i + 2, i + 2, 'go', 'Srv']);
+    crgStore(path.join(tmp, '.graph-assay', 'crg.db'), nodes, []);
+    const t0 = Date.now();
+    const s = crg.snapshot(tmp);
+    const ms = Date.now() - t0;
+    assert.equal(s.nodes.find((x) => x.id === `m.go::Srv.M${N - 1}`).qname, `Srv::M${N - 1}`);
+    assert(ms < 5000, `snapshot of ${N} methods took ${ms} ms`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
