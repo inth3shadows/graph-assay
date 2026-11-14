@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- A third subject, codebase-memory-mcp 0.12.1 (`lib/subjects/codebase-memory-mcp.ts`): indexes in a
+  sandboxed HOME and cache with the repo as the allowed root, and maps the graph's nodes and edges to
+  a snapshot v1. It declares no site lines (cbm keeps one edge per caller and callee), so it is
+  scored on the function-pair track. Edges resolved by a strategy cbm itself calls a weak name-only
+  match are guessed. `tools/setup.sh` installs the linux-amd64 release, sha256-pinned (`--no-cbm`
+  skips). A golden mapping test and a sandbox probe join `lib/adapter-test.ts`.
+- `fixtures/cbm-candidates/`, two unfiled codebase-memory-mcp repros, both BROKEN on 0.12.1:
+  `cbm1-js-ts-same-stem` (`client.js` next to `client.ts`: the TS file's functions and calls vanish)
+  and `cbm2-py-nested-call-lifted` (a call inside a nested function is recorded on the module).
 - Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
   that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
   `java-fq-static-receiver` (`com.x.b.Util.log(...)` in a file that imports `com.x.a.*`, so only

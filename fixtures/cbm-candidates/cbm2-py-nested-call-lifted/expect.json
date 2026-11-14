@@ -1,0 +1,6 @@
+{
+ "issue": null,
+ "note": "codebase-memory-mcp 0.12.1: a nested function is not a node, and a call inside it is recorded on the enclosing module.",
+ "wrong": [{ "from": "decorators.py", "kind": "calls", "to": "decorators.py:echo" }],
+ "right": [{ "from": "version_option::callback", "kind": "calls", "to": "decorators.py:echo" }]
+}

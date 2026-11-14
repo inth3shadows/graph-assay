@@ -1,0 +1,9 @@
+{
+ "issue": null,
+ "note": "codebase-memory-mcp 0.12.1: client.js and client.ts in one directory get the same qualified names (the extension is dropped), and client.ts's functions and calls disappear from the graph.",
+ "wrong": [],
+ "right": [
+  { "from": "send", "fromFile": "client.ts", "kind": "calls", "to": "client.ts:encode" },
+  { "from": "send", "fromFile": "client.js", "kind": "calls", "to": "client.js:format" }
+ ]
+}
