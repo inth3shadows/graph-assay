@@ -48,11 +48,10 @@ All notable changes to this project are recorded here. The format follows
   fixture's caller is in the graph compared the last part of `from` with node names only, and a
   codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A
   caller now also counts when a node that is not a file has exactly `from` as its qualified name (its
-  name when it has none), in `fromFile` when the fixture names one. A file node never counts: it
-  exists even when its file produced nothing. On a
-  codegraph build with the #2975 fix (colbymchenry/codegraph#3140), `issue-2975` now scores `FIXED`;
-  no other fixture verdict changes on that build or on f72c9d2e. A graph without the caller still
-  scores `CHANGED`.
+  name when it has none), in `fromFile` when the fixture names one. The older name check is
+  unchanged; its gaps are tracked in #34. On a codegraph build with the #2975 fix
+  (colbymchenry/codegraph#3140), `issue-2975` now scores `FIXED`; no other fixture verdict changes on
+  that build or on f72c9d2e.
 
 ## [0.1.0] - 2026-11-12
 

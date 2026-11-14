@@ -71,8 +71,9 @@ export function scoreFixture(snapshot, expect) {
   const lastName = (q) => q.split('::').pop().replace(/\(.*\)$/, '');
   // A caller also counts when a node that is not a file has exactly `from` as its qualified name (its
   // name when it has none), in `fromFile` when the fixture names one. A codegraph route node is named
-  // `GET /api/...`; only its qualified name is the fixture's `from` (#29). Exact, not a suffix match,
-  // and never a file node: a file node exists even when its file produced nothing.
+  // `GET /api/...`; only its qualified name is the fixture's `from` (#29). This path is exact and skips
+  // file nodes, which exist even when their file produced nothing. The name check above it is older
+  // and looser (any file, last segment only, file nodes included); #34 tracks unifying the two.
   const callers = new Set(snapshot.nodes.filter((n) => n.kind !== 'file').map((n) => `${n.file}\0${n.qname ?? n.name}`));
   const callerQnames = new Set(snapshot.nodes.filter((n) => n.kind !== 'file').map((n) => n.qname ?? n.name));
   const hasCaller = (x) => names.has(lastName(x.from)) || (x.fromFile ? callers.has(`${x.fromFile}\0${x.from}`) : callerQnames.has(x.from));
