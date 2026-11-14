@@ -7,6 +7,9 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- The five fixtures added for forms next to colbymchenry/codegraph#2976 and #2975 now carry the
+  upstream issues they were filed as: `java-fq-static-receiver` #3290, `java-typed-var-wildcard` #3291,
+  and the three `laravel-route-*` fixtures #3292 (`expect.json` and `known-shapes.json`).
 - Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
   that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
   `java-fq-static-receiver` (`com.x.b.Util.log(...)` in a file that imports `com.x.a.*`, so only
