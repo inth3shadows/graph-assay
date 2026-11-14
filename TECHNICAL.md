@@ -78,7 +78,7 @@ counts-and-sites comparison there.
 | `lib/main.ts` | `isMain(import.meta.url)`: the main-module check every CLI uses, robust to spaces, `%` and symlinks in the checkout path. |
 | `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB and a code-graph-rag export of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus a sandbox probe: an index process sees no caller variables, a private HOME and, where `unshare` works, no network interface. |
 | `lib/snapshot-test.ts`, `benchmarks/pycg-test.ts` | The validator enforces every field the snapshot schema requires (mutation: delete each, expect a problem); the PyCG scorer against fabricated snippets and a stub subject (hits, guess-only, extras, failed index). |
-| `lib/cli-test.ts`, `metamorphic/relations-test.ts`, `labels/data-scan-test.mjs` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and every `*-test.ts` in `lib/` (elsewhere a `.ts` is an indexed test source, not a script). |
+| `lib/cli-test.ts`, `metamorphic/relations-test.ts`, `labels/data-scan-test.mjs` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and every `*-test.ts` among the TypeScript scripts (`tsconfig.json`'s `include`: `lib/`, oracle/'s own, `bench/`, `metamorphic/`, `benchmarks/`, `differential/`; elsewhere a `.ts` is an indexed test source, not a script). |
 | `oracle/baseline.ts` | `save` collects one build's results (oracle forward + missing buckets and group signatures per repo, fixture verdicts, PyCG, metamorphic) into `baseline.json`; `diff` prints every change and an effect-size verdict (SPEC §9). `--fail-on-regression` exits 1 for regression, 2 on diff errors; `--fail-on-incomplete` also exits 1 when something measured on the old build errored or is missing on the new one (`incomplete` in the gate result); `--json gate.json` saves the gate result. |
 | `lib/scores.ts`, `lib/scores-test.ts` | Shared T2 bucket counts and pure `gate(old, next)`; hermetic threshold and baseline CLI tests in `graph-assay check`. |
 | `lib/provenance.ts` | `adapterHash` hashes adapter/shared implementation bytes without Git or installation paths. `recordedAdapterHash` preserves legacy unknown provenance. Snapshots, measurement JSON and manifests carry `adapterSha256`; baseline/table inputs retain their original hashes. |
@@ -295,7 +295,7 @@ image has no harness `.git` directory. Scoring rules and historical results rema
 unchanged. Time, memory and generated dates are observations, not reproducible
 constants; the host kernel also remains visible in the platform record.
 
-T3 provenance also includes `differential/modes.ts`, the repeat comparator. `tools/repro-test.mjs`
+T3 provenance also includes `differential/modes.ts`, the repeat comparator, and `differential/package.json`, which makes it load as an ES module. `tools/repro-test.mjs`
 checks runtime imports against the Docker allowlist and runs the real canonical orchestrator/table
 code with offline subject shims, including expected differences and failed-index manifests.
 

@@ -82,7 +82,7 @@ try {
 
   // The actual runner sees deliberately different subject graphs; challenge files must still match.
   const fake=path.join(tmp,'qa');
-  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.ts','lib/subjects/code-graph-rag.ts','differential/modes.ts','metamorphic/run.ts','metamorphic/relations.ts','lib/spec.ts','lib/fixture-install.ts'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
+  for(const f of [...ADAPTER_SHARED,'lib/subjects/codegraph.ts','lib/subjects/code-graph-rag.ts','differential/modes.ts','metamorphic/run.ts','metamorphic/relations.ts','lib/spec.ts','lib/fixture-install.ts','lib/package.json','differential/package.json','metamorphic/package.json'])write(path.join(fake,f),fs.readFileSync(path.join(qa,f),'utf8'));
   const fixture=path.join(fake,'fixtures/oracle-candidates/shared');fs.cpSync(seed,fixture,{recursive:true});write(path.join(fixture,'expect.json'),{secret:'EVALUATOR_ONLY'});
   const trace=path.join(tmp,'trace.jsonl');
   write(path.join(fake,'lib/subjects/index.ts'),`import * as fs from 'node:fs';import * as path from 'node:path';

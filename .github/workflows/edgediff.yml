@@ -28,6 +28,7 @@ on:
       - .github/workflows/edgediff.yml
       - differential/builds.ts
       - differential/modes.ts
+      - differential/package.json
       - corpus/v1.txt
       - lib/subjects/codegraph.ts
       - tools/build-codegraph.sh

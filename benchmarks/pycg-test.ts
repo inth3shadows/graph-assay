@@ -18,7 +18,7 @@ const write = (f, text) => { fs.mkdirSync(path.dirname(f), { recursive: true });
 
 try {
   const fake = path.join(tmp, 'qa');
-  for (const f of [...ADAPTER_SHARED, 'lib/spec.ts', 'benchmarks/pycg.ts']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
+  for (const f of [...ADAPTER_SHARED, 'lib/spec.ts', 'lib/package.json', 'benchmarks/pycg.ts', 'benchmarks/package.json']) write(path.join(fake, f), fs.readFileSync(path.join(qa, f), 'utf8'));
   write(path.join(fake, 'lib/subjects/codegraph.ts'), '// stub\n');
   // main.py: f (lines 1-2) calls g (lines 3-4); the module calls f.
   const src = 'def f():\n    g()\ndef g():\n    pass\nf()\n';
