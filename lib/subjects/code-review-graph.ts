@@ -59,10 +59,8 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   let cmd: string[] = args ?? ['build'];
   if ((cmd[0] === 'build' || cmd[0] === 'update') && !cmd.some((a) => a === '--repo' || a.startsWith('--repo='))) cmd = [...cmd, '--repo', dir];
   const t0 = Date.now();
-  const mounts = sandbox.venvMounts(path.resolve(build));
   try {
-    const r = mounts.error ? { status: 1, signal: null, stdout: '', stderr: mounts.error, error: undefined }
-      : sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: mounts.ro });
+    const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [], venv: true });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
     if (ok && indexing) {

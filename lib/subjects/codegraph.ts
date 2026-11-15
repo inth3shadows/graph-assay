@@ -47,8 +47,9 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
   Object.assign(env, extra);
   const t0 = Date.now();
   try {
-    const r = sandbox.run([process.execPath, path.resolve(build), ...args],
-      { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [process.execPath, packageRoot(build)] });
+    // the build by its real path, so its package root (node_modules) is the one mounted
+    const js = fs.existsSync(build) ? fs.realpathSync(build) : path.resolve(build);
+    const r = sandbox.run([process.execPath, js, ...args], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [packageRoot(js)] });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     const kernelLoaded = /\[codegraph-kernel\] loaded /.test(output);
     const ok = r.status === 0 && (kernel === null || kernel === '0' || kernelLoaded);

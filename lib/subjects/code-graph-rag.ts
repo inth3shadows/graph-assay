@@ -39,9 +39,7 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   const t0 = Date.now();
   try {
     // Fail closed: code-graph-rag never indexes with network access (lib/sandbox.ts `require`).
-    const mounts = sandbox.venvMounts(path.resolve(build));
-    const r = mounts.error ? { status: 1, signal: null, stdout: '', stderr: mounts.error, error: undefined }
-      : sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [dir, h], ro: mounts.ro, require: true });
+    const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [dir, h], ro: [], venv: true, require: true });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     const ok = r.status === 0 && (args !== null || fs.existsSync(path.join(out, 'export.json')));
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };

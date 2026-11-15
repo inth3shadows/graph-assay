@@ -67,8 +67,13 @@ fi
 if [ "$do_cgr" = 1 ]; then
   venv=$subjects/cgr/venv
   step "code-graph-rag $CGR_VERSION -> $venv"
-  # --clear: a fresh venv, so its interpreter links follow $py (re-running venv over one keeps the old links)
-  run "$py" -m venv --clear "$venv"
+  # Re-running venv over an existing one keeps its old interpreter links: start fresh (--clear) only when
+  # they point at another Python than $py, so an ordinary re-run keeps the working install until pip ends.
+  if [ -e "$venv/bin/python3" ] && [ "$(readlink -f "$venv/bin/python3")" != "$(readlink -f "$(command -v "$py")")" ]; then
+    run "$py" -m venv --clear "$venv"
+  else
+    run "$py" -m venv "$venv"
+  fi
   if [ "$locked" = 1 ]; then
     run "$venv/bin/pip" install -q --only-binary=:all: --require-hashes -r "$qa/docker/requirements.lock"
   else
@@ -98,7 +103,7 @@ if [ "$do_crg" = 1 ]; then
   # working one. A venv cannot be renamed (its scripts name their interpreter by path), hence the link.
   crg=$subjects/code-review-graph
   # the venv's identity: the lock and the interpreter it is made from
-  ident() { cat "$qa/docker/crg-requirements.lock"; command -v "$py"; }
+  ident() { cat "$qa/docker/crg-requirements.lock"; command -v "$py"; "$py" -V; }
   if command -v sha256sum >/dev/null; then lockid=$(ident | sha256sum | cut -c1-12)
   else lockid=$(ident | shasum -a 256 | cut -c1-12); fi
   target=$crg/venv-$lockid
@@ -122,7 +127,9 @@ if [ "$do_sandbox" = 1 ]; then
   # without docker, which leaves the subjects running with network access there (SECURITY.md).
   if [ "$(uname -s)" = Linux ] && command -v docker >/dev/null && docker info >/dev/null 2>&1; then
     step "sandbox image graph-assay-sandbox:1 (docker/sandbox.Dockerfile)"
-    run docker build -q -t graph-assay-sandbox:1 -f "$qa/docker/sandbox.Dockerfile" "$qa/docker"
+    # a failed build warns instead of failing setup: the subjects are installed and work under unshare
+    run docker build -q -t graph-assay-sandbox:1 -f "$qa/docker/sandbox.Dockerfile" "$qa/docker" \
+      || echo "setup: sandbox image build failed; subjects run without the docker isolation backend (SECURITY.md)" >&2
   else
     echo "setup: no usable docker; sandbox image not built (pass --no-sandbox to silence)" >&2
   fi

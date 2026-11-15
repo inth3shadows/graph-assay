@@ -194,6 +194,19 @@ const crgStore = (file: string, nodes: unknown[][], edges: unknown[][]) => {
   db.close();
 };
 
+check('a missing build is a failed index, not a throw, and leaves no sandbox HOME behind (K5/A5)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-missing-build-'));
+  const homes = () => fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('cgqa-home-')).length;
+  try {
+    const before = homes();
+    for (const [name, adapter] of [['codebase-memory-mcp', cbm], ['code-review-graph', crg], ['code-graph-rag', cgr]] as const) {
+      const r = adapter.index(tmp, path.join(tmp, 'no-such-build'));
+      assert.equal(r.ok, false, name);
+    }
+    assert.equal(homes(), before, 'a sandbox HOME was left behind');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
 check('code-review-graph index: a store extract() cannot read is a failed index, not a crash', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-adapter-test-'));
   try {
