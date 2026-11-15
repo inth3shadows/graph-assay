@@ -2,9 +2,11 @@
 //   unshare  `unshare -rn`: no network (Linux with unprivileged user namespaces).
 //   docker   a throwaway container (docker/sandbox.Dockerfile): no network, no capabilities, no new
 //            privileges, read-only root, the caller's uid, a lifetime bounded inside the container, and
-//            only these bind mounts: the indexed dir and the sandbox HOME read-write, the subject's
-//            install read-only, each at the path the caller gave (and at its real path, if a symlink
-//            leads there). Where unshare only cuts the network, this also keeps the host's other files
+//            only these bind mounts: the indexed dir and the subject's install read-only, the sandbox
+//            HOME and the subject's own output dirs read-write, each at the path the caller gave (and at
+//            its real path, if a symlink leads there). The indexed dir is read-only because the host
+//            runs git and the oracle in it afterwards: a tool that could write it could plant a git
+//            config (core.fsmonitor) or a link the host would then follow (#51). Where unshare only cuts the network, this also keeps the host's other files
 //            (~/.ssh, other repos, credentials) out of reach.
 //   none     no isolation (macOS, or nothing above works): the subject runs with network access.
 // GRAPH_ASSAY_ISOLATION=unshare|docker|none picks one; otherwise the first that works, in that order
@@ -59,8 +61,8 @@ export const extraRo = () => (process.env.GRAPH_ASSAY_SANDBOX_RO ?? '').split(':
 
 export type RunOptions = {
   cwd: string; env: Record<string, string>; timeoutMs: number; nice?: boolean; maxBuffer?: number;
-  /** Paths the process may write (the indexed dir, its HOME). */ rw: string[];
-  /** Paths it must read besides the executable (mounted by itself): the subject's install. */ ro: string[];
+  /** Paths the process may write (its HOME, its own output dirs): nested inside an `ro` path is fine. */ rw: string[];
+  /** Paths it must read besides the executable (mounted by itself): the indexed dir, the subject's install. */ ro: string[];
   /** The executable is a Python venv's script: mount the venv and check its interpreter. */ venv?: boolean;
   /** Refuse to run without isolation. */ require?: boolean;
 };
@@ -112,6 +114,9 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
   for (const p of ro) add(p, true);
   // the executable by itself (never its whole directory), unless a mount already holds it
   if (![...binds.keys()].some((d) => exe === d || exe.startsWith(`${d}/`))) binds.set(exe, { src: exe, ro: true });
+  // a parent before anything mounted inside it (a rw output dir inside the ro repo), whatever the order given
+  const depth = (d: string) => d.split('/').length;
+  const ordered = [...binds].sort(([a], [b]) => depth(a) - depth(b));
   // --mount is comma-separated: a `,` (or `"`, or a newline) in a path would end the field and could
   // add options (a second source=), so such a path is refused rather than quoted.
   const unsafe = [...binds].flatMap(([d, b]) => [d, b.src]).filter((p) => /[,"\n\r]/.test(p));
@@ -132,10 +137,10 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
   return {
     name,
     clientEnv: { ...Object.fromEntries(passed.map((k) => [k, env[k]])), ...dockerEnv() },
-    args: ['run', '--rm', '--init', '--name', name, '--label', 'graph-assay.sandbox=1', '--network', 'none', '--cap-drop', 'ALL',
+    args: ['run', '--rm', '--init', '--pull', 'never', '--name', name, '--label', 'graph-assay.sandbox=1', '--network', 'none', '--cap-drop', 'ALL',
       '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp', '--pids-limit', '4096', '--user', `${uid}:${gid}`,
       '--workdir', path.resolve(o.cwd),
-      ...[...binds].flatMap(([dst, b]) => ['--mount', `type=bind,source=${b.src},target=${dst}${b.ro ? ',readonly' : ''}`]),
+      ...ordered.flatMap(([dst, b]) => ['--mount', `type=bind,source=${b.src},target=${dst}${b.ro ? ',readonly' : ''}`]),
       ...(env.PATH ? ['--env', `PATH=${env.PATH}`] : []), ...passed.flatMap((k) => ['--env', k]),
       SANDBOX_IMAGE, ...bound, ...(o.nice ? ['nice', '-n', '10'] : []), exe, ...argv.slice(1)],
   };
@@ -181,7 +186,13 @@ export function within(root: string, p: string) {
   let t: string;
   try {
     // a link that cannot be followed (dangling, a loop, no permission) counts as outside
-    t = fs.lstatSync(p, { throwIfNoEntry: false }) ? fs.realpathSync(p) : path.join(fs.realpathSync(path.dirname(p)), path.basename(p));
+    if (fs.lstatSync(p, { throwIfNoEntry: false })) t = fs.realpathSync(p);
+    else {
+      // missing: its nearest existing ancestor, resolved, plus the rest (which holds no link yet)
+      let a = path.isAbsolute(p) ? p : `${process.cwd()}/${p}`; const rest: string[] = [];
+      while (!fs.lstatSync(a, { throwIfNoEntry: false })) { rest.unshift(path.basename(a)); if (path.dirname(a) === a) return false; a = path.dirname(a); }
+      t = path.join(fs.realpathSync(a), ...rest);
+    }
   } catch { return false; }
   return t === r || t.startsWith(`${r}/`);
 }
@@ -193,16 +204,36 @@ export function within(root: string, p: string) {
  * database). A missing `p` is fine: the caller reports a missing output its own way.
  */
 export function vet(p: string): string | null {
-  const st = fs.lstatSync(p, { throwIfNoEntry: false });
-  if (!st) return null;
-  if (st.isDirectory()) {
-    for (const e of fs.readdirSync(p)) { const bad = vet(path.join(p, e)); if (bad) return bad; }
-    return null;
+  let st: fs.Stats | undefined;
+  try {
+    st = fs.lstatSync(p, { throwIfNoEntry: false });
+    if (!st) return null;
+    if (st.isDirectory()) {
+      for (const e of fs.readdirSync(p)) { const bad = vet(path.join(p, e)); if (bad) return bad; }
+      return null;
+    }
+  } catch (e) {
+    // a tree the tool made too deep (ENAMETOOLONG) or unreadable (EACCES) is a failed index, not a throw
+    return `[graph-assay] cannot check ${p} (${(e as NodeJS.ErrnoException).code ?? (e as Error).message}); the indexed tool's output is not read`;
   }
   return st.isFile() ? null : `[graph-assay] ${p} is ${st.isSymbolicLink() ? 'a link' : 'not a plain file'}; the indexed tool's output must hold only files and directories, so it is not read`;
 }
 /** vet() for each of `trees`: the first problem, or null. */
 export const vetAll = (...trees: string[]) => trees.map(vet).find(Boolean) ?? null;
+
+/**
+ * Remove a temp tree the sandboxed tool could write (its HOME): it may have left a directory it made
+ * unreadable (mode 000), which rmSync cannot descend. Such dirs get their owner bits back, then it
+ * retries. Links are never followed (lstat), so this changes nothing outside `p`.
+ */
+export function remove(p: string) {
+  try { fs.rmSync(p, { recursive: true, force: true }); return; } catch { /* below */ }
+  const open = (d: string) => {
+    try { fs.chmodSync(d, 0o700); for (const e of fs.readdirSync(d)) { const c = path.join(d, e); if (fs.lstatSync(c).isDirectory()) open(c); } } catch { /* best effort */ }
+  };
+  if (fs.lstatSync(p, { throwIfNoEntry: false })?.isDirectory()) open(p);
+  fs.rmSync(p, { recursive: true, force: true });
+}
 
 /** `p` if it stays inside `root` (within()), else an Error naming it. */
 export function confined(root: string, p: string) {

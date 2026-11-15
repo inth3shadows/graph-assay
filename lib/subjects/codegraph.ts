@@ -49,7 +49,9 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
   try {
     // the build by its real path, so its package root (node_modules) is the one mounted
     const js = fs.existsSync(build) ? fs.realpathSync(build) : path.resolve(build);
-    const r = sandbox.run([process.execPath, js, ...args], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [packageRoot(js)] });
+    // the repo read-only: the tool writes only its store (made here, as the mount needs it to exist)
+    const store = path.join(dir, '.codegraph'); fs.mkdirSync(store, { recursive: true });
+    const r = sandbox.run([process.execPath, js, ...args], { cwd: dir, env, timeoutMs, nice, rw: [store, h], ro: [dir, packageRoot(js)] });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     const kernelLoaded = /\[codegraph-kernel\] loaded /.test(output);
     // the tool could write its store: nothing in .codegraph may be a link or a special file
@@ -57,7 +59,7 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
     const ok = r.status === 0 && !bad && (kernel === null || kernel === '0' || kernelLoaded);
     return { ok, status: r.status, signal: r.signal, output: bad ? `${output}\n${bad}` : output, stdout: r.stdout ?? '', ms: Date.now() - t0, kernelLoaded };
   } finally {
-    if (ownHome) fs.rmSync(h, { recursive: true, force: true });
+    if (ownHome) sandbox.remove(h);
   }
 }
 

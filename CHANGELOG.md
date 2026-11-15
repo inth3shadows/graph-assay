@@ -12,9 +12,7 @@ All notable changes to this project are recorded here. The format follows
   throwaway container (`docker/sandbox.Dockerfile`, built by `tools/setup.sh`; `--no-sandbox` skips)
   with no network, no capabilities, no new privileges, a read-only root, a lifetime bounded inside
   the container, and only the indexed dir, the sandbox HOME and the tool's install mounted; the host
-  then refuses the tool's output if it holds anything but plain files and directories. The indexed
-  copy itself (`.git` included) is still writable from the container, and the oracle runs `git` in
-  it afterwards (SECURITY.md). The image's packages come from
+  then refuses the tool's output if it holds anything but plain files and directories. The image's packages come from
   snapshot.ubuntu.com at one date. `GRAPH_ASSAY_ISOLATION` picks the backend, `GRAPH_ASSAY_SANDBOX_RO` adds read-only mounts.
   code-graph-rag still refuses to run unisolated. `tools/setup.sh` makes the Python venvs from
   `/usr/bin/python3.12` where it exists, so they run in the container; the code-review-graph venv is
@@ -137,6 +135,12 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- The docker sandbox mounts the indexed copy read-only, `.git` included (#51). Only the sandbox HOME
+  and the tool's own output dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`) are writable,
+  so an exploited tool can no longer plant a git setting such as `core.fsmonitor`, or a link, in the
+  copy where the host later runs `git` and the oracle. `docker run --pull never` never fetches a
+  missing image by name. An output tree the host cannot read (too deep, or made unreadable) is a
+  failed index instead of a crash, and a missing index no longer reads as "leads outside".
 - The codebase-memory-mcp adapter dropped every definition in a file cbm writes without a `Module`
   node: Go and Java files, and a file whose extensionless path another file's Module took
   (`client.ts` next to `client.js`). The File node of such a code file (a known extension) is now

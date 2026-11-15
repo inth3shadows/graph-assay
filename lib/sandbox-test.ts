@@ -45,7 +45,7 @@ try {
 
   check('docker: no network, no capabilities, no new privileges, read-only root, caller uid, bounded lifetime', () => {
     const a = plan([exe, 'index'], opts).args.join(' ');
-    for (const f of ['--network none', '--cap-drop ALL', '--security-opt no-new-privileges', '--read-only', '--init', '--rm',
+    for (const f of ['--pull never', '--network none', '--cap-drop ALL', '--security-opt no-new-privileges', '--read-only', '--init', '--rm',
       `--user ${process.getuid()}:${process.getgid()}`, `${sandbox.SANDBOX_IMAGE} timeout -k 10 35 ${exe} index`]) assert.ok(a.includes(f), f);
     assert.ok(plan([exe], { ...opts, nice: true }).args.join(' ').endsWith(`timeout -k 10 35 nice -n 10 ${exe}`));
   });
@@ -178,6 +178,31 @@ try {
     assert.equal(sandbox.vetAll(path.join(t, 'a', 'b'), path.join(tmp, 'no-such')), null);
   });
 
+  check('docker: a rw dir inside a ro one is mounted after it, whatever the order given (#51)', () => {
+    const out = path.join(work, '.out'); fs.mkdirSync(out, { recursive: true });
+    const m = mounts(plan([exe], { ...opts, rw: [out, home], ro: [work] }).args);
+    assert.deepEqual(m.slice(0, 3), [`type=bind,source=${home},target=${home}`, `type=bind,source=${work},target=${work},readonly`,
+      `type=bind,source=${out},target=${out}`]);
+  });
+
+  check('within: a missing path under a missing dir is inside, not "leads outside" (D3)', () => {
+    const root = path.join(tmp, 'root3'); fs.mkdirSync(root); fs.symlinkSync(tmp, path.join(root, 'out-link'));
+    assert.equal(sandbox.within(root, path.join(root, 'no-index', 'sub', 'f.db')), true);
+    assert.doesNotThrow(() => sandbox.confined(root, path.join(root, '.codegraph', 'codegraph.db')));
+    assert.equal(sandbox.within(root, path.join(root, 'out-link', 'missing', 'f.db')), false);
+    assert.equal(sandbox.within(root, path.join(root, 'missing', '..', '..', 'f.db')), false);
+  });
+
+  check('vet: an unreadable dir is a message, not a throw; remove() clears it (D2)', () => {
+    if (process.getuid?.() === 0) { console.log('note: running as root; unreadable dirs not checked'); return; }
+    const t = path.join(tmp, 'vet2'); fs.mkdirSync(path.join(t, 'locked', 'deep'), { recursive: true }); fs.chmodSync(path.join(t, 'locked'), 0o000);
+    let bad: string | null = null;
+    assert.doesNotThrow(() => { bad = sandbox.vet(t); });
+    assert.match(bad, /cannot check .*locked \(EACCES\)/);
+    sandbox.remove(t);
+    assert.equal(fs.existsSync(t), false);
+  });
+
   check('within: a dangling link or a loop counts as outside (R3-3)', () => {
     const root = path.join(tmp, 'root2'); fs.mkdirSync(root);
     fs.symlinkSync(path.join(tmp, 'gone-dir'), path.join(root, 'dangling')); fs.symlinkSync('loop', path.join(root, 'loop'));
@@ -209,6 +234,24 @@ try {
         assert.equal(r.status, 0, r.stderr);
         assert.deepEqual(r.stdout.trim().split('\n'), ['lo', 'WROTE', 'RO']);
       });
+    });
+    check('docker (real): the repo and its .git are read-only, its output dir writable: no git config or link plant reaches the host (D1)', () => {
+      const repo = path.join(tmp, 'd1'); const out = path.join(repo, '.out'); fs.mkdirSync(path.join(repo, '.git'), { recursive: true }); fs.mkdirSync(out);
+      fs.writeFileSync(path.join(repo, '.git', 'config'), '[core]\n'); fs.writeFileSync(path.join(repo, 'a.ts'), 'x\n');
+      withEnv({ GRAPH_ASSAY_ISOLATION: 'docker' }, () => {
+        const r = sandbox.run(['/bin/sh', '-c', [
+          `printf '[core]\\n\\tfsmonitor = touch ${tmp}/PWNED\\n' >> .git/config 2>/dev/null || echo GIT-RO`,
+          `ln -sf ${os.homedir()}/.bashrc tsconfig.graph-assay-oracle.json 2>/dev/null || echo ROOT-RO`,
+          `ln -sf ${os.homedir()}/.bashrc a.ts 2>/dev/null || echo SRC-RO`,
+          'echo y > .out/db && echo OUT-RW'].join('; ')], { ...opts, cwd: repo, rw: [out, home], ro: [repo] });
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(r.stdout.trim().split('\n'), ['GIT-RO', 'ROOT-RO', 'SRC-RO', 'OUT-RW']);
+      });
+      assert.equal(fs.readFileSync(path.join(repo, '.git', 'config'), 'utf8'), '[core]\n');
+      assert.equal(fs.lstatSync(path.join(repo, 'a.ts')).isFile(), true);
+      // the host's own git in the copy afterwards runs nothing the tool planted
+      spawnSync('git', ['-C', repo, 'status'], { stdio: 'ignore' });
+      assert.equal(fs.existsSync(path.join(tmp, 'PWNED')), false);
     });
     check('docker (real): a repo reached through a symlink is the repo inside (K1/A3)', () => {
       const link = path.join(tmp, 'link2'); fs.symlinkSync(work, link);

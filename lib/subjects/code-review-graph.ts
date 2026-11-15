@@ -60,7 +60,7 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   if ((cmd[0] === 'build' || cmd[0] === 'update') && !cmd.some((a) => a === '--repo' || a.startsWith('--repo='))) cmd = [...cmd, '--repo', dir];
   const t0 = Date.now();
   try {
-    const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [], venv: true });
+    const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [h], ro: [dir], venv: true }); // the repo read-only: crg writes its graph under HOME
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
     // the tool could write its store and the output dir: nothing in them may be a link or a special file
@@ -79,7 +79,7 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     }
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
-    if (ownHome) fs.rmSync(h, { recursive: true, force: true });
+    if (ownHome) sandbox.remove(h);
   }
 }
 
