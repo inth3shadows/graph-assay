@@ -4,12 +4,13 @@
 // points it costs. Model-free and reproducible: it reads finished oracle work dirs and runs nothing.
 //
 // Usage: node bench/triage.ts [--work <oracle work dir>] [--corpus corpus/v1.txt] [--split dev]
-//                              [--t3 <dir with meta-cg.json / meta-cgr.json>] [--t1 <dir with replay-cg.json>]
+//                              [--t3 <dir with meta-<tag>.json>] [--t1 <dir with replay-cg.json>] [--subjects a,b,...]
 //                              [--known fixtures/known-shapes.json] [--top 15] [--md out.md] [--json out.json]
 //   --known: each fixture's shapes (tools/triage/tag-fixtures.ts); a codegraph shape whose key a fixture of
 //   the same language produces lists that fixture and its upstream issue, with its replay verdict from --t1
 //   (BROKEN: still open at this build). A match is a candidate, not proof: one key can hold several bugs.
-//   --work: the dir holding w-<name>[-code-graph-rag] (default: the configured oracle work dir); for a
+//   --subjects: which subjects (lib/subjects/names.ts); default every subject with a work dir in the split.
+//   --work: the dir holding w-<name>[-<subject>] (default: the configured oracle work dir); for a
 //   canonical reproduction, <results>/work.
 //
 // A shape is one bucket key: verdict or cause, edge kind, how the subject resolved it, and target kind
@@ -24,6 +25,7 @@ import { config } from '../lib/config.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
 import { forward, missing } from '../lib/scores.ts';
 import { isMain } from '../lib/main.ts';
+import { SUBJECT_NAMES, TAG, workSuffix, baseWorkDir, parseSubjects } from '../lib/subjects/names.ts';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
@@ -31,7 +33,7 @@ const work = opt('--work', config.work); const corpus = opt('--corpus', CORPUS);
 const t3Dir = opt('--t3', null); const t1Dir = opt('--t1', null); const top = Number(opt('--top', '15'));
 const knownFile = opt('--known', path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'known-shapes.json'));
 const mdOut = opt('--md', null); const jsonOut = opt('--json', null);
-const SUBJECTS = { codegraph: { sfx: '', tag: 'cg' }, 'code-graph-rag': { sfx: '-code-graph-rag', tag: 'cgr' } };
+const subjectsOpt = opt('--subjects', null);
 const FORWARD_BAD = /^(wrong-target|external|local-shadow|cross-file-unimported|receiver-fallback)\|/;
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const workDir = (name, sfx) => [`w-pub-${name}${sfx}`, `w-${name}${sfx}`].map((d) => path.join(work, d)).find((d) => fs.existsSync(path.join(d, 'out.json')));
@@ -121,7 +123,10 @@ if (isMain(import.meta.url)) {
   const repos = readRepos(corpus, split);
   const known = fs.existsSync(knownFile) ? readJson(knownFile) : null;
   const result = { work, corpus: path.basename(corpus), split, subjects: {} };
-  for (const [subj, { sfx, tag }] of Object.entries<any>(SUBJECTS)) {
+  // A subject with no work dir in the split would only list every repo as not run: left out unless named.
+  const chosen = subjectsOpt ? parseSubjects(subjectsOpt) : SUBJECT_NAMES.filter((s) => repos.some((r) => workDir(r.name, workSuffix(s))));
+  for (const subj of chosen) {
+    const sfx = workSuffix(subj); const tag = TAG[subj];
     const rows = [];
     const notRun = [];
     for (const r of repos) {
@@ -152,7 +157,7 @@ if (isMain(import.meta.url)) {
       for (const g of s.groups.slice(0, 3)) {
         md.push(`- **${g.n}** in ${g.repo}: \`${(g.code ?? '').slice(0, 100)}\``,
           `  - subject: \`${g.codegraph}\``, `  - compiler: \`${g.scipDef ? `${g.scipDef.file}:${g.scipDef.line}` : '-'}\` ${g.scip ? `(\`${g.scip.split(' ').pop().slice(-60)}\`)` : ''}`,
-          `  - inspect: \`node oracle/site.ts ${g.workDir.replace(/-code-graph-rag$/, '')} ${g.sites[0].split(':').slice(0, 2).join(':')} --subject ${subj}\``);
+          `  - inspect: \`node oracle/site.ts ${baseWorkDir(g.workDir)} ${g.sites[0].split(':').slice(0, 2).join(':')} --subject ${subj}\``);
       }
       md.push('');
     });

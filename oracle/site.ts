@@ -3,9 +3,9 @@
 // inspectability). Reads a finished oracle work dir (run.sh with ORACLE_ALLSITES=1); runs nothing.
 //
 // Usage: node oracle/site.ts <name | work dir> <file:line> [called name]
-//                              [--subject codegraph|code-graph-rag|all] [--no-scip]
+//                              [--subject <name>|all] [--no-scip]
 //   <name>: the run.sh name (`pub-express`) or a corpus name (`express`); work dirs are
-//   w-<name> and w-<name>-code-graph-rag under the oracle work dir. --subject all (default) shows
+//   w-<name> and w-<name>-<subject> under the oracle work dir (lib/subjects/names.ts). --subject all (default) shows
 //   every subject that has a work dir. --no-scip skips decoding the SCIP index (large repos).
 // For each subject: the forward and missing-edge records at the site (bucket key and what it means),
 // the subject's call / instantiate edges on that line, SCIP's symbol and definition(s), and the
@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { config } from '../lib/config.ts';
 import { isMain } from '../lib/main.ts';
+import { SUBJECT_NAMES, workSuffix, baseWorkDir } from '../lib/subjects/names.ts';
 
 /** What each bucket's first segment means (oracle/forward.ts, oracle/missing.ts; SPEC §9 maps them to match / mismatch / unaligned). */
 export const MEANING = {
@@ -80,14 +81,14 @@ if (isMain(import.meta.url)) {
   const flag = (k) => { const i = args.indexOf(k); if (i < 0) return false; args.splice(i, 1); return true; };
   const which = opt('--subject', 'all'); const noScip = flag('--no-scip');
   const [target, site, name] = args;
-  if (!target || !/:\d+$/.test(site ?? '')) { console.error('usage: site.ts <name | work dir> <file:line> [called name] [--subject codegraph|code-graph-rag|all] [--no-scip]'); process.exit(2); }
+  if (!target || !/:\d+$/.test(site ?? '')) { console.error('usage: site.ts <name | work dir> <file:line> [called name] [--subject <name>|all] [--no-scip]'); process.exit(2); }
   const file = site.slice(0, site.lastIndexOf(':')); const line = Number(site.slice(site.lastIndexOf(':') + 1));
 
-  const base = fs.existsSync(target) ? path.resolve(target).replace(/-code-graph-rag$/, '')
+  const base = fs.existsSync(target) ? baseWorkDir(path.resolve(target))
     : [`w-pub-${target}`, `w-${target}`].map((d) => path.join(config.work, d)).find((d) => fs.existsSync(d));
   if (!base) { console.error(`no work dir for ${target} under ${config.work}`); process.exit(1); }
   const runName = path.basename(base).replace(/^w-/, '');
-  const subjects = Object.entries({ codegraph: base, 'code-graph-rag': `${base}-code-graph-rag` })
+  const subjects = SUBJECT_NAMES.map((s) => [s, `${base}${workSuffix(s)}`])
     .filter(([s, d]) => (which === 'all' || which === s) && fs.existsSync(path.join(d, 'out.json')));
   if (!subjects.length) { console.error(`no oracle results for ${which} at ${base}`); process.exit(1); }
 

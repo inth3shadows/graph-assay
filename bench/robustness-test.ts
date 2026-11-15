@@ -6,7 +6,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.ts';
+import { summarizeRobustness, compareChallenges, compareAll, robustnessMarkdown } from './robustness.ts';
+import { SUBJECT_NAMES } from '../lib/subjects/names.ts';
 import { applyRelation } from '../metamorphic/relations.ts';
 import { ADAPTER_SHARED } from '../lib/provenance.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
@@ -47,6 +48,14 @@ try {
   check('legacy setup errors remain visible rather than disappearing from all relations', () => {
     const out = summarizeRobustness([{ seed: 'bad', relation: '-', error: 'index' }], 'codegraph');
     assert.equal(out.relations.setup.errors, 1); assert.equal(out.relations.setup.passRate, 0); assert.equal(out.relations.repeat.passRate, null);assert.equal(out.complete,false);
+  });
+  check('three subjects: a challenge matches only if every subject shares it with the first', () => {
+    const a = summarizeRobustness([row(), row({ seed: 's2' })], 'codegraph');
+    const b = summarizeRobustness([row({ subject: 'code-graph-rag' }), row({ seed: 's2', subject: 'code-graph-rag' })], 'code-graph-rag');
+    const c = summarizeRobustness([row({ subject: 'code-review-graph' }), row({ seed: 's2', subject: 'code-review-graph', challengeSha256: other })], 'code-review-graph');
+    const cmp = compareAll([a, b, c]);
+    assert.equal(cmp.matched.length, 1); assert.equal(cmp.mismatched.length, 1); assert.equal(cmp.unknown.length, 0); assert.equal(cmp.unpaired.length, 0);
+    assert.deepEqual(compareAll([a, b]).matched.length, 2);
   });
   check('comparison distinguishes mismatched, unknown and unpaired; nulls cannot match', () => {
     const a = summarizeRobustness([row(), row({ seed: 'unknown', challengeSha256: null }), row({ seed: 'alone' })], 'codegraph');
@@ -117,7 +126,7 @@ export const subject=(name)=>({name,
     const output=path.join(tmp,'tables.json');const args=['--corpus',corpus,'--json',output];
     // canonical tables need every T2 run (SPEC §8), so the canonical cases get one per subject
     const work=path.join(tmp,'work');for(const sfx of ['','-code-graph-rag']){write(path.join(work,`w-pub-tiny${sfx}`,'out.json'),{buckets:{'ok|calls':1},skipped:{},spec:SPEC_VERSION});write(path.join(work,`w-pub-tiny${sfx}`,'out-missing.json'),{buckets:{'missing|found|ts|method':1},spec:SPEC_VERSION});}
-    let r=run(path.join(qa,'bench/tables.ts'),args,{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/NOT RUN/);assert.equal(read(output).missingT3Runs.length,2);
+    let r=run(path.join(qa,'bench/tables.ts'),args,{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/NOT RUN/);assert.deepEqual(read(output).missingT3Runs,SUBJECT_NAMES);
     r=run(path.join(qa,'bench/tables.ts'),[...args,'--canonical'],{ORACLE_WORK:work});assert.notEqual(r.status,0,'canonical output requires T3 even without --t3');
     const t3=path.join(tmp,'t3');write(path.join(t3,'meta-cg.json'),[row()]);write(path.join(t3,'meta-cgr.json'),[row({subject:'code-graph-rag'})]);
     r=run(path.join(qa,'bench/tables.ts'),[...args,'--t3',t3],{ORACLE_WORK:path.join(tmp,'absent')});assert.equal(r.status,0,r.stderr);let data=read(output);assert.equal(data.t3Comparison.matched.length,1);assert.deepEqual(data.subjects.codegraph.robustness.adapterHashes,[hash]);

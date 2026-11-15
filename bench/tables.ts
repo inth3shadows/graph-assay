@@ -4,11 +4,14 @@
 // to its coverage waterfall and resource use.
 //
 // Usage: node bench/tables.ts [--corpus corpus/v1.txt] [--split dev] [--t1 <dir>] [--noise <noise.json>] [--t3 <dir>]
-//                              [--md out.md] [--json out.json] [--seed 1] [--canonical]
+//                              [--subjects a,b,...] [--md out.md] [--json out.json] [--seed 1] [--canonical]
+//   --subjects: which subjects to table (lib/subjects/names.ts). Default: every subject with an input
+//   (a work dir for the split, a T1 or a T3 file); with no inputs at all, every subject. The averages
+//   cover the repos every chosen subject ran (SPEC §8), so a subject run on fewer repos narrows them.
 //   --canonical: tools/repro.ts passes it inside the Docker image; only those tables are canonical
 //   (SPEC §10). Without it the banner marks a development run.
 //   Oracle results are read from the work dirs run.sh leaves: w-pub-<name> (or w-<name>), plus
-//   w-…-code-graph-rag. --t1 <dir>: replay-<tag>.json and pycg-<tag>.json (tag cg / cgr).
+//   w-…-<subject> for the others. --t1 <dir>: replay-<tag>.json and pycg-<tag>.json (tags in names.ts).
 //
 // T2 call-site, forward (precision of the subject's located call edges against SCIP):
 //   match     ok, ok-overload-set (SPEC §4 equivalences)       + tolerant: ok-other-column, local-module-alias
@@ -26,7 +29,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { config } from '../lib/config.ts';
-import { summarizeRobustness, compareChallenges, robustnessMarkdown } from './robustness.ts';
+import { summarizeRobustness, compareAll, robustnessMarkdown } from './robustness.ts';
+import { SUBJECT_NAMES, TAG, workSuffix, parseSubjects } from '../lib/subjects/names.ts';
 import { recordedAdapterHash } from '../lib/provenance.ts';
 import { forward, missing, pairs } from '../lib/scores.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
@@ -40,7 +44,7 @@ const t3Dir = opt('--t3', null);
 const t1Dir = opt('--t1', null); const noiseFile = opt('--noise', null);
 const canonical = (() => { const i = args.indexOf('--canonical'); if (i < 0) return false; args.splice(i, 1); return true; })();
 const mdOut = opt('--md', null); const jsonOut = opt('--json', null); const seed = Number(opt('--seed', '1'));
-const SUBJECTS = { codegraph: { sfx: '', tag: 'cg' }, 'code-graph-rag': { sfx: '-code-graph-rag', tag: 'cgr' } };
+const subjectsOpt = opt('--subjects', null);
 
 const workDir = (name, sfx) => [`w-pub-${name}${sfx}`, `w-${name}${sfx}`].map((d) => path.join(config.work, d)).find((d) => fs.existsSync(path.join(d, 'out.json')));
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { throw new Error(`${f}: ${e.message}`); } };
@@ -63,6 +67,10 @@ const pct = (x) => (Number.isNaN(x) ? '-' : `${(100 * x).toFixed(1)}%`);
 const ci = ([a, b]) => (Number.isNaN(a) ? '' : ` [${(100 * a).toFixed(1)}-${(100 * b).toFixed(1)}]`);
 
 const repos = readRepos(corpus, split);
+const hasInput = (s) => repos.some((r) => workDir(r.name, workSuffix(s)))
+  || [[t1Dir, 'replay'], [t1Dir, 'pycg'], [t3Dir, 'meta']].some(([d, stage]) => d && fs.existsSync(path.join(d, `${stage}-${TAG[s]}.json`)));
+const chosen = subjectsOpt ? parseSubjects(subjectsOpt) : SUBJECT_NAMES.filter(hasInput);
+const SUBJECTS = Object.fromEntries((chosen.length ? chosen : SUBJECT_NAMES).map((s) => [s, { sfx: workSuffix(s), tag: TAG[s] }]));
 // SPEC §9: a language whose oracle is too noisy to score against is diagnostic. Its repos are shown
 // per repo but left out of the T2 averages. Rule: the 95% Wilson lower bound of "SCIP right where it
 // answers" in the labelled sample is under DIAGNOSTIC_FLOOR. Without --noise nothing is excluded.
@@ -118,6 +126,7 @@ result.diagnostic = Object.fromEntries(diagnostic);
 const md = [`# Benchmark tables v1 — corpus ${result.corpus}, split \`${split}\``, '',
   'Edge tiers lead (decision 2026-11-05); T0 question accuracy is experimental and not shown here. Both T2 tracks (SPEC §3), side by side, never combined.',
   `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/tables.ts\`. ${canonical ? 'Canonical: reproduced in the Docker image by `tools/repro.ts` (`manifest.json` records every input; SPEC §10).' : 'Development run: canonical tables come only from `tools/repro.ts` in the Docker image (SPEC §10); this machine\'s Python environment can resolve the standard library differently.'}`, ''];
+md.push(`Subjects: ${Object.keys(SUBJECTS).join(', ')}${subjectsOpt ? ' (--subjects)' : ' (every subject with an input)'}.`, '');
 md.push('Adapter hashes (from recorded inputs): ' + Object.entries<any>(result.subjects).map(([s, v]) => `${s}: ${v.adapterHashes.length ? v.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}`).join('; '), '');
 if (result.missingRuns.length) md.push(`**Not run (left out of every subject's averages):** ${result.missingRuns.join(', ')}`, '');
 for (const [s, v] of Object.entries<any>(result.subjects)) if (v.failed.length) md.push(`**${s} failed (scored as misses, SPEC §8):** ${v.failed.join(', ')}`, '');
@@ -196,7 +205,7 @@ for (const [name, { tag }] of Object.entries<any>(SUBJECTS)) {
   result.subjects[name].robustness = robustness[name];
   if (robustness[name].status === 'NOT RUN') result.missingT3Runs.push(name);
 }
-result.t3Comparison = compareChallenges(robustness.codegraph, robustness['code-graph-rag']);
+result.t3Comparison = compareAll(Object.values(robustness));
 if (canonical && (Object.values<any>(robustness).some((s) => !s.complete || Object.values<any>(s.relations).some((r) => r.errors || r.unverified))
   || result.t3Comparison.mismatched.length || result.t3Comparison.unknown.length || result.t3Comparison.unpaired.length)) throw new Error('incomplete or mismatched canonical T3 evidence');
 md.push('', ...robustnessMarkdown(robustness, result.t3Comparison), '');

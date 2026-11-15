@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Tables, triage and the site inspector read every registered subject, not just codegraph and
+  code-graph-rag. `lib/subjects/names.ts` is the data-only subject list the scorers use (work-dir
+  suffix `-<subject>`, T1/T3 tags `cg`/`cgr`/`cbm`/`crg`); `names-test.ts` checks it against the
+  adapter registry. `bench/tables.ts` and `bench/triage.ts` take `--subjects a,b`, defaulting to every
+  subject with an input; averages still cover only the repos every chosen subject ran (SPEC §8). T3
+  compares each subject's challenge fingerprints with the first subject's.
 - A fourth subject, code-review-graph 2.4.0 (`lib/subjects/code-review-graph.ts`): builds in a
   sandboxed HOME and data dir with Jedi enrichment off, and maps the graph's nodes and edges (paths
   made relative) to a snapshot v1 with site lines and unresolved calls; an ambiguous call becomes a

@@ -20,10 +20,10 @@ const repos = readRepos(undefined, 'dev').map((r) => r.name);
 
 const PAIRS = (o?) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
   decorators: { total: 0, found: 0 }, unmappedEdges: { caller: 2, target: 1 }, skippedEdges: { 'skip-framework-self-site': 4 }, callerRanges: { enclosing: 5, braces: 0 }, unitsAtFileLevel: 1, ...o });
-function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null } = {}) {
+function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'] } = {}) {
   fs.rmSync(work, { recursive: true, force: true });
   for (const r of repos) {
-    for (const sfx of ['', '-code-graph-rag']) {
+    for (const sfx of sfxs) {
       const dir = path.join(work, `w-pub-${r}${sfx}`);
       if (`${r}${sfx}` === missingDir) continue;
       if (`${r}${sfx}` === failed) {
@@ -127,6 +127,24 @@ try {
     assert.equal(cgr.agg['recall strict'].micro, 0.8);
     assert.ok(Math.abs(cgr.agg['pair recall'].micro - 0.8) < 1e-12);
     assert.match(md, /code-graph-rag records no site lines/);
+  });
+  check('every subject with work dirs is tabled; --subjects narrows the set', () => {
+    fabricate(work, { sfxs: ['', '-code-graph-rag', '-code-review-graph'] });
+    const all = tables(work);
+    assert.equal(all.status, 0, all.stderr);
+    assert.deepEqual(Object.keys(all.json.subjects), ['codegraph', 'code-graph-rag', 'code-review-graph']);
+    assert.equal(all.json.subjects['code-review-graph'].agg['recall strict'].macro, 0.8);
+    assert.match(all.md, /Subjects: codegraph, code-graph-rag, code-review-graph \(every subject with an input\)/);
+    assert.match(all.md, /\| code-review-graph \| 90\.0%/);
+    const two = tables(work, ['--subjects', 'codegraph,code-review-graph']);
+    assert.deepEqual(Object.keys(two.json.subjects), ['codegraph', 'code-review-graph']);
+    const bad = tables(work, ['--subjects', 'codegraph,nope']);
+    assert.equal(bad.status, 2); assert.match(bad.stderr, /unknown subject nope/);
+  });
+  check('a third subject missing a repo leaves it out of every subject unless that subject is dropped (SPEC §8)', () => {
+    fabricate(work, { sfxs: ['', '-code-graph-rag', '-codebase-memory-mcp'], missingDir: `${repos[2]}-codebase-memory-mcp` });
+    assert.deepEqual(tables(work).json.averagedRepos, repos.filter((r) => r !== repos[2]));
+    assert.deepEqual(tables(work, ['--subjects', 'codegraph,code-graph-rag']).json.averagedRepos, repos);
   });
   check('confidence bounds print to one decimal place (SPEC §9)', () => {
     fabricate(work);

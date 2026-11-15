@@ -65,6 +65,17 @@ export function compareChallenges(a, b) {
   return result;
 }
 
+/** Every subject's challenges against the first's: a key is matched only if it matches for every pair. */
+export function compareAll(summaries) {
+  const [first, ...rest] = summaries;
+  if (!first) return { matched: [], mismatched: [], unknown: [], unpaired: [] };
+  const pairs = (rest.length ? rest : [first]).map((b) => compareChallenges(first, b));
+  const union = (k) => [...new Set(pairs.flatMap((p) => p[k]))];
+  const bad = new Set(['mismatched', 'unknown', 'unpaired'].flatMap(union));
+  return { matched: union('matched').filter((k) => !bad.has(k) && pairs.every((p) => p.matched.includes(k))),
+    mismatched: union('mismatched'), unknown: union('unknown'), unpaired: union('unpaired') };
+}
+
 export function robustnessMarkdown(subjects, comparison) {
   const md = ['## T3 robustness (seed runs)', '',
     '| subject | relation | clean / eligible | changed | errors | not applicable | unverified | repeat: raw identical / graph-only / unknown |',
