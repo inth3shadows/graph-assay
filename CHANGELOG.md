@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Subject isolation where unprivileged user namespaces are blocked (Ubuntu 24.04's AppArmor default):
+  `lib/sandbox.ts` runs every adapter's index process under `unshare -rn` where it works, else in a
+  throwaway container (`docker/sandbox.Dockerfile`, built by `tools/setup.sh`; `--no-sandbox` skips)
+  with no network, no capabilities, no new privileges, a read-only root and only the indexed dir,
+  the sandbox HOME and the tool's install mounted, which also keeps the host's other files out of
+  reach. `GRAPH_ASSAY_ISOLATION` picks the backend, `GRAPH_ASSAY_SANDBOX_RO` adds read-only mounts.
+  code-graph-rag still refuses to run unisolated. `tools/setup.sh` makes the Python venvs from
+  `/usr/bin/python3.12` where it exists, so they run in the container; the code-review-graph venv is
+  keyed by its interpreter as well as its lock. `lib/sandbox.ts` is part of every adapter hash.
 - Tables, triage and the site inspector read every registered subject, not just codegraph and
   code-graph-rag. `lib/subjects/names.ts` is the data-only subject list the scorers use (work-dir
   suffix `-<subject>`, T1/T3 tags `cg`/`cgr`/`cbm`/`crg`); `names-test.ts` checks it against the

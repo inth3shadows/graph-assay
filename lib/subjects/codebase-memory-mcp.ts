@@ -11,6 +11,7 @@ import { config } from '../config.ts';
 import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
 import { adapterHash } from '../provenance.ts';
 import { isMain } from '../main.ts';
+import * as sandbox from '../sandbox.ts';
 import type { Snapshot, SnapshotEdge, SnapshotNode } from '../types.ts';
 
 export const name = 'codebase-memory-mcp';
@@ -25,14 +26,13 @@ export const defaultBuild = () => path.join(config.subjects, 'codebase-memory-mc
 // Environment an index may see: locale, PATH and cbm's own tuning switches; never its cache, root,
 // download or diagnostics settings, which the sandbox sets or leaves off.
 const PASS_ENV = /^(PATH|LANG|LC_[A-Z]+|TZ|CBM_(WORKERS|MEM_BUDGET_MB|LOG_LEVEL))$/;
-let offline;
-/** `unshare -rn` works here (Linux with unprivileged user namespaces); checked once. */
-export const canIsolateNetwork = () => (offline ??= spawnSync('unshare', ['-rn', 'true']).status === 0);
+/** The index runs isolated (lib/sandbox.ts: unshare or docker), not with network access. */
+export const canIsolateNetwork = sandbox.isolated;
 
 /**
  * Index `dir` with the cbm binary `build`: one-shot `cli index_repository` (mode full, no
  * persistence artifact in the repo), HOME and CBM_CACHE_DIR in a temp dir, CBM_ALLOWED_ROOT = `dir`,
- * an allowlisted environment and, where unshare works, no network. Then copy the project's `nodes`
+ * an allowlisted environment and isolation where it can (lib/sandbox.ts). Then copy the project's `nodes`
  * and `edges` tables to `dir`/.graph-assay/cbm.db (the full store carries search indexes and vectors
  * a snapshot never reads). `home` keeps HOME and cache across calls (incremental re-index); `args`
  * other than the default run as `<build> <args>` in the same sandbox. Returns {ok, status, signal,
@@ -51,12 +51,10 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     HOME: h, XDG_CONFIG_HOME: path.join(h, '.config'), XDG_CACHE_HOME: path.join(h, '.cache'), TMPDIR: path.join(h, 'tmp'),
     CBM_CACHE_DIR: cache, CBM_ALLOWED_ROOT: dir, DO_NOT_TRACK: '1', NO_COLOR: '1', ...extra,
   };
-  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build),
-    ...(args ?? ['cli', '--quiet', 'index_repository', '--repo-path', dir, '--name', PROJECT, '--mode', 'full'])];
+  const argv = [path.resolve(build), ...(args ?? ['cli', '--quiet', 'index_repository', '--repo-path', dir, '--name', PROJECT, '--mode', 'full'])];
   const t0 = Date.now();
   try {
-    const r = spawnSync(nice ? 'nice' : argv[0], nice ? ['-n', '10', ...argv] : argv.slice(1),
-      { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs });
+    const r = sandbox.run(argv, { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [path.dirname(path.resolve(build))] });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
     if (ok && !args) {

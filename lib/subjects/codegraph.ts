@@ -9,6 +9,7 @@ import { config } from '../config.ts';
 import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
 import { adapterHash } from '../provenance.ts';
 import { isMain } from '../main.ts';
+import * as sandbox from '../sandbox.ts';
 import type { Snapshot, SnapshotEdge, SnapshotFile, SnapshotNode, Unresolved } from '../types.ts';
 
 export const name = 'codegraph';
@@ -21,15 +22,14 @@ export const defaultBuild = () => config.codegraphBuild;
  * syncs). `kernel`: '0' (default) = wasm; any other value must load the native kernel; null leaves
  * CODEGRAPH_KERNEL unset (codegraph's own default). `nice` runs it at nice 10. `env` adds variables
  * (codegraph's switches, e.g. CODEGRAPH_PARSE_WORKERS) on top of the sandbox. The sandbox passes
- * only an allowlisted environment (no tokens or keys from the caller's shell) and, where the kernel
- * allows unprivileged namespaces (Linux), runs without network (`unshare -rn`); see SECURITY.md.
+ * only an allowlisted environment (no tokens or keys from the caller's shell) and runs isolated where it
+ * can (lib/sandbox.ts: `unshare -rn`, else a no-network container); see SECURITY.md.
  * Returns {ok, status, signal, output (stdout + stderr), stdout, ms, kernelLoaded}.
  */
 // Environment a codegraph index may see: locale, paths and codegraph's own switches; nothing else.
 const PASS_ENV = /^(PATH|LANG|LC_[A-Z]+|TZ|TMPDIR|NODE_OPTIONS|CODEGRAPH_[A-Z0-9_]+)$/;
-let offline;
-/** `unshare -rn` works here (Linux with unprivileged user namespaces); checked once. */
-export const canIsolateNetwork = () => (offline ??= spawnSync('unshare', ['-rn', 'true']).status === 0);
+/** The index runs isolated (lib/sandbox.ts: unshare or docker), not with network access. */
+export const canIsolateNetwork = sandbox.isolated;
 
 export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0', timeoutMs = 600_000, args = ['init', '-y'], home = null, nice = false, env: extra = {} } = {}) {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
@@ -45,11 +45,10 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
   if (kernel !== null) env.CODEGRAPH_KERNEL = kernel;
   if (kernel !== null && kernel !== '0') env.CODEGRAPH_KERNEL_DEBUG = '1';
   Object.assign(env, extra);
-  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), process.execPath, path.resolve(build), ...args];
   const t0 = Date.now();
   try {
-    const r = spawnSync(nice ? 'nice' : argv[0], nice ? ['-n', '10', ...argv] : argv.slice(1),
-      { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs });
+    const r = sandbox.run([process.execPath, path.resolve(build), ...args],
+      { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [process.execPath, packageRoot(build)] });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     const kernelLoaded = /\[codegraph-kernel\] loaded /.test(output);
     const ok = r.status === 0 && (kernel === null || kernel === '0' || kernelLoaded);
@@ -57,6 +56,12 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
   } finally {
     if (ownHome) fs.rmSync(h, { recursive: true, force: true });
   }
+}
+
+/** The build's package root (its node_modules live there): the nearest dir above it with a package.json. */
+function packageRoot(build: string) {
+  for (let d = path.dirname(path.resolve(build)); d !== path.dirname(d); d = path.dirname(d)) if (fs.existsSync(path.join(d, 'package.json'))) return d;
+  return path.dirname(path.resolve(build));
 }
 
 /** The build's checkout sha (or null), for the snapshot's subject.version. */

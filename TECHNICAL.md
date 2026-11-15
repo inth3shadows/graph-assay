@@ -24,12 +24,12 @@ Design decisions:
   (nodes, files, edges with site line/column and the reference as written, unresolved references,
   capabilities). A second tool needs one more adapter, not changes to the scorers:
   `lib/subjects/code-graph-rag.ts` is that adapter for code-graph-rag 0.5.0 (`cgr start
-  --update-graph -o`, offline under `unshare -rn`, sandboxed HOME; its `exact` / `heuristic` /
+  --update-graph -o`, isolated (`lib/sandbox.ts`; it refuses to run without isolation), sandboxed HOME; its `exact` / `heuristic` /
   `overload` resolution becomes `resolvedBy`, and anything but `exact` becomes provenance; Module
   nodes become file nodes; nodes without a path in the repo are dropped).
   `lib/subjects/codebase-memory-mcp.ts` does the same for codebase-memory-mcp 0.12.1 (`cli
   index_repository`, HOME and `CBM_CACHE_DIR` in a temp dir, `CBM_ALLOWED_ROOT` = the repo, network
-  unshared where possible; its store's `nodes` and `edges` are copied to `.graph-assay/cbm.db`).
+  isolated by `lib/sandbox.ts`; its store's `nodes` and `edges` are copied to `.graph-assay/cbm.db`).
   Its `strategy` becomes `resolvedBy`, and the strategies cbm itself calls weak name-only matches
   (`unique_name`, `suffix_match`, `field_type_hint`, `fuzzy`) become provenance. cbm keeps one edge
   per caller and callee with one site's line, so it declares no site lines and is scored on the
@@ -39,7 +39,7 @@ Design decisions:
   the file, and its definitions keep cbm's bare names. A DEFINES edge that crosses files is dropped.
   `lib/subjects/code-review-graph.ts` does the same for code-review-graph 2.4.0 (`build`, core
   install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
-  unshared where possible; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
+  isolated by `lib/sandbox.ts`; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
   path made relative to the repo). Its confidence tier becomes `resolvedBy`, and `AMBIGUOUS` becomes
   provenance: crg stores an ambiguous call with a bare target and its candidates in
   `extra.ambiguous_targets`, and the adapter links it to each candidate as a guessed edge. Other
@@ -109,6 +109,7 @@ counts-and-sites comparison there.
 | `lib/cli-test.ts`, `metamorphic/relations-test.ts`, `labels/data-scan-test.ts` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and every `*-test.ts` among the TypeScript scripts (`tsconfig.json`'s `include`: `lib/`, oracle/'s own, `bench/`, `metamorphic/`, `benchmarks/`, `differential/`, `labels/`, `tools/` with `tools/triage/`; elsewhere a `.ts` is an indexed test source, not a script). |
 | `oracle/baseline.ts` | `save` collects one build's results (oracle forward + missing buckets and group signatures per repo, fixture verdicts, PyCG, metamorphic) into `baseline.json`; `diff` prints every change and an effect-size verdict (SPEC §9). `--fail-on-regression` exits 1 for regression, 2 on diff errors; `--fail-on-incomplete` also exits 1 when something measured on the old build errored or is missing on the new one (`incomplete` in the gate result); `--json gate.json` saves the gate result. |
 | `lib/scores.ts`, `lib/scores-test.ts` | Shared T2 bucket counts and pure `gate(old, next)`; hermetic threshold and baseline CLI tests in `graph-assay check`. |
+| `lib/sandbox.ts`, `lib/sandbox-test.ts`, `docker/sandbox.Dockerfile` | How every adapter's index process is isolated. `unshare -rn` (no network) where unprivileged user namespaces work; else, once `tools/setup.sh` has built `graph-assay-sandbox:1` (pinned Ubuntu 24.04 plus python3.12 and git), a throwaway container: `--network none`, `--cap-drop ALL`, `no-new-privileges`, read-only root, the caller's uid, with the indexed dir and sandbox HOME mounted read-write and the subject's install read-only at their host paths; else none (network access). A venv must use `/usr/bin/python3.12` (or a prefix in `GRAPH_ASSAY_SANDBOX_RO`) to run in the container. `require` (code-graph-rag) fails instead of running unisolated. The test stubs `docker` for the flags and the timeout cleanup, and, where the image is built, runs a real container that sees only loopback and no host file outside its mounts. |
 | `lib/provenance.ts` | `adapterHash` hashes adapter/shared implementation bytes without Git or installation paths. `recordedAdapterHash` preserves legacy unknown provenance. Snapshots, measurement JSON and manifests carry `adapterSha256`; baseline/table inputs retain their original hashes. |
 | `lib/fixture-install.ts`, `lib/fixture-install-test.ts` | A fixture whose bug depends on installed packages commits them as `node_modules.fixture/` at its root (no ignore file or copy filter drops that name). `copySeed` is how every script copies a fixture or seed for a subject to index: for a fixture (a dir holding `expect.json`) it skips a stray `node_modules/` and renames `node_modules.fixture/` to `node_modules/`; any other tree is copied as it is. The labeller's copy (`labels/questions.ts`) hides both, as `labels/protocol.json` says. The test fails if a script (any `.mjs`, and the TypeScript scripts in `tsconfig.json`'s `include` apart from `fixtures/`) copies with `fs.cpSync` outside a short exempt list. |
 | `lib/fixture.ts`, `lib/anti-gaming-test.ts` | Isolated source copies, unchanged fixture scoring and marker-leak detection. Replay `--canary` repeats under an anonymous directory with appended marker comments; `canaries` records PASS/FAIL/ERROR separately. Hermetic hash, isolation, CLI and propagation checks run in `graph-assay check` (SPEC §11). |
@@ -256,7 +257,7 @@ Known noise on the candidate buckets, which you should rule out before filing:
 
 ## API Integrations
 
-None. Everything runs locally; code-graph-rag indexes with the network unshared, as do codegraph, codebase-memory-mcp and code-review-graph where `unshare` works. `gh` is used by hand, outside these scripts, to file issues.
+None. Everything runs locally; every subject indexes isolated where it can (`lib/sandbox.ts`: `unshare -rn`, else a no-network container), and code-graph-rag only isolated. `gh` is used by hand, outside these scripts, to file issues.
 
 ## Configuration
 
@@ -276,6 +277,8 @@ None. Everything runs locally; code-graph-rag indexes with the network unshared,
 | `ORACLE_EXCLUDE` | `oracle/oracle.ts` | Comma-separated path prefixes of vendored or generated code (the corpus `exclude` column; `tools/repro.ts` passes it): calls from or to them are skipped as `corpus-exclude`, and `waterfall.excluded` counts their files (SPEC §1, §7) | unset |
 | `ORACLE_SUBJECT_FAILED` | `oracle/oracle.ts` | Set by `run.sh` when the subject timed out, crashed, exited non-zero or wrote an invalid snapshot; the oracle then runs against an empty snapshot (every SCIP site a miss) and records `subjectFailed` in both outputs, which the tables score as misses and list (SPEC §8) | unset |
 | `ORACLE_TARGETS` | `differential/shadow.ts` | Targets file for repo names in `questions.json` | `oracle/targets.txt` (git-ignored; see `oracle/targets.example.txt`) |
+| `GRAPH_ASSAY_ISOLATION` | `lib/sandbox.ts` | How subjects index: `unshare`, `docker` or `none` | the first that works, in that order |
+| `GRAPH_ASSAY_SANDBOX_RO` | `lib/sandbox.ts` | Extra read-only mounts (`:`-separated) for the docker backend, e.g. the prefix of a venv's Python | none |
 | `GRAPH_ASSAY_LABEL_SANDBOX=1` | `labels/run.ts` | Declares that labellers run in a container or VM; without it (or `--unsafe-host`) the run refuses to start (SECURITY.md) | unset |
 | `CGQA_HARNESS` | `labels/labellers.ts` | Checkout of the harness runtime the `kimi-k3` / `glm-5.3` labellers run in; only labelling needs it | unset |
 | `CODEGRAPH_KERNEL=0` | codegraph itself | Force the WASM extraction path; also check the native kernel before filing | native when present |
@@ -537,7 +540,7 @@ Held-out rotation and source-file/symbol renaming remain future work.
 ### P0 subject spike (SPEC v0 Appendix A)
 
 GO. Installed with `code-graph-rag[treesitter-full]==0.5.0` (without `treesitter-full`, TS and Go
-files become File nodes with no definitions). Indexed offline (`unshare -rn`, empty environment),
+files become File nodes with no definitions). Indexed offline (`lib/sandbox.ts`, empty environment),
 about 0.3 s per fixture; export via `cgr export -o g.json --repo-path <repo>`.
 
 - Every CALLS / INSTANTIATES edge carries `line`, `col`, `end_line`, `end_col` (col = the callee

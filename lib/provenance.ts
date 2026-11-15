@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const qa = fileURLToPath(new URL('../', import.meta.url));
 const adapters = { codegraph: 'codegraph.ts', 'code-graph-rag': 'code-graph-rag.ts', 'codebase-memory-mcp': 'codebase-memory-mcp.ts', 'code-review-graph': 'code-review-graph.ts' };
-export const ADAPTER_SHARED = ['lib/provenance.ts', 'lib/config.ts', 'lib/snapshot.ts', 'lib/main.ts',
+export const ADAPTER_SHARED = ['lib/provenance.ts', 'lib/config.ts', 'lib/snapshot.ts', 'lib/main.ts', 'lib/sandbox.ts',
   'lib/subjects/index.ts', 'schema/snapshot.v1.json'];
 
 /** Recompute from disk so edited adapters are identified even without a commit or .git. */

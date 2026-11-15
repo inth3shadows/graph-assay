@@ -12,6 +12,7 @@ import { config } from '../config.ts';
 import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
 import { adapterHash } from '../provenance.ts';
 import { isMain } from '../main.ts';
+import * as sandbox from '../sandbox.ts';
 import type { Snapshot, SnapshotEdge, SnapshotNode, Unresolved } from '../types.ts';
 
 export const name = 'code-review-graph';
@@ -26,14 +27,13 @@ export const defaultBuild = () => path.join(config.subjects, 'code-review-graph'
 // Environment a build may see: locale, PATH and crg's own parse switches; never its data, home,
 // enrichment or any embedding-provider setting, which the sandbox sets or leaves off.
 const PASS_ENV = /^(PATH|LANG|LC_[A-Z]+|TZ|CRG_(SERIAL_PARSE|GIT_TIMEOUT))$/;
-let offline;
-/** `unshare -rn` works here (Linux with unprivileged user namespaces); checked once. */
-export const canIsolateNetwork = () => (offline ??= spawnSync('unshare', ['-rn', 'true']).status === 0);
+/** The index runs isolated (lib/sandbox.ts: unshare or docker), not with network access. */
+export const canIsolateNetwork = sandbox.isolated;
 
 /**
  * Index `dir` with the crg binary `build`: one `build` (full parse, core install: no embeddings;
  * Jedi enrichment forced off) with HOME, CRG_HOME and CRG_DATA_DIR in a temp dir, an allowlisted
- * environment and, where unshare works, no network. The repo root is pinned to `dir` (`--repo` and
+ * environment and isolation where it can (lib/sandbox.ts). The repo root is pinned to `dir` (`--repo` and
  * CRG_REPO_ROOT; crg otherwise walks up to the nearest .git). Then copy the graph's `nodes` and
  * `edges`, paths made relative to `dir`, to `dir`/.graph-assay/crg.db. `home` keeps HOME and data
  * across calls (then `args: ['update']` is incremental); `build` and `update` args extract again,
@@ -58,11 +58,11 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   // build and update need --repo: update ignores CRG_REPO_ROOT and walks up to the nearest .git
   let cmd: string[] = args ?? ['build'];
   if ((cmd[0] === 'build' || cmd[0] === 'update') && !cmd.some((a) => a === '--repo' || a.startsWith('--repo='))) cmd = [...cmd, '--repo', dir];
-  const argv = [...(canIsolateNetwork() ? ['unshare', '-rn'] : []), path.resolve(build), ...cmd];
   const t0 = Date.now();
+  const mounts = sandbox.venvMounts(path.resolve(build));
   try {
-    const r = spawnSync(nice ? 'nice' : argv[0], nice ? ['-n', '10', ...argv] : argv.slice(1),
-      { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs });
+    const r = mounts.error ? { status: 1, signal: null, stdout: '', stderr: mounts.error, error: undefined }
+      : sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: mounts.ro });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
     if (ok && indexing) {

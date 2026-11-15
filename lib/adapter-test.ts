@@ -19,6 +19,8 @@ import { validateSnapshot } from './snapshot.ts';
 import { DatabaseSync } from 'node:sqlite';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// The sandbox probes below are Node scripts: under the docker backend the container needs this Node.
+process.env.GRAPH_ASSAY_SANDBOX_RO = [process.env.GRAPH_ASSAY_SANDBOX_RO, process.execPath].filter(Boolean).join(':');
 const update = process.argv.includes('--update');
 let n = 0;
 const check = (name, fn) => { n++; try { fn(); } catch (e) { console.error(`FAIL ${name}\n${e.message}`); process.exitCode = 1; } };
