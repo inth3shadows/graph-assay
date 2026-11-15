@@ -9,7 +9,7 @@
 # version), so a re-run against a new codegraph build only re-indexes codegraph.
 #
 # Env:
-#   CGQA_SUBJECT       subject to test: codegraph (default) or code-graph-rag; work dir w-<name>[-<subject>]
+#   CGQA_SUBJECT       subject to test: codegraph (default) or any lib/subjects/names.ts name; work dir w-<name>[-<subject>]
 #   CODEGRAPH_BUILD    codegraph.js to test   (default: lib/config.ts codegraphBuild)
 #   CGQA_BUILD         a non-codegraph subject's build (default: the subject's own)
 #   ORACLE_WORK        work dirs, w-<name>/   (default ${XDG_CACHE_HOME:-~/.cache}/graph-assay/oracle/work)

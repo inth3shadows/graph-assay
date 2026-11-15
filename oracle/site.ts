@@ -18,6 +18,16 @@ import { config } from '../lib/config.ts';
 import { isMain } from '../lib/main.ts';
 import { SUBJECT_NAMES, workSuffix, baseWorkDir } from '../lib/subjects/names.ts';
 
+/**
+ * The run's base work dir (codegraph's, `w-<name>`) for a work-dir path of any subject or a run or
+ * corpus name. The base need not exist: a run may hold only another subject's `w-<name>-<subject>`.
+ */
+export function resolveBase(target: string, work: string) {
+  const anyRun = (base: string) => SUBJECT_NAMES.some((s) => fs.existsSync(`${base}${workSuffix(s)}`));
+  if (fs.existsSync(target) || anyRun(path.resolve(target))) return baseWorkDir(path.resolve(target));
+  return [`w-pub-${target}`, `w-${target}`].map((d) => path.join(work, d)).find(anyRun) ?? null;
+}
+
 /** What each bucket's first segment means (oracle/forward.ts, oracle/missing.ts; SPEC §9 maps them to match / mismatch / unaligned). */
 export const MEANING = {
   ok: "the subject's target is SCIP's definition",
@@ -84,8 +94,7 @@ if (isMain(import.meta.url)) {
   if (!target || !/:\d+$/.test(site ?? '')) { console.error('usage: site.ts <name | work dir> <file:line> [called name] [--subject <name>|all] [--no-scip]'); process.exit(2); }
   const file = site.slice(0, site.lastIndexOf(':')); const line = Number(site.slice(site.lastIndexOf(':') + 1));
 
-  const base = fs.existsSync(target) ? baseWorkDir(path.resolve(target))
-    : [`w-pub-${target}`, `w-${target}`].map((d) => path.join(config.work, d)).find((d) => fs.existsSync(d));
+  const base = resolveBase(target, config.work);
   if (!base) { console.error(`no work dir for ${target} under ${config.work}`); process.exit(1); }
   const runName = path.basename(base).replace(/^w-/, '');
   const subjects = SUBJECT_NAMES.map((s) => [s, `${base}${workSuffix(s)}`])

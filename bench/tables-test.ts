@@ -159,6 +159,10 @@ try {
     fabricate(work, { sfxs: [''] });
     const r = tables(work, ['--canonical']);
     assert.equal(r.status, 2); assert.match(r.stderr, /canonical tables need every run; missing: .*\(code-graph-rag\)/);
+    for (const set of ['codegraph', 'codegraph,code-graph-rag,code-review-graph']) {
+      const x = tables(work, ['--canonical', '--subjects', set]);
+      assert.equal(x.status, 2, set); assert.match(x.stderr, /canonical tables cover codegraph and code-graph-rag/);
+    }
   });
   check('an empty or valueless --subjects is an error, not the default', () => {
     fabricate(work);

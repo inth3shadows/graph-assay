@@ -7,7 +7,8 @@
 //                              [--subjects a,b,...] [--md out.md] [--json out.json] [--seed 1] [--canonical]
 //   --subjects: which subjects to table (lib/subjects/names.ts). Default: every subject with a work dir
 //   for the split; with none, every subject with a T1 or T3 file; with neither, every subject. With
-//   --canonical the default is codegraph and code-graph-rag, the reproduction's subjects (SPEC §10).
+//   --canonical the subjects are codegraph and code-graph-rag, the reproduction's (SPEC §10); any other
+//   --subjects is refused.
 //   The averages cover the repos every chosen subject ran (SPEC §8), so a subject run on fewer repos
 //   narrows them; a default selection that narrows them says so on stderr.
 //   --canonical: tools/repro.ts passes it inside the Docker image; only those tables are canonical
@@ -79,6 +80,10 @@ const [chosen, chosenBy] = (() => {
   }
   return [SUBJECT_NAMES, 'no inputs: every subject'];
 })();
+// SPEC §10: canonical tables are the reproduction's (tools/repro.ts), which builds and records exactly these two.
+if (canonical && [...new Set(chosen)].sort().join() !== 'code-graph-rag,codegraph') {
+  console.error(`canonical tables cover codegraph and code-graph-rag (tools/repro.ts); got --subjects ${chosen.join(',')}`); process.exit(2);
+}
 const SUBJECTS = Object.fromEntries(chosen.map((s) => [s, { sfx: workSuffix(s), tag: TAG[s] }]));
 // SPEC §9: a language whose oracle is too noisy to score against is diagnostic. Its repos are shown
 // per repo but left out of the T2 averages. Rule: the 95% Wilson lower bound of "SCIP right where it
