@@ -100,8 +100,23 @@ const KIND = { CALLS: 'calls', CALL_REFERENCE: 'references', USAGE: 'references'
 // cbm's own list of weak short-name strategies (registry.c weak_short_name_strategy, v0.12.1): a
 // match on a name alone, not on a receiver or an import. SPEC §1: the subject's marking decides.
 const GUESSED = new Set(['unique_name', 'suffix_match', 'field_type_hint', 'fuzzy']);
-// Labels that are not code definitions (or, for File, duplicate the file's Module node).
+// Labels that are not code definitions. A File node duplicates the file's Module node, or stands in
+// for a file that has no Module (snapshot()).
 const SKIP = new Set(['File', 'Folder', 'Project', 'Branch', 'Route']);
+
+/**
+ * The qname prefixes of definitions in a file that has only a File node, from that node's qname
+ * (`graph-assay.examples.aliases.aliases.py.__file__` for `examples/aliases/aliases.py`): the
+ * extensionless path (`graph-assay.examples.aliases.aliases`), then the directory
+ * (`graph-assay.examples.aliases`; the project alone at the root). None if the qname is not that shape.
+ */
+export function filePrefixes(fileQname: string, file: string) {
+  const base = path.posix.basename(file); const ext = path.posix.extname(base);
+  const suffix = `.${base}.__file__`;
+  if (!fileQname.endsWith(suffix)) return [];
+  const dir = fileQname.slice(0, -suffix.length);
+  return ext && base !== ext ? [`${dir}.${base.slice(0, -ext.length)}`, dir] : [dir];
+}
 
 /** Map `dir`/.graph-assay/cbm.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
@@ -114,14 +129,18 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     const er = db.prepare('SELECT source_id AS src, target_id AS dst, type, properties FROM edges ORDER BY id').all() as unknown as
       { src: number; dst: number; type: string; properties: string }[];
     // A file is its Module node; File nodes (the same file) are folded into it. cbm 0.12.1 writes no
-    // Module for some languages (Go), only a File node: there a code file's File node is the file.
+    // Module for some files, only a File node: Go and Java files, and a file whose extensionless path
+    // another file's Module already took (`aliases.py` next to `aliases.ini`). There the File node is
+    // the file, if it is code (a known extension, or a definition in it).
     const moduleOf = new Map<string, Row>();
     for (const n of rows) if (n.label === 'Module' && n.file && !n.file.startsWith(`${OUT}/`)) moduleOf.set(n.file, n);
+    const defined = new Set(rows.filter((n) => n.file && n.label !== 'Module' && !SKIP.has(n.label)).map((n) => n.file));
     const alias = new Map<number, number>();
+    const fileOnly = new Map<string, string[]>(); // file -> qname prefixes its definitions may carry, longest first
     for (const n of rows) {
       if (n.label !== 'File' || !n.file || n.file.startsWith(`${OUT}/`)) continue;
       if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
-      else if (lang(n.file)) moduleOf.set(n.file, { ...n, label: 'Module' });
+      else if (lang(n.file) || defined.has(n.file)) { moduleOf.set(n.file, n); fileOnly.set(n.file, filePrefixes(n.qname, n.file)); }
     }
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
@@ -134,8 +153,10 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
         nodes.push({ id: String(n.id), kind: 'file', name: n.file, qname: n.file, file: n.file, language: lang(n.file), start: 1, end: Math.max(1, n.end) });
         continue;
       }
-      // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the module's own qname.
-      const local = n.qname.startsWith(`${mod.qname}.`) ? n.qname.slice(mod.qname.length + 1) : n.name;
+      // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the module's own qname
+      // (for a file with no Module: its extensionless path, else its directory, as Go and Java name them).
+      const prefix = (fileOnly.get(n.file) ?? [mod.qname]).find((q) => n.qname.startsWith(`${q}.`));
+      const local = prefix ? n.qname.slice(prefix.length + 1) : n.name;
       nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.split('.').join('::'), file: n.file,
         language: lang(n.file), start: n.start, end: Math.max(n.start, n.end) });
     }

@@ -118,11 +118,14 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
-- The codebase-memory-mcp adapter dropped every Go definition. cbm 0.12.1 writes a `File` node but
-  no `Module` node for a Go file, and the adapter kept only nodes whose file had a Module. A code
-  file with only a File node is now the file. On gorilla/mux (corpus v1, dev) the snapshot goes from
-  0 to 17 Go files and its function-pair track from no pairs to 624 subject pairs; the other dev
-  repos are unchanged.
+- The codebase-memory-mcp adapter dropped every definition in a file cbm writes without a `Module`
+  node: Go and Java files, and a file whose extensionless path another file's Module took
+  (`aliases.py` next to `aliases.ini`). The adapter kept only nodes whose file had a Module. A code
+  file with only a `File` node (a known extension, or a definition in it) is now the file, and its
+  definitions keep their containers (`Config::read_config`, Java `A::run`). On corpus v1's dev split,
+  gorilla/mux goes from 0 to 17 Go files and from no function pairs to 624 subject pairs (469 of the
+  oracle's 620 matched); click gains 6 files and 23 nodes, requests 1 file. Every node and edge the
+  adapter produced before is unchanged, and the other repos' pair counts are the same.
 - Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
   fixture's caller is in the graph compared the last part of `from` with node names only, and a
   codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A

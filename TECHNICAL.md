@@ -34,8 +34,9 @@ Design decisions:
   (`unique_name`, `suffix_match`, `field_type_hint`, `fuzzy`) become provenance. cbm keeps one edge
   per caller and callee with one site's line, so it declares no site lines and is scored on the
   function-pair track (SPEC §3).
-  A file is its `Module` node; for a code file with only a `File` node (Go, in 0.12.1) the `File`
-  node is the file.
+  A file is its `Module` node. cbm 0.12.1 writes only a `File` node for Go and Java files and for a
+  file whose extensionless path another file's Module took; for such a code file the `File` node is
+  the file, and its definitions' qnames lose the extensionless path or, failing that, the directory.
   `lib/subjects/code-review-graph.ts` does the same for code-review-graph 2.4.0 (`build`, core
   install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
   unshared where possible; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
