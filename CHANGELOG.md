@@ -138,7 +138,9 @@ All notable changes to this project are recorded here. The format follows
 - The docker sandbox mounts the indexed copy read-only, `.git` included (#51). Only the sandbox HOME
   and the tool's own output dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`) are writable,
   so an exploited tool can no longer plant a git setting such as `core.fsmonitor`, or a link, in the
-  copy where the host later runs `git` and the oracle. `docker run --pull never` never fetches a
+  copy where the host later runs `git` and the oracle. A link or file the repository itself tracks at
+  an output dir is removed before the run, never followed into a read-write mount, and a committed
+  code-graph-rag export is never taken for the tool's. `docker run --pull never` never fetches a
   missing image by name. An output tree the host cannot read (too deep, or made unreadable) is a
   failed index instead of a crash, and a missing index no longer reads as "leads outside".
 - The codebase-memory-mcp adapter dropped every definition in a file cbm writes without a `Module`

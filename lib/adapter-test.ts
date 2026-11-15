@@ -297,6 +297,57 @@ fs.mkdirSync('.codegraph', { recursive: true }); fs.writeFileSync('.codegraph/co
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
+check('a repo that tracks a link or file at an output dir gets no rw mount outside it; a stale export or a missing dir is a failed index (#52 F1/F2/F4)', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-tracked-')));
+  const bin = path.join(tmp, 'bin'); fs.mkdirSync(bin); const log = path.join(tmp, 'docker.log');
+  fs.writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\n[ "$1" = run ] && printf '%s\\n' "$@" > ${log}\nexit 0\n`, { mode: 0o755 });
+  const build = path.join(tmp, 'build'); fs.writeFileSync(build, '', { mode: 0o755 });
+  const host = path.join(tmp, 'host'); fs.mkdirSync(host); fs.writeFileSync(path.join(host, 'f'), 'host');
+  try {
+    withEnv({ GRAPH_ASSAY_ISOLATION: 'docker', PATH: `${bin}:${process.env.PATH}` }, () => {
+      sandbox.resetBackend();
+      for (const [name, adapter, outDir] of [['codegraph', codegraph, '.codegraph'], ['code-graph-rag', cgr, '.graph-assay']] as const) {
+        for (const target of ['.', '.git', host, 'FILE']) {
+          const work = path.join(tmp, `repo-${name}-${path.basename(target)}`); fs.mkdirSync(path.join(work, '.git'), { recursive: true });
+          if (target === 'FILE') fs.writeFileSync(path.join(work, outDir), 'tracked'); else fs.symlinkSync(target, path.join(work, outDir));
+          fs.rmSync(log, { force: true });
+          const r = adapter.index(work, build, { home: path.join(tmp, `home-${name}`) });
+          const args = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n') : [];
+          const rw = args.flatMap((a, i) => (args[i - 1] === '--mount' && !a.endsWith(',readonly') ? [a] : []));
+          for (const m of rw) {
+            const src = /source=([^,]*)/.exec(m)![1];
+            assert(src !== work && !src.startsWith(`${work}/.git`) && !src.startsWith(host), `${name} ${outDir} -> ${target}: rw mount ${m}`);
+          }
+          assert.equal(fs.readFileSync(path.join(host, 'f'), 'utf8'), 'host');
+          assert.equal(typeof r.ok, 'boolean');
+        }
+      }
+      // a committed export the tool never wrote is not taken as its output
+      const stale = path.join(tmp, 'repo-stale'); fs.mkdirSync(path.join(stale, '.graph-assay'), { recursive: true });
+      fs.writeFileSync(path.join(stale, '.graph-assay', 'export.json'), '{"nodes":[],"relationships":[]}');
+      assert.equal(cgr.index(stale, build, { home: path.join(tmp, 'home-stale') }).ok, false, 'a committed export.json was accepted');
+      // a dir that does not exist is a failed index, and is not created
+      const typo = path.join(tmp, 'no-such-repo');
+      let r2;
+      assert.doesNotThrow(() => { r2 = codegraph.index(typo, build, { home: path.join(tmp, 'home-typo') }); });
+      assert.equal(r2.ok, false); assert.equal(fs.existsSync(typo), false);
+    });
+  } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-graph-rag: a query run that leaves a link in its export dir is a failed run too (#52 F6)', () => {
+  sandbox.resetBackend();
+  if (!sandbox.isolated()) { console.log('note: no isolation here; code-graph-rag refuses to run, F6 not checked'); return; }
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-f6-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}\nimport * as fs from 'node:fs';\nfs.symlinkSync('/etc/passwd', '.graph-assay/leak');\n`, { mode: 0o755 });
+    const r = cgr.index(work, probe, { args: ['query'] });
+    assert.equal(r.ok, false, r.output); assert.match(r.output, /leak is a link/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
 check('a missing build is a failed index, not a throw, and leaves no sandbox HOME behind (K5/A5)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-missing-build-'));
   // a private TMPDIR: the adapters make their sandbox HOME there, so other graph-assay runs do not count

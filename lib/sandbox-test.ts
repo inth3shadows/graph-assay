@@ -185,6 +185,45 @@ try {
       `type=bind,source=${out},target=${out}`]);
   });
 
+  check('docker: a rw dir inside a ro one must really be there: a link to the root, .git or any other dir is refused (#52 F1)', () => {
+    const root = path.join(tmp, 'f1'); fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+    const elsewhere = path.join(tmp, 'f1-host'); fs.mkdirSync(elsewhere);
+    for (const target of ['.', '.git', elsewhere]) {
+      const out = path.join(root, '.out'); fs.rmSync(out, { force: true }); fs.symlinkSync(target, out);
+      assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: root, rw: [out, home], ro: [root] }, 'n') as any).error ?? 'planned', /leads outside|read-only and read-write/, `.out -> ${target}`);
+    }
+    fs.rmSync(path.join(root, '.out')); fs.mkdirSync(path.join(root, '.out'));
+    assert.ok(!('error' in sandbox.dockerPlan([exe], { ...opts, cwd: root, rw: [path.join(root, '.out'), home], ro: [root] }, 'n')));
+    // the same place both read-only and read-write is refused, also when a ro link leads to a rw dir
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [work, home], ro: [work] }, 'n') as any).error, /read-write: it leads outside|read-only and read-write/);
+    const homeLink = path.join(tmp, 'f1-home-link'); fs.symlinkSync(home, homeLink);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [work, home], ro: [homeLink] }, 'n') as any).error, /read-only and read-write/);
+  });
+
+  check('outputDir: a link or file there is removed (never its target), a dir is kept or emptied, a missing parent fails (#52 F1/F2/F4)', () => {
+    const root = path.join(tmp, 'od'); fs.mkdirSync(root); const victim = path.join(tmp, 'od-victim'); fs.mkdirSync(victim); fs.writeFileSync(path.join(victim, 'f'), 'host');
+    const out = path.join(root, '.out');
+    fs.symlinkSync(victim, out); assert.equal(sandbox.outputDir(out), null);
+    assert.ok(fs.lstatSync(out).isDirectory() && !fs.lstatSync(out).isSymbolicLink()); assert.equal(fs.readFileSync(path.join(victim, 'f'), 'utf8'), 'host');
+    fs.writeFileSync(path.join(out, 'old'), ''); assert.equal(sandbox.outputDir(out), null); assert.deepEqual(fs.readdirSync(out), ['old']);
+    assert.equal(sandbox.outputDir(out, true), null); assert.deepEqual(fs.readdirSync(out), []);
+    fs.rmSync(out, { recursive: true }); fs.writeFileSync(out, 'file'); assert.equal(sandbox.outputDir(out), null); assert.ok(fs.statSync(out).isDirectory());
+    assert.match(sandbox.outputDir(path.join(tmp, 'no-such-repo', '.out')), /cannot prepare .*ENOENT/);
+    assert.equal(fs.existsSync(path.join(tmp, 'no-such-repo')), false);
+  });
+
+  check('remove: a tree too deep for one path (ENAMETOOLONG) is removed, never thrown (#52 F3)', () => {
+    const d = path.join(tmp, 'deep'); fs.mkdirSync(d); const cwd = process.cwd();
+    try { process.chdir(d); for (let i = 0; i < 40; i++) { fs.mkdirSync('d'.repeat(200)); process.chdir('d'.repeat(200)); } } finally { process.chdir(cwd); }
+    assert.doesNotThrow(() => sandbox.remove(d));
+    assert.equal(fs.existsSync(d), false);
+  });
+
+  check('within: a missing path whose .. steps back through a link out of the root is outside (#52 F5)', () => {
+    const root = path.join(tmp, 'f5'); fs.mkdirSync(root); fs.symlinkSync(tmp, path.join(root, 'out-link'));
+    assert.equal(sandbox.within(root, `${root}/nodir/../out-link/f`), false);
+  });
+
   check('within: a missing path under a missing dir is inside, not "leads outside" (D3)', () => {
     const root = path.join(tmp, 'root3'); fs.mkdirSync(root); fs.symlinkSync(tmp, path.join(root, 'out-link'));
     assert.equal(sandbox.within(root, path.join(root, 'no-index', 'sub', 'f.db')), true);

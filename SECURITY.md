@@ -17,7 +17,9 @@ you point the oracle at. Treat every indexed repository as untrusted input. What
     dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`) read-write. A repository that exploits
     a tool cannot reach the network, read your files outside those mounts, or change the copy the
     host later runs `git` and the oracle in (no planted `core.fsmonitor`, no source file swapped for a
-    link). graph-assay refuses the tool's output if it holds anything but plain files and directories
+    link). The host makes each output dir itself, removing a link or file the repository tracks at
+    that path first, and refuses to mount read-write anything that resolves outside the copy (or is
+    the copy). graph-assay refuses the tool's output if it holds anything but plain files and directories
     (`lib/sandbox.ts` `vet`). The output dirs start with a dot, so the SCIP indexers, which run on the
     copy afterwards, do not read them. This is the path on Ubuntu 24.04, whose AppArmor policy blocks
     unprivileged user namespaces; do not lift that policy for `unshare` (it would let any process

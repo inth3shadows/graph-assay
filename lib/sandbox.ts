@@ -105,13 +105,25 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
     if (v.error) return { error: v.error };
     if (v.root) ro.push(v.root);
   }
+  // A rw dir inside a ro one (an output dir in the repo) must be that dir itself: a link the repo
+  // tracks there (`.codegraph -> .`, `-> .git`, `-> ~`) would mount its target read-write (#52).
+  for (const w of o.rw) for (const r of ro) {
+    const rel = path.relative(path.resolve(r), path.resolve(w));
+    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    if (!rel || real(w) !== path.join(real(r), rel)) return { error: `refusing to mount ${w} read-write: it leads outside ${r}, or is it (a link the repository tracks?)` };
+  }
   const binds = new Map<string, { src: string; ro: boolean }>(); // dst -> source
+  let clash = '';
   const add = (p: string, readOnly: boolean) => {
     const src = real(p);
-    for (const dst of new Set([path.resolve(p), src])) if (!binds.has(dst) || !readOnly) binds.set(dst, { src, ro: readOnly });
+    for (const dst of new Set([path.resolve(p), src])) {
+      if (binds.has(dst) && binds.get(dst)!.ro !== readOnly) clash ||= dst;
+      binds.set(dst, { src, ro: readOnly });
+    }
   };
   for (const p of o.rw) add(p, false);
   for (const p of ro) add(p, true);
+  if (clash) return { error: `refusing to mount ${clash} both read-only and read-write` };
   // the executable by itself (never its whole directory), unless a mount already holds it
   if (![...binds.keys()].some((d) => exe === d || exe.startsWith(`${d}/`))) binds.set(exe, { src: exe, ro: true });
   // a parent before anything mounted inside it (a rw output dir inside the ro repo), whatever the order given
@@ -191,6 +203,8 @@ export function within(root: string, p: string) {
       // missing: its nearest existing ancestor, resolved, plus the rest (which holds no link yet)
       let a = path.isAbsolute(p) ? p : `${process.cwd()}/${p}`; const rest: string[] = [];
       while (!fs.lstatSync(a, { throwIfNoEntry: false })) { rest.unshift(path.basename(a)); if (path.dirname(a) === a) return false; a = path.dirname(a); }
+      // a `..` after a missing dir can step back into an existing one, through links joining cannot see
+      if (rest.includes('..')) return false;
       t = path.join(fs.realpathSync(a), ...rest);
     }
   } catch { return false; }
@@ -228,11 +242,31 @@ export const vetAll = (...trees: string[]) => trees.map(vet).find(Boolean) ?? nu
  */
 export function remove(p: string) {
   try { fs.rmSync(p, { recursive: true, force: true }); return; } catch { /* below */ }
-  const open = (d: string) => {
-    try { fs.chmodSync(d, 0o700); for (const e of fs.readdirSync(d)) { const c = path.join(d, e); if (fs.lstatSync(c).isDirectory()) open(c); } } catch { /* best effort */ }
-  };
-  if (fs.lstatSync(p, { throwIfNoEntry: false })?.isDirectory()) open(p);
-  fs.rmSync(p, { recursive: true, force: true });
+  // `chmod -R u+rwx` and `rm -rf` descend by directory handle, so a tree too deep for one path
+  // (ENAMETOOLONG) goes too; chmod -R never follows a link below p (GNU default -P).
+  spawnSync('chmod', ['-R', 'u+rwx', '--', p], { stdio: 'ignore' });
+  spawnSync('rm', ['-rf', '--', p], { stdio: 'ignore' });
+  // cleanup never replaces the caller's result: what is left is reported, not thrown
+  if (fs.lstatSync(p, { throwIfNoEntry: false })) console.error(`[graph-assay] could not remove ${p}`);
+}
+
+/**
+ * Prepare `p`, a tool's output dir inside the indexed repo, before it is mounted read-write: a plain
+ * directory made by the host. A link or file the repository tracks there is removed (the entry, never
+ * its target), so its target is never mounted; `fresh` also empties a directory (output an earlier run
+ * or the repository left). The repo dir must exist: no index of a dir that is not there. Returns why
+ * it could not, or null.
+ */
+export function outputDir(p: string, fresh = false): string | null {
+  try {
+    const st = fs.lstatSync(p, { throwIfNoEntry: false });
+    const keep = st?.isDirectory() && !fresh;
+    if (st && !keep) fs.rmSync(p, { recursive: true, force: true });
+    if (!keep) fs.mkdirSync(p);
+    return null;
+  } catch (e) {
+    return `[graph-assay] cannot prepare ${p} (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})`;
+  }
 }
 
 /** `p` if it stays inside `root` (within()), else an Error naming it. */
