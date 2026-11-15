@@ -52,8 +52,10 @@ export function index(dir, build, { kernel = process.env.CODEGRAPH_KERNEL ?? '0'
     const r = sandbox.run([process.execPath, js, ...args], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [packageRoot(js)] });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     const kernelLoaded = /\[codegraph-kernel\] loaded /.test(output);
-    const ok = r.status === 0 && (kernel === null || kernel === '0' || kernelLoaded);
-    return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0, kernelLoaded };
+    // the tool could write its store: nothing in .codegraph may be a link or a special file
+    const bad = sandbox.vet(path.join(dir, '.codegraph'));
+    const ok = r.status === 0 && !bad && (kernel === null || kernel === '0' || kernelLoaded);
+    return { ok, status: r.status, signal: r.signal, output: bad ? `${output}\n${bad}` : output, stdout: r.stdout ?? '', ms: Date.now() - t0, kernelLoaded };
   } finally {
     if (ownHome) fs.rmSync(h, { recursive: true, force: true });
   }
@@ -75,6 +77,7 @@ export function version(build) {
 export function snapshot(dir: string, { build = null as string | null, kernel = process.env.CODEGRAPH_KERNEL ?? '0' } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
   // written by the sandboxed tool: follow no link it may have left out of the repo
+  const bad = sandbox.vet(path.join(dir, '.codegraph')); if (bad) throw new Error(bad);
   const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, '.codegraph/codegraph.db')), { readOnly: true });
   try {
     const nodes = db.prepare(`SELECT id, kind, name, qualified_name AS qname, file_path AS file, language,

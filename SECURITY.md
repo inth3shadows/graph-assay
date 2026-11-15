@@ -14,9 +14,10 @@ you point the oracle at. Treat every indexed repository as untrusted input. What
   - A throwaway Docker container (`graph-assay-sandbox:1`, built by `tools/setup.sh`): no network, no
     capabilities, no new privileges, read-only root, your uid, and only the indexed copy, the sandbox
     HOME (read-write) and the tool's install (read-only) mounted. A repository that exploits a tool
-    cannot reach your other files: afterwards graph-assay reads and writes the tool's output only
-    where every link stays inside the repository copy or the sandbox HOME (`lib/sandbox.ts`
-    `confined`), so a link the tool planted there leads nowhere. This is the path on Ubuntu 24.04, whose AppArmor policy blocks
+    cannot reach your other files: afterwards graph-assay refuses the tool's output if it holds
+    anything but plain files and directories (a link, FIFO or device the tool planted; `lib/sandbox.ts`
+    `vet`), checked once before the host opens any of it, and reads module paths named in an export
+    only as plain files inside the repository copy. This is the path on Ubuntu 24.04, whose AppArmor policy blocks
     unprivileged user namespaces; do not lift that policy for `unshare` (it would let any process
     create user namespaces). Being in the `docker` group is itself root-equivalent on the host.
   - Neither (macOS, or no image): codegraph, codebase-memory-mcp and code-review-graph run with

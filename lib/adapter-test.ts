@@ -208,14 +208,43 @@ fs.symlinkSync(${JSON.stringify(path.join(outside, 'host.db'))}, process.env.CBM
 fs.symlinkSync(${JSON.stringify(outside)}, '.graph-assay');
 console.log('{"status":"indexed"}');\n`, { mode: 0o755 });
     const r = cbm.index(work, probe);
-    assert.equal(r.ok, false, r.output); assert.match(r.output, /leads outside/);
+    assert.equal(r.ok, false, r.output); assert.match(r.output, /is a link|leads outside/);
     assert.deepEqual(fs.readdirSync(outside), ['host.db']); assert.equal(fs.readFileSync(path.join(outside, 'host.db'), 'utf8'), 'host file');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('a link or special file in any tool output fails the index before the host opens it (R3-1, N2, N3)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-vet-'));
+  try {
+    const victim = path.join(tmp, 'victim'); fs.writeFileSync(victim, 'host file\n'.repeat(7));
+    const probe = (name, body) => { const p = path.join(tmp, name); fs.writeFileSync(p, `#!${process.execPath}\nimport * as fs from 'node:fs';\n${body}\n`, { mode: 0o755 }); return p; };
+    // cbm: a plain store, but a -shm sidecar link beside it (SQLite would open it read-write)
+    const cbmWork = path.join(tmp, 'cbm'); fs.mkdirSync(cbmWork);
+    const r1 = cbm.index(cbmWork, probe('cbm.mjs', `const c = process.env.CBM_CACHE_DIR; fs.mkdirSync(c, { recursive: true });
+fs.writeFileSync(c + '/graph-assay.db', ''); fs.symlinkSync(${JSON.stringify(victim)}, c + '/graph-assay.db-shm');
+console.log('{"status":"indexed"}');`));
+    assert.equal(r1.ok, false); assert.match(r1.output, /graph-assay\.db-shm is a link/);
+    // codegraph: a .codegraph sidecar link is a failed index, not a throw later in snapshot()
+    const cgWork = path.join(tmp, 'cg'); fs.mkdirSync(cgWork);
+    const r2 = codegraph.index(cgWork, probe('cg.mjs', `fs.mkdirSync('.codegraph'); fs.writeFileSync('.codegraph/codegraph.db', ''); fs.symlinkSync(${JSON.stringify(victim)}, '.codegraph/codegraph.db-shm');`), { args: [] });
+    assert.equal(r2.ok, false); assert.match(r2.output, /codegraph\.db-shm is a link/);
+    assert.throws(() => codegraph.snapshot(cgWork), /is a link/);
+    // cgr: an export naming a module path outside the repo, or a link in the repo, reads no host file
+    const cgrWork = path.join(tmp, 'cgr'); fs.mkdirSync(path.join(cgrWork, '.graph-assay'), { recursive: true });
+    fs.symlinkSync(victim, path.join(cgrWork, 'link.py'));
+    const mod = (id, p) => ({ node_id: id, labels: ['Module'], properties: { path: p, qualified_name: `m${id}`, name: p } });
+    fs.writeFileSync(path.join(cgrWork, '.graph-assay', 'export.json'), JSON.stringify({ nodes: [mod(1, '../victim'), mod(2, 'link.py')], relationships: [] }));
+    const snap = cgr.snapshot(cgrWork);
+    for (const n of snap.nodes.filter((x) => x.kind === 'file')) assert.equal(n.end, 1, `${n.file} was read (end ${n.end})`);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'host file\n'.repeat(7));
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 check('a missing build is a failed index, not a throw, and leaves no sandbox HOME behind (K5/A5)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-missing-build-'));
-  const homes = () => fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('cgqa-home-')).length;
+  // a private TMPDIR: the adapters make their sandbox HOME there, so other graph-assay runs do not count
+  const priv = path.join(tmp, 'tmpdir'); fs.mkdirSync(priv); const oldTmp = process.env.TMPDIR; process.env.TMPDIR = priv;
+  const homes = () => fs.readdirSync(priv).filter((d) => d.startsWith('cgqa-home-')).length;
   try {
     const before = homes();
     for (const [name, adapter] of [['codebase-memory-mcp', cbm], ['code-review-graph', crg], ['code-graph-rag', cgr]] as const) {
@@ -223,7 +252,7 @@ check('a missing build is a failed index, not a throw, and leaves no sandbox HOM
       assert.equal(r.ok, false, name);
     }
     assert.equal(homes(), before, 'a sandbox HOME was left behind');
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { if (oldTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = oldTmp; fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 check('code-review-graph index: a store extract() cannot read is a failed index, not a crash', () => {

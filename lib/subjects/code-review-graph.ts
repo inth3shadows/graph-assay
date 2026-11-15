@@ -63,6 +63,9 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [], venv: true });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
+    // the tool could write its store and the output dir: nothing in them may be a link or a special file
+    const bad = ok && indexing ? sandbox.vetAll(data, out) : null;
+    if (bad) { ok = false; output += `\n${bad}`; }
     if (ok && indexing) {
       const store = path.join(data, 'graph.db');
       if (!fs.existsSync(store)) { ok = false; output += '\n[graph-assay] crg wrote no graph.db'; }
@@ -225,6 +228,7 @@ const internal = (p: string) => p === OUT || p.startsWith(`${OUT}/`) || p === OW
 /** Map `dir`/.graph-assay/crg.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
+  const bad = sandbox.vet(path.join(dir, OUT)); if (bad) throw new Error(bad);
   const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, OUT, DB)), { readOnly: true });
   try {
     type Row = { kind: string; name: string; qname: string; file: string; start: number | null; end: number | null; language: string | null };

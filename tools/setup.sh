@@ -75,7 +75,8 @@ if [ "$do_cgr" = 1 ]; then
   for l in "$venv"/bin/python*; do
     [ -L "$l" ] || continue
     [ -e "$l" ] || stale=1
-    case $(readlink "$l") in /*) [ "$(readlink "$l")" = "$(command -v "$py")" ] || stale=1;; esac
+    # the venv may record $py as found on PATH or as its real file (a shim or Homebrew link resolved)
+    case $(readlink "$l") in /*) [ "$(readlink "$l")" = "$(command -v "$py")" ] || [ "$(readlink "$l")" = "$(readlink -f "$(command -v "$py")")" ] || stale=1;; esac
   done
   if [ "$stale" = 1 ]; then
     run "$py" -m venv --clear "$venv"

@@ -114,8 +114,8 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
   if (![...binds.keys()].some((d) => exe === d || exe.startsWith(`${d}/`))) binds.set(exe, { src: exe, ro: true });
   // --mount is comma-separated: a `,` (or `"`, or a newline) in a path would end the field and could
   // add options (a second source=), so such a path is refused rather than quoted.
-  const unsafe = [...binds].flatMap(([d, b]) => [d, b.src]).filter((p) => /[,"\n]/.test(p));
-  if (unsafe.length) return { error: `refusing to mount a path with a comma, quote or newline: ${JSON.stringify(unsafe[0])}` };
+  const unsafe = [...binds].flatMap(([d, b]) => [d, b.src]).filter((p) => /[,"\n\r]/.test(p));
+  if (unsafe.length) return { error: `refusing to mount a path with a comma, quote or line break: ${JSON.stringify(unsafe[0])}` };
   const shadow = [...binds.keys()].filter((d) => SYSTEM.has(d));
   if (shadow.length) return { error: `refusing to mount ${shadow.join(', ')} over the sandbox image's own` };
   // TMPDIR must be writable inside: one outside the mounts moves under the sandbox HOME (or /tmp).
@@ -155,7 +155,8 @@ export function venvOf(script: string): { root: string | null; error: string | n
   const given = path.dirname(path.dirname(path.resolve(script))); const reallyAt = path.dirname(path.dirname(real(script)));
   const d = fs.existsSync(path.join(given, 'pyvenv.cfg')) ? given : reallyAt;
   if (!fs.existsSync(path.join(d, 'pyvenv.cfg'))) return { root: null, error: null };
-  const mounted = [given, reallyAt, real(d), ...extraRo().flatMap((m) => [path.resolve(m), real(m)])];
+  // only what dockerPlan mounts: the venv root (at the path it was reached by and its real path)
+  const mounted = [d, real(d), ...extraRo().flatMap((m) => [path.resolve(m), real(m)])];
   const inside = (p: string) => p === IMAGE_PYTHON || mounted.some((m) => p === m || p.startsWith(`${m}/`));
   let p = ['python3', 'python'].map((x) => path.join(d, 'bin', x)).find((x) => fs.lstatSync(x, { throwIfNoEntry: false }));
   const why = (at: string) => ({ root: d, error: `the docker sandbox has no Python at ${at}, which the venv ${d} uses: re-run tools/setup.sh where ${IMAGE_PYTHON} exists, or mount that Python's prefix with GRAPH_ASSAY_SANDBOX_RO` });
@@ -177,9 +178,32 @@ export function venvOf(script: string): { root: string | null; error: string | n
  */
 export function within(root: string, p: string) {
   const r = real(root);
-  const t = fs.lstatSync(p, { throwIfNoEntry: false }) ? real(p) : path.join(real(path.dirname(p)), path.basename(p));
+  let t: string;
+  try {
+    // a link that cannot be followed (dangling, a loop, no permission) counts as outside
+    t = fs.lstatSync(p, { throwIfNoEntry: false }) ? fs.realpathSync(p) : path.join(fs.realpathSync(path.dirname(p)), path.basename(p));
+  } catch { return false; }
   return t === r || t.startsWith(`${r}/`);
 }
+/**
+ * Why the tool-writable tree at `p` must not be touched, or null: any entry in it (or `p` itself) that
+ * is not a plain file or directory (a link, FIFO, socket or device). The sandboxed tool could write
+ * there, so the host checks the whole tree once, after the run and before it opens anything in it,
+ * instead of guarding each path it opens (SQLite alone opens -wal, -shm and -journal files beside a
+ * database). A missing `p` is fine: the caller reports a missing output its own way.
+ */
+export function vet(p: string): string | null {
+  const st = fs.lstatSync(p, { throwIfNoEntry: false });
+  if (!st) return null;
+  if (st.isDirectory()) {
+    for (const e of fs.readdirSync(p)) { const bad = vet(path.join(p, e)); if (bad) return bad; }
+    return null;
+  }
+  return st.isFile() ? null : `[graph-assay] ${p} is ${st.isSymbolicLink() ? 'a link' : 'not a plain file'}; the indexed tool's output must hold only files and directories, so it is not read`;
+}
+/** vet() for each of `trees`: the first problem, or null. */
+export const vetAll = (...trees: string[]) => trees.map(vet).find(Boolean) ?? null;
+
 /** `p` if it stays inside `root` (within()), else an Error naming it. */
 export function confined(root: string, p: string) {
   if (!within(root, p)) throw new Error(`[graph-assay] ${p} leads outside ${root}; refusing to follow it (a link left by the indexed tool?)`);

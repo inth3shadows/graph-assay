@@ -71,9 +71,9 @@ try {
 
   check('docker: a path with a comma, quote or newline is refused, never split into mount options (G1)', () => {
     const inj = path.join(tmp, 'inj,source=' + home); fs.mkdirSync(inj, { recursive: true });
-    assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: inj, rw: [inj] }, 'n') as any).error, /comma, quote or newline/);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: inj, rw: [inj] }, 'n') as any).error, /comma, quote or line break/);
     const quoted = path.join(tmp, 'q"x'); fs.mkdirSync(quoted);
-    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [quoted] }, 'n') as any).error, /comma, quote or newline/);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [quoted] }, 'n') as any).error, /comma, quote or line break/);
   });
 
   check('docker: timeoutMs 0 or unset means no inner timeout; DOCKER_* never reach the subject (G4/G5)', () => {
@@ -165,6 +165,37 @@ try {
     assert.equal(sandbox.within(root, path.join(root, 'out-link')), false);
     assert.equal(sandbox.within(root, path.join(root, 'out-link', 'f.db')), false);
     assert.throws(() => sandbox.confined(root, path.join(root, 'out-link')), /leads outside/);
+  });
+
+  check('vet: a link, FIFO or other special file anywhere in a tool output tree is refused; plain trees pass (R3-1/R3-4)', () => {
+    const t = path.join(tmp, 'vet'); fs.mkdirSync(path.join(t, 'a', 'b'), { recursive: true }); fs.writeFileSync(path.join(t, 'a', 'b', 'db'), '');
+    assert.equal(sandbox.vet(t), null); assert.equal(sandbox.vet(path.join(tmp, 'no-such')), null);
+    fs.symlinkSync(path.join(os.homedir(), '.bashrc'), path.join(t, 'a', 'b', 'db-shm'));
+    assert.match(sandbox.vet(t), /db-shm is a link/);
+    fs.rmSync(path.join(t, 'a', 'b', 'db-shm')); spawnSync('mkfifo', [path.join(t, 'a', 'fifo')]);
+    if (fs.existsSync(path.join(t, 'a', 'fifo'))) assert.match(sandbox.vet(t), /fifo is not a plain file/);
+    const l = path.join(tmp, 'vet-link'); fs.symlinkSync(t, l); assert.match(sandbox.vet(l), /is a link/);
+    assert.equal(sandbox.vetAll(path.join(t, 'a', 'b'), path.join(tmp, 'no-such')), null);
+  });
+
+  check('within: a dangling link or a loop counts as outside (R3-3)', () => {
+    const root = path.join(tmp, 'root2'); fs.mkdirSync(root);
+    fs.symlinkSync(path.join(tmp, 'gone-dir'), path.join(root, 'dangling')); fs.symlinkSync('loop', path.join(root, 'loop'));
+    assert.equal(sandbox.within(root, path.join(root, 'dangling')), false);
+    assert.equal(sandbox.within(root, path.join(root, 'loop')), false);
+    assert.equal(sandbox.within(root, path.join(root, 'new.db')), true);
+  });
+
+  check('venv reached through a link outside it: only the venv counts as mounted (N1); a CR in a path is refused (N4)', () => {
+    const x = path.join(tmp, 'n1'); fs.mkdirSync(path.join(x, 'venv', 'bin'), { recursive: true }); fs.mkdirSync(path.join(x, 'home', '.local', 'py'), { recursive: true });
+    fs.mkdirSync(path.join(x, 'home', '.local', 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(x, 'venv', 'pyvenv.cfg'), ''); fs.writeFileSync(path.join(x, 'venv', 'bin', 'cgr'), '');
+    fs.writeFileSync(path.join(x, 'home', '.local', 'py', 'python3.12'), '');
+    fs.symlinkSync(path.join(x, 'home', '.local', 'py', 'python3.12'), path.join(x, 'venv', 'bin', 'python3'));
+    fs.symlinkSync(path.join(x, 'venv', 'bin', 'cgr'), path.join(x, 'home', '.local', 'bin', 'cgr'));
+    assert.match(sandbox.venvOf(path.join(x, 'home', '.local', 'bin', 'cgr')).error, /no Python at .*\.local\/py\/python3\.12/);
+    const cr = path.join(tmp, 'ab\r'); fs.mkdirSync(cr);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [cr] }, 'n') as any).error, /line break/);
   });
 
   const built = spawnSync('docker', ['image', 'inspect', sandbox.SANDBOX_IMAGE], { stdio: 'ignore', env: sandbox.dockerEnv() }).status === 0;
