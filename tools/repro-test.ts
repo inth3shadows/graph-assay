@@ -69,6 +69,21 @@ try{
   // tools/package.json decides how the entry point loads (#39 review L2).
   assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json (the entry point\'s module marker) missing from the repro manifest');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
  });
+ check('--split heldout needs --publish; the usage names every corpus repo; the split is recorded',()=>{
+  const go=(argv)=>spawnSync(process.execPath,[path.join(qa,'tools/repro.ts'),...argv],{cwd:qa,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
+  const refused=go(['--split','heldout','--repo','httpx','--out',path.join(tmp,'held-refused')]);
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/reserved for publication.*--publish/s);assert(!fs.existsSync(path.join(tmp,'held-refused')),'a refused run must not create its output');
+  // With --publish it passes parsing and reaches the (shimmed, failing) namespace check; no reproduction runs.
+  const out=path.join(tmp,'held-ok');const ok=go(['--split','heldout','--publish','--repo','httpx','--out',out]);
+  assert.equal(ok.status,1,ok.stdout+ok.stderr);const m=read(path.join(out,'manifest.json'));
+  assert.match(m.error,/namespace-check/);assert.equal(m.split,'heldout');assert.equal(m.publish,true);assert.deepEqual(m.repos.map(r=>r.name),['httpx']);
+  // A dev repo is not in the held-out split; --publish does not change the dev split.
+  assert.match(go(['--split','heldout','--publish','--repo','mux','--out',path.join(tmp,'h2')]).stderr,/Unknown heldout repo: mux/);
+  const dev=go(['--split','dev','--repo','mux','--out',path.join(tmp,'dev-pub'),'--publish']);assert.equal(read(path.join(tmp,'dev-pub','manifest.json')).publish,true);assert.equal(dev.status,1);
+  const devPlain=path.join(tmp,'dev-plain');go(['--repo','mux','--out',devPlain]);const dm=read(path.join(devPlain,'manifest.json'));assert.equal(dm.split,'dev');assert.equal(dm.publish,false);
+  assert.match(go(['--split','bogus']).stderr,/Unknown split/);
+  const help=go(['--help']);assert.equal(help.status,0);for(const name of ['mux','requests','httpx','cobra','got'])assert.match(help.stdout,new RegExp(name),`usage lacks ${name}`);
+ });
  shim('unshare','process.exit(0);');
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
  shim('bash',`const fs=require('node:fs'),path=require('node:path');const args=process.argv.slice(2);if(args[0]!=='oracle/run.sh')process.exit(9);

@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- `tools/repro.ts --split heldout --publish`: the reproduction image can run the held-out split, which it
+  refuses without `--publish` (SPEC §9); the manifest records the split and the flag.
 - Subject isolation where unprivileged user namespaces are blocked (Ubuntu 24.04's AppArmor default):
   `lib/sandbox.ts` runs every adapter's index process under `unshare -rn` where it works, else in a
   throwaway container (`docker/sandbox.Dockerfile`, built by `tools/setup.sh`; `--no-sandbox` skips)
