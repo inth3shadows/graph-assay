@@ -76,12 +76,18 @@ check('every subject with a work dir is triaged, under its own work-dir suffix; 
       fs.writeFileSync(path.join(dir, 'out-missing.json'), JSON.stringify({ buckets: {}, groups: {}, sites: [] }));
     }
     const run = (extra = []) => { const out = path.join(work, 't.json');
-      const r = spawnSync(process.execPath, [path.join(qa, 'bench/triage.ts'), '--work', work, '--known', path.join(work, 'none.json'), '--json', out, '--md', path.join(work, 't.md'), ...extra], { encoding: 'utf8' });
+      const r = spawnSync(process.execPath, [path.join(qa, 'bench/triage.ts'), ...extra, '--work', work, '--known', path.join(work, 'none.json'), '--json', out, '--md', path.join(work, 't.md')], { encoding: 'utf8' });
       assert.equal(r.status, 0, r.stderr); return JSON.parse(fs.readFileSync(out, 'utf8')); };
     const all = run();
     assert.deepEqual(Object.keys(all.subjects), ['codegraph', 'code-review-graph']);
     assert.equal(all.subjects['code-review-graph'].shapes[0].key, WRONG);
     assert.deepEqual(Object.keys(run(['--subjects', 'code-review-graph']).subjects), ['code-review-graph']);
+    // a T3 file alone selects its subject; nothing found lists every subject as not run (a wrong --work shows)
+    const t3 = path.join(work, 't3'); fs.mkdirSync(t3); fs.writeFileSync(path.join(t3, 'meta-cbm.json'), '[]');
+    assert.deepEqual(Object.keys(run(['--t3', t3]).subjects), ['codegraph', 'codebase-memory-mcp', 'code-review-graph']);
+    const empty = path.join(work, 'empty'); fs.mkdirSync(empty);
+    const none = run(['--work', empty]);
+    assert.equal(Object.keys(none.subjects).length, 4); assert.ok(Object.values<any>(none.subjects).every((v) => v.notRun.length === readRepos(undefined, 'dev').length));
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
 console.log(`${n}/${n} triage checks`);

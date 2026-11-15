@@ -56,6 +56,15 @@ try {
     const cmp = compareAll([a, b, c]);
     assert.equal(cmp.matched.length, 1); assert.equal(cmp.mismatched.length, 1); assert.equal(cmp.unknown.length, 0); assert.equal(cmp.unpaired.length, 0);
     assert.deepEqual(compareAll([a, b]).matched.length, 2);
+    const one = compareAll([a]); assert.equal(one.single, true); assert.equal(one.matched.length, 0);
+    assert.match(robustnessMarkdown({ codegraph: a }, one).join('\n'), /fewer than two subjects with a T3 run, nothing compared/);
+    // a challenge that mismatches one subject and is unknown for another lands in one list only
+    const d = summarizeRobustness([row({ subject: 'codebase-memory-mcp', challengeSha256: null }), row({ seed: 's2', subject: 'codebase-memory-mcp' })], 'codebase-memory-mcp');
+    const both = compareAll([a, c, d]); const all = [...both.matched, ...both.mismatched, ...both.unknown, ...both.unpaired];
+    assert.equal(all.length, new Set(all).size); assert.equal(both.unknown.length, 1); assert.equal(both.mismatched.length, 1);
+    // a subject with no T3 run is left out (listed NOT RUN): the others still pair
+    const none = summarizeRobustness(null, 'codegraph');
+    const ref = compareAll([none, b, { ...b, subject: 'code-review-graph' }]); assert.equal(ref.matched.length, 2);
   });
   check('comparison distinguishes mismatched, unknown and unpaired; nulls cannot match', () => {
     const a = summarizeRobustness([row(), row({ seed: 'unknown', challengeSha256: null }), row({ seed: 'alone' })], 'codegraph');

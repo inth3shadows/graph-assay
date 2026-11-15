@@ -9,7 +9,8 @@
 //   --known: each fixture's shapes (tools/triage/tag-fixtures.ts); a codegraph shape whose key a fixture of
 //   the same language produces lists that fixture and its upstream issue, with its replay verdict from --t1
 //   (BROKEN: still open at this build). A match is a candidate, not proof: one key can hold several bugs.
-//   --subjects: which subjects (lib/subjects/names.ts); default every subject with a work dir in the split.
+//   --subjects: which subjects (lib/subjects/names.ts); default every subject with a work dir in the split
+//   or a --t3 file, else every subject (each then lists its repos as not run).
 //   --work: the dir holding w-<name>[-<subject>] (default: the configured oracle work dir); for a
 //   canonical reproduction, <results>/work.
 //
@@ -124,7 +125,8 @@ if (isMain(import.meta.url)) {
   const known = fs.existsSync(knownFile) ? readJson(knownFile) : null;
   const result = { work, corpus: path.basename(corpus), split, subjects: {} };
   // A subject with no work dir in the split would only list every repo as not run: left out unless named.
-  const chosen = subjectsOpt ? parseSubjects(subjectsOpt) : SUBJECT_NAMES.filter((s) => repos.some((r) => workDir(r.name, workSuffix(s))));
+  const found = SUBJECT_NAMES.filter((s) => repos.some((r) => workDir(r.name, workSuffix(s))) || (t3Dir && fs.existsSync(path.join(t3Dir, `meta-${TAG[s]}.json`))));
+  const chosen = subjectsOpt !== null ? parseSubjects(subjectsOpt ?? '') : found.length ? found : SUBJECT_NAMES;
   for (const subj of chosen) {
     const sfx = workSuffix(subj); const tag = TAG[subj];
     const rows = [];

@@ -65,15 +65,22 @@ export function compareChallenges(a, b) {
   return result;
 }
 
-/** Every subject's challenges against the first's: a key is matched only if it matches for every pair. */
+/**
+ * The challenges of every subject with a T3 run against the first such subject's. A subject without a
+ * run is listed NOT RUN on its own, and canonical tables refuse it. Each challenge lands in exactly one
+ * list, the worst it reaches in any pair (unpaired, then unknown, then mismatched); it is matched only
+ * if it matches in every pair. Fewer than two runs compare nothing (`single`).
+ */
 export function compareAll(summaries) {
-  const [first, ...rest] = summaries;
-  if (!first) return { matched: [], mismatched: [], unknown: [], unpaired: [] };
-  const pairs = (rest.length ? rest : [first]).map((b) => compareChallenges(first, b));
-  const union = (k) => [...new Set(pairs.flatMap((p) => p[k]))];
-  const bad = new Set(['mismatched', 'unknown', 'unpaired'].flatMap(union));
-  return { matched: union('matched').filter((k) => !bad.has(k) && pairs.every((p) => p.matched.includes(k))),
-    mismatched: union('mismatched'), unknown: union('unknown'), unpaired: union('unpaired') };
+  const recorded = summaries.filter((s) => s.status === 'RECORDED');
+  const result = { matched: [], mismatched: [], unknown: [], unpaired: [], single: recorded.length < 2 };
+  if (result.single) return result;
+  const [ref, ...rest] = recorded;
+  const pairs = rest.map((b) => compareChallenges(ref, b));
+  const worst = new Map();
+  for (const list of ['matched', 'mismatched', 'unknown', 'unpaired']) for (const p of pairs) for (const k of p[list]) worst.set(k, list);
+  for (const [k, list] of worst) result[list].push(k);
+  return result;
 }
 
 export function robustnessMarkdown(subjects, comparison) {
@@ -87,7 +94,8 @@ export function robustnessMarkdown(subjects, comparison) {
     }
   }
   md.push('', 'Errors remain in the eligible denominator; unsupported or empty transformations are not applicable. Legacy evidence without challenge fingerprints is unverified and excluded from eligible counts. Clean repeat runs have the same canonical graph; raw id/order drift is reported separately.',
-    `Shared challenge fingerprints: ${comparison.matched.length} matched, ${comparison.mismatched.length} mismatched, ${comparison.unknown.length} unknown, ${comparison.unpaired.length} unpaired. Unknown or unmatched evidence does not establish a paired subject comparison.`);
+    comparison.single ? 'Shared challenge fingerprints: fewer than two subjects with a T3 run, nothing compared.'
+      : `Shared challenge fingerprints: ${comparison.matched.length} matched, ${comparison.mismatched.length} mismatched, ${comparison.unknown.length} unknown, ${comparison.unpaired.length} unpaired. Unknown or unmatched evidence does not establish a paired subject comparison.`);
   for (const [name, summary] of Object.entries<any>(subjects)) md.push(`${name} T3 adapter hashes: ${summary.adapterHashes.length ? summary.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}.`);
   return md;
 }

@@ -5,9 +5,11 @@
 //
 // Usage: node bench/tables.ts [--corpus corpus/v1.txt] [--split dev] [--t1 <dir>] [--noise <noise.json>] [--t3 <dir>]
 //                              [--subjects a,b,...] [--md out.md] [--json out.json] [--seed 1] [--canonical]
-//   --subjects: which subjects to table (lib/subjects/names.ts). Default: every subject with an input
-//   (a work dir for the split, a T1 or a T3 file); with no inputs at all, every subject. The averages
-//   cover the repos every chosen subject ran (SPEC §8), so a subject run on fewer repos narrows them.
+//   --subjects: which subjects to table (lib/subjects/names.ts). Default: every subject with a work dir
+//   for the split; with none, every subject with a T1 or T3 file; with neither, every subject. With
+//   --canonical the default is codegraph and code-graph-rag, the reproduction's subjects (SPEC §10).
+//   The averages cover the repos every chosen subject ran (SPEC §8), so a subject run on fewer repos
+//   narrows them; a default selection that narrows them says so on stderr.
 //   --canonical: tools/repro.ts passes it inside the Docker image; only those tables are canonical
 //   (SPEC §10). Without it the banner marks a development run.
 //   Oracle results are read from the work dirs run.sh leaves: w-pub-<name> (or w-<name>), plus
@@ -67,10 +69,17 @@ const pct = (x) => (Number.isNaN(x) ? '-' : `${(100 * x).toFixed(1)}%`);
 const ci = ([a, b]) => (Number.isNaN(a) ? '' : ` [${(100 * a).toFixed(1)}-${(100 * b).toFixed(1)}]`);
 
 const repos = readRepos(corpus, split);
-const hasInput = (s) => repos.some((r) => workDir(r.name, workSuffix(s)))
-  || [[t1Dir, 'replay'], [t1Dir, 'pycg'], [t3Dir, 'meta']].some(([d, stage]) => d && fs.existsSync(path.join(d, `${stage}-${TAG[s]}.json`)));
-const chosen = subjectsOpt ? parseSubjects(subjectsOpt) : SUBJECT_NAMES.filter(hasInput);
-const SUBJECTS = Object.fromEntries((chosen.length ? chosen : SUBJECT_NAMES).map((s) => [s, { sfx: workSuffix(s), tag: TAG[s] }]));
+const hasRun = (s) => repos.some((r) => workDir(r.name, workSuffix(s)));
+const hasTier = (s) => [[t1Dir, 'replay'], [t1Dir, 'pycg'], [t3Dir, 'meta']].some(([d, stage]) => d && fs.existsSync(path.join(d, `${stage}-${TAG[s]}.json`)));
+const [chosen, chosenBy] = (() => {
+  if (subjectsOpt !== null) return [parseSubjects(subjectsOpt ?? ''), '--subjects'];
+  if (canonical) return [['codegraph', 'code-graph-rag'], 'the canonical subjects'];
+  for (const [has, why] of [[hasRun, 'every subject with a work dir'], [hasTier, 'no work dirs: every subject with a T1 or T3 file']] as const) {
+    const found = SUBJECT_NAMES.filter(has); if (found.length) return [found, why];
+  }
+  return [SUBJECT_NAMES, 'no inputs: every subject'];
+})();
+const SUBJECTS = Object.fromEntries(chosen.map((s) => [s, { sfx: workSuffix(s), tag: TAG[s] }]));
 // SPEC §9: a language whose oracle is too noisy to score against is diagnostic. Its repos are shown
 // per repo but left out of the T2 averages. Rule: the 95% Wilson lower bound of "SCIP right where it
 // answers" in the labelled sample is under DIAGNOSTIC_FLOOR. Without --noise nothing is excluded.
@@ -103,6 +112,10 @@ const notRun = new Set(result.missingRuns.map((m) => m.replace(/ \(.*\)$/, '')))
 result.otherSpec = Object.entries<any>(result.subjects).flatMap(([s, v]) => v.rows.filter((x) => x.spec.some((y) => y !== SPEC_VERSION)).map((x) => `${x.repo} (${s}: ${[...new Set(x.spec)].map((y) => y ?? 'unrecorded').join(', ')})`));
 if (canonical && result.otherSpec.length) { console.error(`canonical tables need ${SPEC_VERSION} results; got: ${result.otherSpec.join(', ')}`); process.exit(2); }
 result.averagedRepos = repos.map((r) => r.name).filter((n) => !notRun.has(n));
+if (subjectsOpt === null && notRun.size) {
+  const short = Object.keys(SUBJECTS).filter((s) => repos.some((r) => !workDir(r.name, workSuffix(s))));
+  console.error(`tables: ${short.join(', ')} ran on fewer repos; every subject's averages cover only ${result.averagedRepos.join(', ') || 'none'} (SPEC §8). Pass --subjects to choose.`);
+}
 for (const v of Object.values<any>(result.subjects)) {
   const agg: Record<string, any> = {};
   for (const [name, pick] of ([['precision strict', (x) => x.fwd.strict], ['precision tolerant', (x) => x.fwd.tolerant], ['recall strict', (x) => x.miss.strict], ['recall tolerant', (x) => x.miss.tolerant],
@@ -126,7 +139,7 @@ result.diagnostic = Object.fromEntries(diagnostic);
 const md = [`# Benchmark tables v1 — corpus ${result.corpus}, split \`${split}\``, '',
   'Edge tiers lead (decision 2026-11-05); T0 question accuracy is experimental and not shown here. Both T2 tracks (SPEC §3), side by side, never combined.',
   `Generated ${new Date().toISOString().slice(0, 10)} by \`bench/tables.ts\`. ${canonical ? 'Canonical: reproduced in the Docker image by `tools/repro.ts` (`manifest.json` records every input; SPEC §10).' : 'Development run: canonical tables come only from `tools/repro.ts` in the Docker image (SPEC §10); this machine\'s Python environment can resolve the standard library differently.'}`, ''];
-md.push(`Subjects: ${Object.keys(SUBJECTS).join(', ')}${subjectsOpt ? ' (--subjects)' : ' (every subject with an input)'}.`, '');
+md.push(`Subjects: ${Object.keys(SUBJECTS).join(', ')} (${chosenBy}).`, '');
 md.push('Adapter hashes (from recorded inputs): ' + Object.entries<any>(result.subjects).map(([s, v]) => `${s}: ${v.adapterHashes.length ? v.adapterHashes.map((h) => h ?? 'unknown (legacy)').join(', ') : 'no inputs'}`).join('; '), '');
 if (result.missingRuns.length) md.push(`**Not run (left out of every subject's averages):** ${result.missingRuns.join(', ')}`, '');
 for (const [s, v] of Object.entries<any>(result.subjects)) if (v.failed.length) md.push(`**${s} failed (scored as misses, SPEC §8):** ${v.failed.join(', ')}`, '');

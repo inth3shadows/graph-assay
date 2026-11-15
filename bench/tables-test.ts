@@ -41,10 +41,10 @@ function fabricate(work, { failed = null, missingDir = null, noPairs = null, spe
   }
 }
 const tables = (work, extra = []) => {
-  const out = path.join(tmp, 'out.json');
+  const out = path.join(tmp, 'out.json'); fs.rmSync(out, { force: true });
   const r = spawnSync(process.execPath, [path.join(qa, 'bench/tables.ts'), '--json', out, '--md', path.join(tmp, 'out.md'), ...extra],
     { encoding: 'utf8', env: { ...process.env, ORACLE_WORK: work, NODE_NO_WARNINGS: '1' } });
-  return { status: r.status, stderr: r.stderr, json: r.status === 0 ? JSON.parse(fs.readFileSync(out, 'utf8')) : null, md: r.status === 0 ? fs.readFileSync(path.join(tmp, 'out.md'), 'utf8') : '' };
+  return { status: r.status, stderr: r.stderr, stdout: r.stdout, json: r.status === 0 ? JSON.parse(fs.readFileSync(out, 'utf8')) : null, md: r.status === 0 ? fs.readFileSync(path.join(tmp, 'out.md'), 'utf8') : '' };
 };
 
 try {
@@ -134,7 +134,7 @@ try {
     assert.equal(all.status, 0, all.stderr);
     assert.deepEqual(Object.keys(all.json.subjects), ['codegraph', 'code-graph-rag', 'code-review-graph']);
     assert.equal(all.json.subjects['code-review-graph'].agg['recall strict'].macro, 0.8);
-    assert.match(all.md, /Subjects: codegraph, code-graph-rag, code-review-graph \(every subject with an input\)/);
+    assert.match(all.md, /Subjects: codegraph, code-graph-rag, code-review-graph \(every subject with a work dir\)/);
     assert.match(all.md, /\| code-review-graph \| 90\.0%/);
     const two = tables(work, ['--subjects', 'codegraph,code-review-graph']);
     assert.deepEqual(Object.keys(two.json.subjects), ['codegraph', 'code-review-graph']);
@@ -145,6 +145,30 @@ try {
     fabricate(work, { sfxs: ['', '-code-graph-rag', '-codebase-memory-mcp'], missingDir: `${repos[2]}-codebase-memory-mcp` });
     assert.deepEqual(tables(work).json.averagedRepos, repos.filter((r) => r !== repos[2]));
     assert.deepEqual(tables(work, ['--subjects', 'codegraph,code-graph-rag']).json.averagedRepos, repos);
+  });
+  check('a T1 or T3 file alone does not make a subject a table subject when others have work dirs', () => {
+    fabricate(work);
+    const t3 = path.join(tmp, 't3'); write(path.join(t3, 'meta-cbm.json'), []);
+    const r = tables(work, ['--t3', t3]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(Object.keys(r.json.subjects), ['codegraph', 'code-graph-rag']);
+    assert.deepEqual(r.json.averagedRepos, repos);
+    assert.match(r.md, /Subjects: codegraph, code-graph-rag \(every subject with a work dir\)/);
+  });
+  check('canonical tables default to codegraph and code-graph-rag and refuse a missing one (SPEC §10)', () => {
+    fabricate(work, { sfxs: [''] });
+    const r = tables(work, ['--canonical']);
+    assert.equal(r.status, 2); assert.match(r.stderr, /canonical tables need every run; missing: .*\(code-graph-rag\)/);
+  });
+  check('an empty or valueless --subjects is an error, not the default', () => {
+    fabricate(work);
+    for (const extra of [['--subjects', ''], ['--subjects']]) { const r = tables(work, extra); assert.equal(r.status, 2, extra.join(' ')); assert.match(r.stderr, /unknown subject/); }
+  });
+  check('a default selection that narrows the averaged repos says so; no inputs is labelled as such', () => {
+    fabricate(work, { sfxs: ['', '-code-graph-rag', '-codebase-memory-mcp'], missingDir: `${repos[2]}-codebase-memory-mcp` });
+    assert.match(tables(work).stderr, /codebase-memory-mcp ran on fewer repos/);
+    assert.doesNotMatch(tables(work, ['--subjects', 'codegraph,codebase-memory-mcp']).stderr, /ran on fewer repos/);
+    assert.match(tables(path.join(tmp, 'absent')).md, /Subjects: codegraph, code-graph-rag, codebase-memory-mcp, code-review-graph \(no inputs: every subject\)/);
   });
   check('confidence bounds print to one decimal place (SPEC §9)', () => {
     fabricate(work);
