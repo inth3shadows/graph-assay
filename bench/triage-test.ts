@@ -2,6 +2,12 @@
 // Hermetic checks for bench/triage.ts: shapes rank by macro headline points (not raw sites), noise is
 // left out, shapes that share call sites are linked, and decoy findings are counted.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readRepos } from '../differential/builds.ts';
 import { decoyFindings, describe, knownFor, rankShapes } from './triage.ts';
 
 let n = 0;
@@ -58,5 +64,30 @@ check('a filed fixture matches a shape it produces in the same language, with it
 check('the row language travels with a shape', () => {
   const r = row('mux', { 'ok|calls': 8, [WRONG]: 2 }, {}); r.language = 'go';
   assert.deepEqual(rankShapes([r]).shapes[0].langs, ['go']);
+});
+check('every subject with a work dir is triaged, under its own work-dir suffix; --subjects narrows the set', () => {
+  const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-triage-'));
+  try {
+    const repo = readRepos(undefined, 'dev')[0].name;
+    for (const sfx of ['', '-code-review-graph']) {
+      const dir = path.join(work, `w-pub-${repo}${sfx}`); fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'out.json'), JSON.stringify({ buckets: { 'ok|calls': 1, [WRONG]: 1 }, skipped: {}, groups: {}, sites: [] }));
+      fs.writeFileSync(path.join(dir, 'out-missing.json'), JSON.stringify({ buckets: {}, groups: {}, sites: [] }));
+    }
+    const run = (extra = []) => { const out = path.join(work, 't.json');
+      const r = spawnSync(process.execPath, [path.join(qa, 'bench/triage.ts'), ...extra, '--work', work, '--known', path.join(work, 'none.json'), '--json', out, '--md', path.join(work, 't.md')], { encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stderr); return JSON.parse(fs.readFileSync(out, 'utf8')); };
+    const all = run();
+    assert.deepEqual(Object.keys(all.subjects), ['codegraph', 'code-review-graph']);
+    assert.equal(all.subjects['code-review-graph'].shapes[0].key, WRONG);
+    assert.deepEqual(Object.keys(run(['--subjects', 'code-review-graph']).subjects), ['code-review-graph']);
+    // a T3 file alone selects its subject; nothing found lists every subject as not run (a wrong --work shows)
+    const t3 = path.join(work, 't3'); fs.mkdirSync(t3); fs.writeFileSync(path.join(t3, 'meta-cbm.json'), '[]');
+    assert.deepEqual(Object.keys(run(['--t3', t3]).subjects), ['codegraph', 'codebase-memory-mcp', 'code-review-graph']);
+    const empty = path.join(work, 'empty'); fs.mkdirSync(empty);
+    const none = run(['--work', empty]);
+    assert.equal(Object.keys(none.subjects).length, 4); assert.ok(Object.values<any>(none.subjects).every((v) => v.notRun.length === readRepos(undefined, 'dev').length));
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
 console.log(`${n}/${n} triage checks`);

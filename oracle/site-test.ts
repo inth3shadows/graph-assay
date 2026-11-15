@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Hermetic checks for oracle/site.ts's pure core: bucket meanings and the explanation's content.
-import { explainSite, meaningOf, MEANING } from './site.ts';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { explainSite, meaningOf, MEANING, resolveBase } from './site.ts';
 
 let n = 0; let failed = 0;
 const check = (name, ok) => { n++; if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}`); };
@@ -19,6 +22,18 @@ check('explain: key, meaning, target, SCIP symbol and definition, edges', text.i
 const none = explainSite({ subject: 'codegraph', site: 'a.js:1', records: { forward: [], missing: [] }, source: null, edges: [], defs: null, skipped: { 'skip-decorator': 2, unused: 0 } }).join('\n');
 check('explain: no record names the skip counts, not zero ones', /no oracle record/.test(none) && none.includes('skip-decorator 2') && !none.includes('unused'));
 check('explain: --no-scip prints no SCIP definition line', !/SCIP definition/.test(none));
+{
+  // A run may hold only another subject's work dir: triage prints the base for it, which must resolve.
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-site-'));
+  fs.mkdirSync(path.join(work, 'w-pub-ky-code-review-graph')); fs.mkdirSync(path.join(work, 'w-mux'));
+  const base = path.join(work, 'w-pub-ky');
+  check('base: a crg-only run resolves from its base path', resolveBase(base, work) === base);
+  check('base: a crg-only run resolves from its subject dir', resolveBase(`${base}-code-review-graph`, work) === base);
+  check('base: a crg-only run resolves from its corpus name', resolveBase('ky', work) === base);
+  check('base: a codegraph run resolves from its run name', resolveBase('mux', work) === path.join(work, 'w-mux'));
+  check('base: no run is null', resolveBase('nope', work) === null);
+  fs.rmSync(work, { recursive: true, force: true });
+}
 
 console.log(`${n - failed}/${n} site checks`);
 process.exit(failed ? 1 : 0);
