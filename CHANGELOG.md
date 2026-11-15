@@ -24,7 +24,7 @@ All notable changes to this project are recorded here. The format follows
   match are guessed. `tools/setup.sh` installs the linux-amd64 release, sha256-pinned (`--no-cbm`
   skips). A golden mapping test and a sandbox probe join `lib/adapter-test.ts`.
 - `fixtures/cbm-candidates/`, two unfiled codebase-memory-mcp repros, both BROKEN on 0.12.1:
-  `cbm1-js-ts-same-stem` (`client.js` next to `client.ts`: the TS file's functions and calls vanish)
+  `cbm1-js-ts-same-stem` (`client.js` next to `client.ts`: a function defined in both becomes one node, and the TS file's call lands on the JS one)
   and `cbm2-py-nested-call-lifted` (a call inside a nested function is recorded on the module).
 - Five fixtures for forms next to colbymchenry/codegraph#2976 and #2975 that neither issue lists and
   that no open fix covers (all BROKEN on f72c9d2e and on PRs #3138, #3139 and #3140):
@@ -120,12 +120,12 @@ All notable changes to this project are recorded here. The format follows
 ### Fixed
 - The codebase-memory-mcp adapter dropped every definition in a file cbm writes without a `Module`
   node: Go and Java files, and a file whose extensionless path another file's Module took
-  (`aliases.py` next to `aliases.ini`). The adapter kept only nodes whose file had a Module. A code
-  file with only a `File` node (a known extension, or a definition in it) is now the file, and its
-  definitions keep their containers (`Config::read_config`, Java `A::run`). On corpus v1's dev split,
-  gorilla/mux goes from 0 to 17 Go files and from no function pairs to 624 subject pairs (469 of the
-  oracle's 620 matched); click gains 6 files and 23 nodes, requests 1 file. Every node and edge the
-  adapter produced before is unchanged, and the other repos' pair counts are the same.
+  (`client.ts` next to `client.js`). The File node of such a code file (a known extension) is now
+  the file; its definitions keep cbm's bare names. cbm's DEFINES edges that cross files (a File node
+  "defining" another file's functions) are dropped. On corpus v1's dev split, gorilla/mux goes from
+  0 to 17 Go files and from no function pairs to 624 subject pairs (469 of the oracle's 620 matched);
+  click gains 6 files and 23 nodes, requests 1 file. Every node and edge the adapter produced before
+  is unchanged, and the other repos' pair counts are the same.
 - Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
   fixture's caller is in the graph compared the last part of `from` with node names only, and a
   codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A

@@ -7,7 +7,7 @@ Minimal repros of codebase-memory-mcp defects, found while building its adapter.
 
 | fixture | defect | 0.12.1 | upstream |
 |---|---|---|---|
-| `cbm1-js-ts-same-stem` | `client.js` and `client.ts` in one directory get the same qualified names (the extension is dropped); every function and call of `client.ts` disappears. `client.py` next to `client.ts` loses `client.ts` the same way. | BROKEN | unfiled |
+| `cbm1-js-ts-same-stem` | `client.js` and `client.ts` in one directory get the same qualified names (the extension is dropped), so `send`, defined in both, becomes one node (`client.js`'s) and `client.ts`'s `send -> encode` call is recorded on it. `client.py` next to `client.ts` collides the same way. (Before #47 the graph-assay adapter also dropped the rest of `client.ts`: cbm writes that file with no Module node.) | BROKEN | unfiled |
 | `cbm2-py-nested-call-lifted` | A nested function (`version_option.callback`) is not a node, and a call inside it is recorded on the enclosing module. | BROKEN | unfiled |
 
 Neither is filed yet: the maintainers see graph-assay's results first.

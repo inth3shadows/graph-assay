@@ -61,7 +61,7 @@ fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), h
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-check('codebase-memory-mcp: a code file with only a File node is a file, and its definitions keep their containers', () => {
+check('codebase-memory-mcp: a code file with only a File node is a file; containment never crosses files', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-file-only-'));
   try {
     fs.mkdirSync(path.join(tmp, '.graph-assay'));
@@ -69,31 +69,28 @@ check('codebase-memory-mcp: a code file with only a File node is a file, and its
     db.exec(`CREATE TABLE nodes (id, label, name, qualified_name, file_path, start_line, end_line, properties);
       CREATE TABLE edges (id, source_id, target_id, type, properties);`);
     const node = db.prepare('INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    // Rows as cbm 0.12.1 writes them. Go (gorilla/mux) and Java: a File node, no Module, qnames under the
-    // directory. aliases.py (pallets/click): its Module qname was taken by aliases.ini, so it is File-only
-    // and its qnames run under its extensionless path. x.swift: File-only, an extension the adapter does not
-    // know, with a definition. user.tmpl: File-only, no definitions, not code.
+    // Rows as cbm 0.12.1 writes them. Go (gorilla/mux): a File node, no Module, package-level qnames.
+    // client.ts beside client.js (fixtures/cbm-candidates/cbm1): the .js file took the Module, the .ts file
+    // is File-only, and cbm's File client.ts "defines" client.js's function. x.swift: File-only with an
+    // extension the adapter does not know. user.tmpl: File-only, not code.
     for (const r of [[1, 'Project', 'graph-assay', 'graph-assay', '', 0, 0], [2, 'File', 'main.go', 'graph-assay.main.go.__file__', 'main.go', 0, 0],
       [3, 'Function', 'main', 'graph-assay.main', 'main.go', 3, 5], [4, 'Function', 'helper', 'graph-assay.helper', 'main.go', 7, 8],
       [5, 'File', 'user.tmpl', 'graph-assay.user.tmpl.__file__', 'user.tmpl', 0, 0],
-      [10, 'Module', 'aliases', 'graph-assay.ex.aliases', 'ex/aliases.ini', 1, 3], [11, 'File', 'aliases.ini', 'graph-assay.ex.aliases.ini.__file__', 'ex/aliases.ini', 0, 0],
-      [12, 'File', 'aliases.py', 'graph-assay.ex.aliases.py.__file__', 'ex/aliases.py', 0, 0], [13, 'Class', 'Config', 'graph-assay.ex.aliases.Config', 'ex/aliases.py', 1, 4],
-      [14, 'Method', 'read_config', 'graph-assay.ex.aliases.Config.read_config', 'ex/aliases.py', 3, 4], [15, 'Function', 'read_config', 'graph-assay.ex.aliases.read_config', 'ex/aliases.py', 6, 7],
-      [20, 'File', 'Svc.java', 'graph-assay.src.Svc.java.__file__', 'src/Svc.java', 0, 0], [21, 'Method', 'run', 'graph-assay.src.A.run', 'src/Svc.java', 1, 1],
-      [22, 'Method', 'run', 'graph-assay.src.B.run', 'src/Svc.java', 2, 2],
+      [10, 'Module', 'client', 'graph-assay.client', 'client.js', 1, 3], [11, 'File', 'client.js', 'graph-assay.client.js.__file__', 'client.js', 0, 0],
+      [12, 'Function', 'send', 'graph-assay.client.send', 'client.js', 1, 3],
+      [13, 'File', 'client.ts', 'graph-assay.client.ts.__file__', 'client.ts', 0, 0], [14, 'Function', 'encode', 'graph-assay.client.encode', 'client.ts', 1, 2],
       [30, 'File', 'x.swift', 'graph-assay.x.swift.__file__', 'x.swift', 0, 0], [31, 'Function', 'f', 'graph-assay.x.f', 'x.swift', 1, 2]]) node.run(...r, '{}');
     const edge = db.prepare('INSERT INTO edges VALUES (?, ?, ?, ?, ?)');
     edge.run(1, 2, 3, 'DEFINES', '{}'); edge.run(2, 3, 4, 'CALLS', JSON.stringify({ line: 4, callee: 'helper', strategy: 'same_module' }));
+    edge.run(3, 13, 14, 'DEFINES', '{}'); edge.run(4, 13, 12, 'DEFINES', '{}'); edge.run(5, 13, 11, 'DEFINES', '{}');
+    edge.run(6, 12, 14, 'CALLS', JSON.stringify({ line: 2, callee: 'encode' }));
     db.close();
     const snap = cbm.snapshot(tmp);
     assert.deepEqual(validateSnapshot(snap), []);
-    assert.deepEqual(snap.files, [{ path: 'ex/aliases.ini', language: null }, { path: 'ex/aliases.py', language: 'python' }, { path: 'main.go', language: 'go' },
-      { path: 'src/Svc.java', language: 'java' }, { path: 'x.swift', language: null }]);
-    const q = Object.fromEntries(['main.go', 'ex/aliases.py', 'src/Svc.java', 'x.swift'].map((f) => [f, snap.nodes.filter((n) => n.file === f).map((n) => `${n.kind} ${n.qname}`)]));
-    assert.deepEqual(q, { 'main.go': ['file main.go', 'function main', 'function helper'],
-      'ex/aliases.py': ['file ex/aliases.py', 'class Config', 'method Config::read_config', 'function read_config'],
-      'src/Svc.java': ['file src/Svc.java', 'method A::run', 'method B::run'], 'x.swift': ['file x.swift', 'function f'] });
-    assert.deepEqual(snap.edges.map((e) => [e.kind, e.src, e.dst, e.line]), [['contains', '2', '3', null], ['calls', '3', '4', 4]]);
+    assert.deepEqual(snap.files, [{ path: 'client.js', language: 'javascript' }, { path: 'client.ts', language: 'typescript' }, { path: 'main.go', language: 'go' }]);
+    assert.deepEqual(snap.nodes.filter((n) => ['main.go', 'client.ts'].includes(n.file)).map((n) => `${n.kind} ${n.qname}`),
+      ['file main.go', 'function main', 'function helper', 'file client.ts', 'function encode']);
+    assert.deepEqual(snap.edges.map((e) => [e.kind, e.src, e.dst, e.line]), [['contains', '2', '3', null], ['calls', '3', '4', 4], ['contains', '13', '14', null], ['calls', '12', '14', 2]]);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 

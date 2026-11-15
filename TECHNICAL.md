@@ -36,7 +36,7 @@ Design decisions:
   function-pair track (SPEC §3).
   A file is its `Module` node. cbm 0.12.1 writes only a `File` node for Go and Java files and for a
   file whose extensionless path another file's Module took; for such a code file the `File` node is
-  the file, and its definitions' qnames lose the extensionless path or, failing that, the directory.
+  the file, and its definitions keep cbm's bare names. A DEFINES edge that crosses files is dropped.
   `lib/subjects/code-review-graph.ts` does the same for code-review-graph 2.4.0 (`build`, core
   install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
   unshared where possible; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
