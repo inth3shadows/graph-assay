@@ -16,6 +16,7 @@ import * as cgr from './subjects/code-graph-rag.ts';
 import * as cbm from './subjects/codebase-memory-mcp.ts';
 import * as crg from './subjects/code-review-graph.ts';
 import { validateSnapshot } from './snapshot.ts';
+import * as sandbox from './sandbox.ts';
 import { DatabaseSync } from 'node:sqlite';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -48,13 +49,14 @@ check('codegraph sandbox: allowlisted env, private HOME, no network where unshar
     const probe = path.join(tmp, 'probe.mjs');
     fs.writeFileSync(probe, `import * as fs from 'node:fs'; import * as os from 'node:os';
 const ifaces = Object.entries(os.networkInterfaces()).filter(([k]) => k !== 'lo').length;
-fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), home: process.env.HOME, ifaces }));\n`);
+fs.writeFileSync(process.env.HOME + '/seen.json', JSON.stringify({ keys: Object.keys(process.env), home: process.env.HOME, ifaces }));\n`);
     const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
     process.env.GRAPH_ASSAY_TEST_SECRET = 'x'; process.env.CODEGRAPH_TEST_SWITCH = '1';
-    const r = codegraph.index(work, probe, { args: [] });
+    const home = path.join(tmp, 'home');
+    const r = codegraph.index(work, probe, { args: [], home });
     delete process.env.GRAPH_ASSAY_TEST_SECRET; delete process.env.CODEGRAPH_TEST_SWITCH;
     assert.equal(r.ok, true, r.output);
-    const seen = JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8'));
+    const seen = JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8'));
     assert(!seen.keys.includes('GRAPH_ASSAY_TEST_SECRET'), 'a caller variable reached the index');
     assert(seen.keys.includes('CODEGRAPH_TEST_SWITCH'), "codegraph's own switches must pass");
     assert.notEqual(seen.home, os.homedir());
@@ -104,13 +106,14 @@ check('codebase-memory-mcp sandbox: allowlisted env, private HOME and cache, roo
     fs.writeFileSync(probe, `#!${process.execPath}
 import * as fs from 'node:fs'; import * as os from 'node:os';
 const ifaces = Object.entries(os.networkInterfaces()).filter(([k]) => k !== 'lo').length;
-fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces }));\n`, { mode: 0o755 });
+fs.writeFileSync(process.env.HOME + '/seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces }));\n`, { mode: 0o755 });
     const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
     process.env.GRAPH_ASSAY_TEST_SECRET = 'x'; process.env.CBM_WORKERS = '2'; process.env.CBM_DOWNLOAD_URL = 'http://example.invalid';
-    const r = cbm.index(work, probe, { args: [] });
+    const home = path.join(tmp, 'home');
+    const r = cbm.index(work, probe, { args: [], home });
     delete process.env.GRAPH_ASSAY_TEST_SECRET; delete process.env.CBM_WORKERS; delete process.env.CBM_DOWNLOAD_URL;
     assert.equal(r.ok, true, r.output);
-    const seen = JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8'));
+    const seen = JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8'));
     assert(!seen.keys.includes('GRAPH_ASSAY_TEST_SECRET'), 'a caller variable reached the index');
     assert(!seen.keys.includes('CBM_DOWNLOAD_URL'), 'a cbm setting outside the allowlist reached the index');
     assert.equal(seen.env.CBM_WORKERS, '2', "cbm's tuning switches must pass");
@@ -139,16 +142,16 @@ check('code-review-graph sandbox: allowlisted env, private HOME and data dir, re
     fs.writeFileSync(probe, `#!${process.execPath}
 import * as fs from 'node:fs'; import * as os from 'node:os'; import { DatabaseSync } from 'node:sqlite';
 const ifaces = Object.entries(os.networkInterfaces()).filter(([k]) => k !== 'lo').length;
-fs.writeFileSync('seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces, argv: process.argv.slice(2) }));
+fs.writeFileSync(process.env.HOME + '/seen.json', JSON.stringify({ keys: Object.keys(process.env), env: process.env, ifaces, argv: process.argv.slice(2) }));
 fs.mkdirSync(process.env.CRG_DATA_DIR, { recursive: true });
 const db = new DatabaseSync(process.env.CRG_DATA_DIR + '/graph.db');
 db.exec("CREATE TABLE IF NOT EXISTS nodes (kind, name, qualified_name, file_path, line_start, line_end, language, parent_name); CREATE TABLE IF NOT EXISTS edges (id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier, target_resolution)");
 db.close();\n`, { mode: 0o755 });
     const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
-    let r;
-    withEnv({ GRAPH_ASSAY_TEST_SECRET: 'x', CRG_SERIAL_PARSE: '1', CRG_OPENAI_API_KEY: 'x', CRG_REPO_ROOT: '/elsewhere' }, () => { r = crg.index(work, probe); });
+    let r; const first = path.join(tmp, 'home0');
+    withEnv({ GRAPH_ASSAY_TEST_SECRET: 'x', CRG_SERIAL_PARSE: '1', CRG_OPENAI_API_KEY: 'x', CRG_REPO_ROOT: '/elsewhere' }, () => { r = crg.index(work, probe, { home: first }); });
     assert.equal(r.ok, true, r.output);
-    const seen = JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8'));
+    const seen = JSON.parse(fs.readFileSync(path.join(first, 'seen.json'), 'utf8'));
     assert(!seen.keys.includes('GRAPH_ASSAY_TEST_SECRET'), 'a caller variable reached the index');
     assert(!seen.keys.includes('CRG_OPENAI_API_KEY'), 'an embedding-provider key reached the index');
     assert.equal(seen.env.CRG_SERIAL_PARSE, '1', "crg's parse switches must pass");
@@ -170,14 +173,14 @@ db.close();\n`, { mode: 0o755 });
     assert.notEqual(fs.readFileSync(path.join(work, '.graph-assay', 'crg.db'), 'utf8').slice(0, 5), 'stale', 'args [build] left a stale extract');
     // crg's update ignores CRG_REPO_ROOT, so it needs --repo too; an explicit --repo is kept as given
     assert.equal(crg.index(work, probe, { home, args: ['update'] }).ok, true);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
     assert.equal(crg.index(work, probe, { home, args: ['update', '--repo', work] }).ok, true);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8')).argv, ['update', '--repo', work]);
     assert.equal(crg.index(work, probe, { home, args: ['update', `--repo=${work}`] }).ok, true);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).argv, ['update', `--repo=${work}`]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8')).argv, ['update', `--repo=${work}`]);
     // the `env` option adds switches but never re-roots crg
     assert.equal(crg.index(work, probe, { home, env: { CRG_REPO_ROOT: '/elsewhere' } }).ok, true);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(work, 'seen.json'), 'utf8')).env.CRG_REPO_ROOT, work);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'seen.json'), 'utf8')).env.CRG_REPO_ROOT, work);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
@@ -205,7 +208,7 @@ check('codebase-memory-mcp: links the tool leaves in its output lead the host no
 import * as fs from 'node:fs';
 fs.mkdirSync(process.env.CBM_CACHE_DIR, { recursive: true });
 fs.symlinkSync(${JSON.stringify(path.join(outside, 'host.db'))}, process.env.CBM_CACHE_DIR + '/graph-assay.db');
-fs.symlinkSync(${JSON.stringify(outside)}, '.graph-assay');
+try { fs.symlinkSync(${JSON.stringify(outside)}, '.graph-assay'); } catch { /* a read-only repo (docker) */ }
 console.log('{"status":"indexed"}');\n`, { mode: 0o755 });
     const r = cbm.index(work, probe);
     assert.equal(r.ok, false, r.output); assert.match(r.output, /is a link|leads outside/);
@@ -226,7 +229,7 @@ console.log('{"status":"indexed"}');`));
     assert.equal(r1.ok, false); assert.match(r1.output, /graph-assay\.db-shm is a link/);
     // codegraph: a .codegraph sidecar link is a failed index, not a throw later in snapshot()
     const cgWork = path.join(tmp, 'cg'); fs.mkdirSync(cgWork);
-    const r2 = codegraph.index(cgWork, probe('cg.mjs', `fs.mkdirSync('.codegraph'); fs.writeFileSync('.codegraph/codegraph.db', ''); fs.symlinkSync(${JSON.stringify(victim)}, '.codegraph/codegraph.db-shm');`), { args: [] });
+    const r2 = codegraph.index(cgWork, probe('cg.mjs', `fs.mkdirSync('.codegraph', { recursive: true }); fs.writeFileSync('.codegraph/codegraph.db', ''); fs.symlinkSync(${JSON.stringify(victim)}, '.codegraph/codegraph.db-shm');`), { args: [] });
     assert.equal(r2.ok, false); assert.match(r2.output, /codegraph\.db-shm is a link/);
     assert.throws(() => codegraph.snapshot(cgWork), /is a link/);
     // cgr: an export naming a module path outside the repo, or a link in the repo, reads no host file
@@ -237,6 +240,147 @@ console.log('{"status":"indexed"}');`));
     const snap = cgr.snapshot(cgrWork);
     for (const n of snap.nodes.filter((x) => x.kind === 'file')) assert.equal(n.end, 1, `${n.file} was read (end ${n.end})`);
     assert.equal(fs.readFileSync(victim, 'utf8'), 'host file\n'.repeat(7));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('every adapter mounts the indexed repo read-only and only its own output dir read-write (#51)', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-mounts-')));
+  const bin = path.join(tmp, 'bin'); fs.mkdirSync(bin); const log = path.join(tmp, 'docker.log');
+  // a stub docker: records one `run`'s arguments, one per line, and does nothing
+  fs.writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\n[ "$1" = run ] && printf '%s\\n' "$@" > ${log}\nexit 0\n`, { mode: 0o755 });
+  const build = path.join(tmp, 'build'); fs.writeFileSync(build, '', { mode: 0o755 });
+  const work = path.join(tmp, 'repo'); fs.mkdirSync(path.join(work, '.git'), { recursive: true });
+  const oldPath = process.env.PATH;
+  try {
+    withEnv({ GRAPH_ASSAY_ISOLATION: 'docker', PATH: `${bin}:${oldPath}` }, () => {
+      sandbox.resetBackend();
+      for (const [name, adapter, writes] of [['codegraph', codegraph, ['.codegraph']], ['code-graph-rag', cgr, ['.graph-assay']],
+        ['codebase-memory-mcp', cbm, []], ['code-review-graph', crg, ['.code-review-graph']]] as const) {
+        fs.rmSync(log, { force: true });
+        adapter.index(work, build, { home: path.join(tmp, `home-${name}`) });
+        const args = fs.readFileSync(log, 'utf8').split('\n');
+        const m = args.flatMap((a, i) => (args[i - 1] === '--mount' ? [a] : []));
+        const target = (x: string) => /target=([^,]*)/.exec(x)![1];
+        const repo = m.filter((x) => target(x) === work);
+        assert.deepEqual(repo, [`type=bind,source=${work},target=${work},readonly`], `${name}: the repo is not mounted read-only`);
+        const inside = m.filter((x) => target(x).startsWith(`${work}/`) && !x.endsWith(',readonly')).map((x) => path.relative(work, target(x)));
+        assert.deepEqual(inside, writes, `${name}: writable inside the repo`);
+        const firstInside = m.findIndex((x) => target(x).startsWith(`${work}/`));
+        assert(firstInside === -1 || m.indexOf(repo[0]) < firstInside, `${name}: an output dir is mounted before the repo`);
+      }
+    });
+  } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('docker (real): a tool cannot plant a git config or a link in the repo the host then uses (D1, #51)', () => {
+  sandbox.resetBackend();
+  if (sandbox.backend() !== 'docker') { console.log('note: docker backend not in use; D1 plants not checked'); return; }
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-d1-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(path.join(work, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(work, '.git', 'config'), '[core]\n'); fs.writeFileSync(path.join(work, 'a.ts'), 'x\n');
+    const victim = path.join(tmp, 'victim'); fs.writeFileSync(victim, 'host file\n');
+    // a stand-in codegraph exploited by the repo: a host-run git would execute core.fsmonitor; the
+    // host's ts-cover.ts writes tsconfig.graph-assay-oracle.json and reads every source file
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `import * as fs from 'node:fs';
+const tried = (f) => { try { f(); } catch { /* read-only */ } };
+tried(() => fs.appendFileSync('.git/config', '[core]\\n\\tfsmonitor = touch ${tmp}/PWNED\\n'));
+tried(() => fs.symlinkSync(${JSON.stringify(victim)}, 'tsconfig.graph-assay-oracle.json'));
+tried(() => { fs.rmSync('a.ts'); fs.symlinkSync(${JSON.stringify(victim)}, 'a.ts'); });
+fs.mkdirSync('.codegraph', { recursive: true }); fs.writeFileSync('.codegraph/codegraph.db', '');\n`);
+    const r = codegraph.index(work, probe, { args: [] });
+    assert.equal(r.ok, true, r.output);
+    assert.equal(fs.readFileSync(path.join(work, '.git', 'config'), 'utf8'), '[core]\n');
+    assert.equal(fs.existsSync(path.join(work, 'tsconfig.graph-assay-oracle.json')), false);
+    assert.equal(fs.lstatSync(path.join(work, 'a.ts')).isFile(), true);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('a repo that tracks a link or file at an output dir gets no rw mount outside it; a stale export or a missing dir is a failed index (#52 F1/F2/F4)', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-tracked-')));
+  const bin = path.join(tmp, 'bin'); fs.mkdirSync(bin); const log = path.join(tmp, 'docker.log');
+  fs.writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\n[ "$1" = run ] && printf '%s\\n' "$@" > ${log}\nexit 0\n`, { mode: 0o755 });
+  const build = path.join(tmp, 'build'); fs.writeFileSync(build, '', { mode: 0o755 });
+  const host = path.join(tmp, 'host'); fs.mkdirSync(host); fs.writeFileSync(path.join(host, 'f'), 'host');
+  try {
+    withEnv({ GRAPH_ASSAY_ISOLATION: 'docker', PATH: `${bin}:${process.env.PATH}` }, () => {
+      sandbox.resetBackend();
+      for (const [name, adapter, outDir] of [['codegraph', codegraph, '.codegraph'], ['code-graph-rag', cgr, '.graph-assay']] as const) {
+        for (const target of ['.', '.git', host, 'FILE']) {
+          const work = path.join(tmp, `repo-${name}-${path.basename(target)}`); fs.mkdirSync(path.join(work, '.git'), { recursive: true });
+          if (target === 'FILE') fs.writeFileSync(path.join(work, outDir), 'tracked'); else fs.symlinkSync(target, path.join(work, outDir));
+          fs.rmSync(log, { force: true });
+          const r = adapter.index(work, build, { home: path.join(tmp, `home-${name}`) });
+          const args = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n') : [];
+          const rw = args.flatMap((a, i) => (args[i - 1] === '--mount' && !a.endsWith(',readonly') ? [a] : []));
+          for (const m of rw) {
+            const src = /source=([^,]*)/.exec(m)![1];
+            assert(src !== work && !src.startsWith(`${work}/.git`) && !src.startsWith(host), `${name} ${outDir} -> ${target}: rw mount ${m}`);
+          }
+          assert.equal(fs.readFileSync(path.join(host, 'f'), 'utf8'), 'host');
+          assert.equal(typeof r.ok, 'boolean');
+        }
+      }
+      // a committed export the tool never wrote is not taken as its output
+      const stale = path.join(tmp, 'repo-stale'); fs.mkdirSync(path.join(stale, '.graph-assay'), { recursive: true });
+      fs.writeFileSync(path.join(stale, '.graph-assay', 'export.json'), '{"nodes":[],"relationships":[]}');
+      assert.equal(cgr.index(stale, build, { home: path.join(tmp, 'home-stale') }).ok, false, 'a committed export.json was accepted');
+      // a dir that does not exist is a failed index, and is not created
+      const typo = path.join(tmp, 'no-such-repo');
+      let r2;
+      assert.doesNotThrow(() => { r2 = codegraph.index(typo, build, { home: path.join(tmp, 'home-typo') }); });
+      assert.equal(r2.ok, false); assert.equal(fs.existsSync(typo), false);
+    });
+  } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-review-graph: a repo with no .git indexes; crg may write its marker dir, nothing else in the repo (#52 V1)', () => {
+  sandbox.resetBackend();
+  if (sandbox.backend() !== 'docker') { console.log('note: docker backend not in use; V1 not checked'); return; }
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-v1-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work); fs.writeFileSync(path.join(work, 'a.py'), 'x = 1\n');
+    // like crg 2.4: with no .git it makes <repo>/.code-review-graph, then writes its graph to CRG_DATA_DIR
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs'; import { DatabaseSync } from 'node:sqlite';
+fs.mkdirSync('.code-review-graph', { recursive: true }); fs.writeFileSync('.code-review-graph/.gitignore', '*\\n');
+let rootWritable = true; try { fs.writeFileSync('planted', ''); } catch { rootWritable = false; }
+if (rootWritable) process.exit(3);
+fs.mkdirSync(process.env.CRG_DATA_DIR, { recursive: true });
+const db = new DatabaseSync(process.env.CRG_DATA_DIR + '/graph.db');
+db.exec("CREATE TABLE nodes (kind, name, qualified_name, file_path, line_start, line_end, language, parent_name); CREATE TABLE edges (id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier, target_resolution)");
+db.close();\n`, { mode: 0o755 });
+    const r = crg.index(work, probe);
+    assert.equal(r.ok, true, r.output);
+    assert.equal(fs.existsSync(path.join(work, 'planted')), false);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-graph-rag: a run refused for want of isolation leaves the repo as it was (#52 V7)', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-v7-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work); fs.writeFileSync(path.join(work, '.graph-assay'), 'tracked');
+    withEnv({ GRAPH_ASSAY_ISOLATION: 'none' }, () => {
+      sandbox.resetBackend();
+      const r = cgr.index(work, path.join(tmp, 'build'));
+      assert.equal(r.ok, false); assert.match(r.output, /refusing to run without isolation/);
+    });
+    assert.equal(fs.readFileSync(path.join(work, '.graph-assay'), 'utf8'), 'tracked');
+  } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-graph-rag: a query run that leaves a link in its export dir is a failed run too (#52 F6)', () => {
+  sandbox.resetBackend();
+  if (!sandbox.isolated()) { console.log('note: no isolation here; code-graph-rag refuses to run, F6 not checked'); return; }
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-f6-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work);
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}\nimport * as fs from 'node:fs';\nfs.symlinkSync('/etc/passwd', '.graph-assay/leak');\n`, { mode: 0o755 });
+    const r = cgr.index(work, probe, { args: ['query'] });
+    assert.equal(r.ok, false, r.output); assert.match(r.output, /leak is a link/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 

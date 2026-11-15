@@ -31,6 +31,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { oracleRules } from './rules.ts';
+import * as sandbox from '../../lib/sandbox.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const oracle = path.join(here, '..', 'oracle.ts');
@@ -134,6 +135,6 @@ try {
     if (survivors.length) { console.log(`\n${survivors.length} rule(s) no test pins: ${survivors.join(', ')}`); failed += survivors.length; }
   }
 } finally {
-  fs.rmSync(work, { recursive: true, force: true });
+  sandbox.remove(work);
 }
 process.exit(failed ? 1 : 0);

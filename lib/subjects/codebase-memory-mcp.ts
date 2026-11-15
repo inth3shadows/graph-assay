@@ -54,10 +54,10 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   const argv = [path.resolve(build), ...(args ?? ['cli', '--quiet', 'index_repository', '--repo-path', dir, '--name', PROJECT, '--mode', 'full'])];
   const t0 = Date.now();
   try {
-    const r = sandbox.run(argv, { cwd: dir, env, timeoutMs, nice, rw: [dir, h], ro: [] });
+    const r = sandbox.run(argv, { cwd: dir, env, timeoutMs, nice, rw: [h], ro: [dir] }); // the repo read-only: cbm writes its store under HOME, nothing in the repo
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
-    // the tool could write its store and the output dir: nothing in them may be a link or a special file
+    // the tool could write its store (the host writes the output dir): nothing in either may be a link or a special file
     const bad = ok && !args ? sandbox.vetAll(cache, out) : null;
     if (bad) { ok = false; output += `\n${bad}`; }
     if (ok && !args) {
@@ -71,7 +71,7 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     }
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
-    if (ownHome) fs.rmSync(h, { recursive: true, force: true });
+    if (ownHome) sandbox.remove(h);
   }
 }
 

@@ -16,6 +16,7 @@ import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
+import * as sandbox from '../lib/sandbox.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -66,7 +67,7 @@ function hunks(diff, ctx = 2) {
 function open(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-shadow-'));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
-  const done = () => { for (const d of [work, home]) fs.rmSync(d, { recursive: true, force: true }); };
+  const done = () => { for (const d of [work, home]) sandbox.remove(d); };
   copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
   const r = codegraph.index(work, build, { home, env: QUERY_ENV });
   if (!r.ok) { done(); return { error: `index failed (status ${r.status}): ${r.output.trim().split('\n').slice(-2).join(' | ')}` }; }

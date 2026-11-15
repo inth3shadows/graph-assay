@@ -32,22 +32,26 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   const h = home ?? fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
   fs.mkdirSync(h, { recursive: true });
   const out = path.join(dir, OUT);
-  fs.mkdirSync(out, { recursive: true });
   const env = { PATH: `${path.dirname(build)}:/usr/bin:/bin`, HOME: h, LANG: 'C.UTF-8', NO_COLOR: '1', ...extra };
   const argv = args ?? ['-q', 'start', '--repo-path', '.', '--update-graph', '-o', path.join(out, 'export.json'),
     '--no-start-stack', '--no-embeddings', '--exclude', OUT];
   const t0 = Date.now();
   try {
+    // its export dir, the only place in the repo it may write: a plain dir made here, emptied for an
+    // index so an export the repository tracks is never taken for the tool's (sandbox.outputDir)
+    // only where it will run: a run refused for want of isolation leaves the repo as it was
+    const prep = sandbox.isolated() ? sandbox.outputDir(out, args === null) : null;
+    if (prep) return { ok: false, status: null, signal: null, output: prep, stdout: '', ms: Date.now() - t0 };
     // Fail closed: code-graph-rag never indexes with network access (lib/sandbox.ts `require`).
-    const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [dir, h], ro: [], venv: true, require: true });
+    const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [out, h], ro: [dir], venv: true, require: true });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     // the tool could write its output dir: nothing in it may be a link or a special file
-    const bad = args === null ? sandbox.vet(out) : null;
+    const bad = sandbox.vet(out);
     if (bad) output += `\n${bad}`;
     const ok = r.status === 0 && !bad && (args !== null || fs.existsSync(path.join(out, 'export.json')));
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
-    if (ownHome) fs.rmSync(h, { recursive: true, force: true });
+    if (ownHome) sandbox.remove(h);
   }
 }
 

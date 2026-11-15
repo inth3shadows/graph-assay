@@ -20,6 +20,7 @@
 // Exit code: 0 when every seed is clean, 1 when any diff was found, 2 on usage / index errors.
 import { fileURLToPath } from 'node:url';
 import { joinedEdges } from '../lib/snapshot.ts';
+import * as sandbox from '../lib/sandbox.ts';
 import { canonical, diffCanonical, rawHash } from '../differential/modes.ts';
 import { applyRelation, RELATIONS, SKIP, DECOY_DIR, SHIFT } from './relations.ts';
 import { buildFor, subject } from '../lib/subjects/index.ts';
@@ -126,7 +127,7 @@ try {
     }
   }
 } finally {
-  fs.rmSync(work, { recursive: true, force: true });
+  sandbox.remove(work);
 }
 
 const limit = Number(process.env.META_SHOW ?? 5);

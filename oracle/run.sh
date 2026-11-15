@@ -33,6 +33,8 @@ case $lang in ts|python|go|jvm) ;; *) echo "$name: language must be ts, python, 
 export CODEGRAPH_KERNEL=${CODEGRAPH_KERNEL:-0} CODEGRAPH_NO_TELEMETRY=1 NODE_NO_WARNINGS=1
 logtail() { if [ "${ORACLE_REDACT:-}" = 1 ]; then echo "  (log withheld: $1)"; else tail -5 "$1"; fi; }
 
+# a tool may have left a dir it made unreadable in its output dir: give the owner bits back first
+if [ -e "$w" ]; then chmod -R u+rwx "$w" 2>/dev/null || true; fi
 rm -rf "$w"; mkdir -p "$w/home" "$scip_cache"
 git clone -q --no-hardlinks "$src" "$w/repo"
 sha=$(git -C "$w/repo" rev-parse HEAD)

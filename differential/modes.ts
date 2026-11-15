@@ -19,6 +19,7 @@ import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
+import * as sandbox from '../lib/sandbox.ts';
 import { isMain } from '../lib/main.ts';
 
 const SKIP = new Set(['.codegraph', 'node_modules']);
@@ -42,7 +43,7 @@ export const MODES = {
   }),
   // init an empty directory, then add every file and sync
   'sync-from-empty': (work, src, build) => withHome((home) => {
-    fs.rmSync(work, { recursive: true, force: true });
+    sandbox.remove(work);
     fs.mkdirSync(work);
     const a = codegraph.index(work, build, { home });
     if (!a.ok) return a;
@@ -53,7 +54,7 @@ export const MODES = {
 
 function withHome(fn) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
-  try { return fn(home); } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  try { return fn(home); } finally { sandbox.remove(home); }
 }
 const join = (a, b) => ({ ...b, ms: a.ms + b.ms, output: `${a.output}\n${b.output}` });
 const copy = (src, dst) => copySeed(src, dst, (p) => !SKIP.has(path.basename(p)));
@@ -106,13 +107,13 @@ export function runDir(build, src, modes) {
       if (!r.ok) { runs[mode] = { ms: r.ms, error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-3).join(' | ')}` }; continue; }
       let snap;
       try { snap = codegraph.snapshot(work, { kernel: mode === 'native' ? '1' : '0' }); } catch (e) {
-        runs[mode] = { ms: r.ms, error: `snapshot failed: ${e.message}` }; fs.rmSync(work, { recursive: true, force: true }); continue;
+        runs[mode] = { ms: r.ms, error: `snapshot failed: ${e.message}` }; sandbox.remove(work); continue;
       }
       runs[mode] = { ms: r.ms, raw: rawHash(snap), canon: canonical(snap), size: { nodes: snap.nodes.length, edges: snap.edges.length, unresolved: snap.unresolved.length } };
-      fs.rmSync(work, { recursive: true, force: true });
+      sandbox.remove(work);
     }
   } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    sandbox.remove(tmp);
   }
   const base = runs.base;
   const results = [];

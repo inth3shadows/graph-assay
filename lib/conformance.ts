@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { joinedEdges, validateSnapshot } from './snapshot.ts';
 import * as codegraph from './subjects/codegraph.ts';
+import * as sandbox from './sandbox.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const [build] = process.argv.slice(2);
@@ -74,7 +75,7 @@ try {
     report(`column unit (unicode.py:6, after '😀é'): col ${pe?.col ?? '-'}; utf16 ${pu.utf16}, codepoint ${pu.codepoint}, utf8 ${pu.utf8} -> ${pm.join('/') || 'none'}`);
   }
 } finally {
-  fs.rmSync(work, { recursive: true, force: true });
+  sandbox.remove(work); // the tool's output dir may hold a tree it made unreadable
 }
 console.log(fails ? `${fails} conformance failure(s)` : 'adapter conformant');
 process.exit(fails ? 1 : 0);
