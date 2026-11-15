@@ -112,6 +112,10 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
   for (const p of ro) add(p, true);
   // the executable by itself (never its whole directory), unless a mount already holds it
   if (![...binds.keys()].some((d) => exe === d || exe.startsWith(`${d}/`))) binds.set(exe, { src: exe, ro: true });
+  // --mount is comma-separated: a `,` (or `"`, or a newline) in a path would end the field and could
+  // add options (a second source=), so such a path is refused rather than quoted.
+  const unsafe = [...binds].flatMap(([d, b]) => [d, b.src]).filter((p) => /[,"\n]/.test(p));
+  if (unsafe.length) return { error: `refusing to mount a path with a comma, quote or newline: ${JSON.stringify(unsafe[0])}` };
   const shadow = [...binds.keys()].filter((d) => SYSTEM.has(d));
   if (shadow.length) return { error: `refusing to mount ${shadow.join(', ')} over the sandbox image's own` };
   // TMPDIR must be writable inside: one outside the mounts moves under the sandbox HOME (or /tmp).
@@ -121,8 +125,10 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
     env.TMPDIR = env.HOME && writable(path.resolve(env.HOME)) ? path.join(env.HOME, 'tmp') : '/tmp';
     if (env.TMPDIR !== '/tmp') fs.mkdirSync(env.TMPDIR, { recursive: true });
   }
-  const seconds = Math.ceil(o.timeoutMs / 1000) + 5; // after the caller's own timeout, which removes it first
-  const passed = Object.keys(env).filter((k) => k !== 'PATH');
+  // after the caller's own timeout, which removes it first; none when the caller sets none (0 or unset)
+  const bound = o.timeoutMs > 0 ? ['timeout', '-k', '10', String(Math.ceil(o.timeoutMs / 1000) + 5)] : [];
+  // DOCKER_* configure the client (dockerEnv), never the subject
+  const passed = Object.keys(env).filter((k) => k !== 'PATH' && !/^DOCKER_/.test(k));
   return {
     name,
     clientEnv: { ...Object.fromEntries(passed.map((k) => [k, env[k]])), ...dockerEnv() },
@@ -131,23 +137,51 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
       '--workdir', path.resolve(o.cwd),
       ...[...binds].flatMap(([dst, b]) => ['--mount', `type=bind,source=${b.src},target=${dst}${b.ro ? ',readonly' : ''}`]),
       ...(env.PATH ? ['--env', `PATH=${env.PATH}`] : []), ...passed.flatMap((k) => ['--env', k]),
-      SANDBOX_IMAGE, 'timeout', '-k', '10', String(seconds), ...(o.nice ? ['nice', '-n', '10'] : []), exe, ...argv.slice(1)],
+      SANDBOX_IMAGE, ...bound, ...(o.nice ? ['nice', '-n', '10'] : []), exe, ...argv.slice(1)],
   };
 }
 
 /**
- * The venv a script belongs to (the dir holding pyvenv.cfg) and, under docker, whether its interpreter
- * runs there: where `bin/python3` really points (pyvenv.cfg can disagree) must be the image's
- * /usr/bin/python3.12 or sit under a GRAPH_ASSAY_SANDBOX_RO prefix. A venv made from another Python
- * (another version, Homebrew's, pyenv's) gets a message instead of an opaque exec failure.
+ * The venv a script belongs to (`<venv>/bin/<script>` with `<venv>/pyvenv.cfg`) and, under docker,
+ * whether its interpreter runs there. Every hop of `bin/python3`'s link chain must exist inside the
+ * container: inside the venv, the image's /usr/bin/python3.12 itself, or under a GRAPH_ASSAY_SANDBOX_RO
+ * prefix. Resolving the whole chain on the host is not enough: `bin/python3 -> /usr/bin/python3 ->
+ * python3.12` ends at the image's Python, but the image has no /usr/bin/python3 (pyvenv.cfg can disagree
+ * too). A venv made from another Python gets a message instead of an opaque exec failure.
  */
 export function venvOf(script: string): { root: string | null; error: string | null } {
-  for (let d = path.dirname(real(script)); d !== path.dirname(d); d = path.dirname(d)) {
-    if (!fs.existsSync(path.join(d, 'pyvenv.cfg'))) continue;
-    const link = ['python3', 'python'].map((x) => path.join(d, 'bin', x)).find((x) => fs.existsSync(x));
-    const py = link ? real(link) : null;
-    const ok = py === IMAGE_PYTHON || (py !== null && extraRo().map(real).some((m) => py.startsWith(`${m}/`)));
-    return { root: d, error: ok ? null : `the docker sandbox has no Python at ${py ?? '(none found)'}, which the venv ${d} uses: re-run tools/setup.sh where ${IMAGE_PYTHON} exists, or mount that Python's prefix with GRAPH_ASSAY_SANDBOX_RO` };
+  // A venv made through a symlinked path keeps that path in its scripts: the root is the venv as the
+  // caller reached it (mounted there and at its real path), else as the script really lives.
+  const given = path.dirname(path.dirname(path.resolve(script))); const reallyAt = path.dirname(path.dirname(real(script)));
+  const d = fs.existsSync(path.join(given, 'pyvenv.cfg')) ? given : reallyAt;
+  if (!fs.existsSync(path.join(d, 'pyvenv.cfg'))) return { root: null, error: null };
+  const mounted = [given, reallyAt, real(d), ...extraRo().flatMap((m) => [path.resolve(m), real(m)])];
+  const inside = (p: string) => p === IMAGE_PYTHON || mounted.some((m) => p === m || p.startsWith(`${m}/`));
+  let p = ['python3', 'python'].map((x) => path.join(d, 'bin', x)).find((x) => fs.lstatSync(x, { throwIfNoEntry: false }));
+  const why = (at: string) => ({ root: d, error: `the docker sandbox has no Python at ${at}, which the venv ${d} uses: re-run tools/setup.sh where ${IMAGE_PYTHON} exists, or mount that Python's prefix with GRAPH_ASSAY_SANDBOX_RO` });
+  if (!p) return why('(none found)');
+  for (let hop = 0; hop < 40; hop++) {
+    if (!inside(p)) return why(p);
+    const st = fs.lstatSync(p, { throwIfNoEntry: false });
+    if (!st) return why(`${p} (a dangling link)`);
+    if (!st.isSymbolicLink()) return { root: d, error: null };
+    p = path.resolve(path.dirname(p), fs.readlinkSync(p));
   }
-  return { root: null, error: null };
+  return why(`${p} (a link loop)`);
+}
+
+/**
+ * Whether `p` stays inside `root` once every link is followed (`p` itself need not exist yet). A
+ * sandboxed subject had write access to its mounts, so the host must not follow a link it may have
+ * planted there to another host path when it reads or writes the subject's output afterwards.
+ */
+export function within(root: string, p: string) {
+  const r = real(root);
+  const t = fs.lstatSync(p, { throwIfNoEntry: false }) ? real(p) : path.join(real(path.dirname(p)), path.basename(p));
+  return t === r || t.startsWith(`${r}/`);
+}
+/** `p` if it stays inside `root` (within()), else an Error naming it. */
+export function confined(root: string, p: string) {
+  if (!within(root, p)) throw new Error(`[graph-assay] ${p} leads outside ${root}; refusing to follow it (a link left by the indexed tool?)`);
+  return p;
 }

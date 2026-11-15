@@ -74,7 +74,8 @@ export function version(build) {
 /** Export `dir`/.codegraph/codegraph.db as a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null, kernel = process.env.CODEGRAPH_KERNEL ?? '0' } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
-  const db = new DatabaseSync(path.join(dir, '.codegraph/codegraph.db'), { readOnly: true });
+  // written by the sandboxed tool: follow no link it may have left out of the repo
+  const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, '.codegraph/codegraph.db')), { readOnly: true });
   try {
     const nodes = db.prepare(`SELECT id, kind, name, qualified_name AS qname, file_path AS file, language,
                                      start_line AS start, end_line AS "end" FROM nodes`).all() as unknown as (Omit<SnapshotNode, 'id'> & { id: number | string })[];

@@ -68,8 +68,16 @@ if [ "$do_cgr" = 1 ]; then
   venv=$subjects/cgr/venv
   step "code-graph-rag $CGR_VERSION -> $venv"
   # Re-running venv over an existing one keeps its old interpreter links: start fresh (--clear) only when
-  # they point at another Python than $py, so an ordinary re-run keeps the working install until pip ends.
-  if [ -e "$venv/bin/python3" ] && [ "$(readlink -f "$venv/bin/python3")" != "$(readlink -f "$(command -v "$py")")" ]; then
+  # one leads elsewhere than $py (compared link by link, not resolved: /usr/bin/python3 resolves to
+  # python3.12 on the host but is missing in the sandbox image) or dangles, so an ordinary re-run keeps
+  # the working install until pip ends.
+  stale=0
+  for l in "$venv"/bin/python*; do
+    [ -L "$l" ] || continue
+    [ -e "$l" ] || stale=1
+    case $(readlink "$l") in /*) [ "$(readlink "$l")" = "$(command -v "$py")" ] || stale=1;; esac
+  done
+  if [ "$stale" = 1 ]; then
     run "$py" -m venv --clear "$venv"
   else
     run "$py" -m venv "$venv"

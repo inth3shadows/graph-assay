@@ -67,8 +67,11 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
       const store = path.join(data, 'graph.db');
       if (!fs.existsSync(store)) { ok = false; output += '\n[graph-assay] crg wrote no graph.db'; }
       else {
-        fs.mkdirSync(out, { recursive: true });
-        try { extract(store, path.join(out, DB), dir); } catch (e) { ok = false; output += `\n[graph-assay] extract failed: ${e.message}`; }
+        // the store and the output dir were writable inside the sandbox: follow no link out of them
+        try {
+          sandbox.confined(h, store); sandbox.confined(dir, out); fs.mkdirSync(out, { recursive: true });
+          extract(store, sandbox.confined(dir, path.join(out, DB)), dir);
+        } catch (e) { ok = false; output += `\n[graph-assay] extract failed: ${e.message}`; }
       }
     }
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
@@ -222,7 +225,7 @@ const internal = (p: string) => p === OUT || p.startsWith(`${OUT}/`) || p === OW
 /** Map `dir`/.graph-assay/crg.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
-  const db = new DatabaseSync(path.join(dir, OUT, DB), { readOnly: true });
+  const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, OUT, DB)), { readOnly: true });
   try {
     type Row = { kind: string; name: string; qname: string; file: string; start: number | null; end: number | null; language: string | null };
     const rows = db.prepare(`SELECT kind, name, qualified_name AS qname, file_path AS file, line_start AS start, line_end AS "end",

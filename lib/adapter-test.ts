@@ -194,6 +194,25 @@ const crgStore = (file: string, nodes: unknown[][], edges: unknown[][]) => {
   db.close();
 };
 
+check('codebase-memory-mcp: links the tool leaves in its output lead the host nowhere outside the repo (V3)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-links-'));
+  try {
+    const work = path.join(tmp, 'repo'); const outside = path.join(tmp, 'outside'); fs.mkdirSync(work); fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'host.db'), 'host file');
+    // A stand-in cbm that reports an indexed store, then replaces the output dir with a link out of the repo.
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs';
+fs.mkdirSync(process.env.CBM_CACHE_DIR, { recursive: true });
+fs.symlinkSync(${JSON.stringify(path.join(outside, 'host.db'))}, process.env.CBM_CACHE_DIR + '/graph-assay.db');
+fs.symlinkSync(${JSON.stringify(outside)}, '.graph-assay');
+console.log('{"status":"indexed"}');\n`, { mode: 0o755 });
+    const r = cbm.index(work, probe);
+    assert.equal(r.ok, false, r.output); assert.match(r.output, /leads outside/);
+    assert.deepEqual(fs.readdirSync(outside), ['host.db']); assert.equal(fs.readFileSync(path.join(outside, 'host.db'), 'utf8'), 'host file');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
 check('a missing build is a failed index, not a throw, and leaves no sandbox HOME behind (K5/A5)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-missing-build-'));
   const homes = () => fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('cgqa-home-')).length;

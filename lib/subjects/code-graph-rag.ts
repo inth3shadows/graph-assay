@@ -41,7 +41,7 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     // Fail closed: code-graph-rag never indexes with network access (lib/sandbox.ts `require`).
     const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [dir, h], ro: [], venv: true, require: true });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
-    const ok = r.status === 0 && (args !== null || fs.existsSync(path.join(out, 'export.json')));
+    const ok = r.status === 0 && (args !== null || (fs.existsSync(path.join(out, 'export.json')) && sandbox.within(dir, path.join(out, 'export.json'))));
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
     if (ownHome) fs.rmSync(h, { recursive: true, force: true });
@@ -68,7 +68,8 @@ const edgeKind = (t) => KIND[t] ?? (/^(DEFINES|CONTAINS)/.test(t) ? 'contains' :
 /** Map `dir`'s cgr export (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
-  const g = JSON.parse(fs.readFileSync(path.join(dir, OUT, 'export.json'), 'utf8'));
+  // written by the sandboxed tool: follow no link it may have left out of the repo
+  const g = JSON.parse(fs.readFileSync(sandbox.confined(dir, path.join(dir, OUT, 'export.json')), 'utf8'));
   const lines = new Map<string, number>();
   const lineCount = (p: string) => {
     if (!lines.has(p)) { let n = 1; try { n = fs.readFileSync(path.join(dir, p), 'utf8').split('\n').length; } catch { /* unreadable: 1 */ } lines.set(p, n); }

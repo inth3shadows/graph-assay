@@ -60,7 +60,11 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     if (ok && !args) {
       const store = path.join(cache, `${PROJECT}.db`);
       if (!/"status"\s*:\s*"indexed"/.test(r.stdout ?? '') || !fs.existsSync(store)) { ok = false; output += '\n[graph-assay] cbm reported no indexed store'; }
-      else { fs.mkdirSync(out, { recursive: true }); extract(store, path.join(out, DB)); }
+      else {
+        // the store and the output dir were writable inside the sandbox: follow no link out of them
+        try { sandbox.confined(h, store); sandbox.confined(dir, out); fs.mkdirSync(out, { recursive: true }); extract(store, sandbox.confined(dir, path.join(out, DB))); }
+        catch (e) { ok = false; output += `\n${e.message}`; }
+      }
     }
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
@@ -105,7 +109,7 @@ const SKIP = new Set(['File', 'Folder', 'Project', 'Branch', 'Route']);
 /** Map `dir`/.graph-assay/cbm.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
-  const db = new DatabaseSync(path.join(dir, OUT, DB), { readOnly: true });
+  const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, OUT, DB)), { readOnly: true });
   try {
     type Row = { id: number; label: string; name: string; qname: string; file: string; start: number; end: number };
     const rows = db.prepare(`SELECT id, label, name, qualified_name AS qname, file_path AS file, start_line AS start,

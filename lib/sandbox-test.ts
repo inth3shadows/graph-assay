@@ -69,6 +69,19 @@ try {
     assert.ok(p.args.join(' ').endsWith(`${exe} --repo ${link}`), 'runs the real executable, keeps the given args');
   });
 
+  check('docker: a path with a comma, quote or newline is refused, never split into mount options (G1)', () => {
+    const inj = path.join(tmp, 'inj,source=' + home); fs.mkdirSync(inj, { recursive: true });
+    assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: inj, rw: [inj] }, 'n') as any).error, /comma, quote or newline/);
+    const quoted = path.join(tmp, 'q"x'); fs.mkdirSync(quoted);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [quoted] }, 'n') as any).error, /comma, quote or newline/);
+  });
+
+  check('docker: timeoutMs 0 or unset means no inner timeout; DOCKER_* never reach the subject (G4/G5)', () => {
+    for (const t of [0, undefined]) assert.ok(!plan([exe], { ...opts, timeoutMs: t }).args.includes('timeout'), String(t));
+    const p = plan([exe], { ...opts, env: { ...opts.env, DOCKER_HOST: 'tcp://subject:1' } });
+    assert.ok(!p.args.includes('DOCKER_HOST')); assert.notEqual(p.clientEnv.DOCKER_HOST, 'tcp://subject:1');
+  });
+
   check('docker: the subject env travels by name, not on the command line; PATH is explicit (A6)', () => {
     const p = plan([exe], { ...opts, env: { ...opts.env, CODEGRAPH_X: 's3cr3t' } });
     assert.ok(!p.args.join(' ').includes('s3cr3t'));
@@ -123,11 +136,35 @@ try {
     fs.symlinkSync(path.join(tmp, 'brew'), path.join(tmp, 'brew-link'));
     if (fs.existsSync(sandbox.IMAGE_PYTHON)) { link(sandbox.IMAGE_PYTHON); assert.deepEqual(sandbox.venvOf(script), { root: venv, error: null }); }
     link('/bin/sh'); assert.match(sandbox.venvOf(script).error, /no Python at \//);
+    // `python3 -m venv` links bin/python3 -> /usr/bin/python3: it resolves to python3.12 on the host,
+    // but the image has no /usr/bin/python3 (V1)
+    link('/usr/bin/python3'); assert.match(sandbox.venvOf(script).error, /no Python at \/usr\/bin\/python3,/);
+    fs.rmSync(path.join(venv, 'bin', 'python3')); fs.symlinkSync(path.join(tmp, 'gone'), path.join(venv, 'bin', 'python3'));
+    assert.match(sandbox.venvOf(script).error, /dangling|no Python at/);
     link(path.join(brew, 'python3.14')); assert.match(sandbox.venvOf(script).error, /no Python at .*brew/);
     withEnv({ GRAPH_ASSAY_SANDBOX_RO: path.join(tmp, 'brew-link') }, () => assert.equal(sandbox.venvOf(script).error, null));
+    // a venv made through a symlinked dir keeps that path in its scripts: it is mounted there too (G2)
+    const store = path.join(tmp, 'store'); fs.mkdirSync(path.join(store, 'v', 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(store, 'v', 'pyvenv.cfg'), ''); fs.writeFileSync(path.join(store, 'v', 'bin', 'tool'), '');
+    if (fs.existsSync(sandbox.IMAGE_PYTHON)) fs.symlinkSync(sandbox.IMAGE_PYTHON, path.join(store, 'v', 'bin', 'python3'));
+    else fs.writeFileSync(path.join(store, 'v', 'bin', 'python3'), '');
+    fs.symlinkSync(store, path.join(tmp, 'lnk'));
+    const viaLink = path.join(tmp, 'lnk', 'v', 'bin', 'tool');
+    assert.equal(sandbox.venvOf(viaLink).root, path.join(tmp, 'lnk', 'v'));
+    assert.ok(mounts(plan([viaLink], { ...opts, venv: true }).args).includes(`type=bind,source=${path.join(store, 'v')},target=${path.join(tmp, 'lnk', 'v')},readonly`));
     // the plan mounts the venv, or refuses with the message; a missing script is left to fail as a spawn
     assert.match((sandbox.dockerPlan([script], { ...opts, venv: true }, 'n') as any).error, /no Python at .*brew/);
     assert.ok(!('error' in sandbox.dockerPlan([path.join(tmp, 'missing', 'tool')], { ...opts, venv: true }, 'n')));
+  });
+
+  check('within/confined: a link out of the root is refused; inside, missing or nested paths are fine (V3)', () => {
+    const root = path.join(tmp, 'root'); fs.mkdirSync(path.join(root, 'sub'), { recursive: true });
+    fs.symlinkSync(tmp, path.join(root, 'out-link')); fs.symlinkSync(path.join(root, 'sub'), path.join(root, 'in-link'));
+    assert.equal(sandbox.within(root, path.join(root, 'sub', 'f.db')), true);
+    assert.equal(sandbox.within(root, path.join(root, 'in-link', 'f.db')), true);
+    assert.equal(sandbox.within(root, path.join(root, 'out-link')), false);
+    assert.equal(sandbox.within(root, path.join(root, 'out-link', 'f.db')), false);
+    assert.throws(() => sandbox.confined(root, path.join(root, 'out-link')), /leads outside/);
   });
 
   const built = spawnSync('docker', ['image', 'inspect', sandbox.SANDBOX_IMAGE], { stdio: 'ignore', env: sandbox.dockerEnv() }).status === 0;
