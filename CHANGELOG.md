@@ -11,9 +11,10 @@ All notable changes to this project are recorded here. The format follows
   `lib/sandbox.ts` runs every adapter's index process under `unshare -rn` where it works, else in a
   throwaway container (`docker/sandbox.Dockerfile`, built by `tools/setup.sh`; `--no-sandbox` skips)
   with no network, no capabilities, no new privileges, a read-only root, a lifetime bounded inside
-  the container, and only the indexed dir, the sandbox HOME and the tool's install mounted, which
-  also keeps the host's other files out of reach; the host then refuses the tool's output if it holds
-  anything but plain files and directories. The image's packages come from
+  the container, and only the indexed dir, the sandbox HOME and the tool's install mounted; the host
+  then refuses the tool's output if it holds anything but plain files and directories. The indexed
+  copy itself (`.git` included) is still writable from the container, and the oracle runs `git` in
+  it afterwards (SECURITY.md). The image's packages come from
   snapshot.ubuntu.com at one date. `GRAPH_ASSAY_ISOLATION` picks the backend, `GRAPH_ASSAY_SANDBOX_RO` adds read-only mounts.
   code-graph-rag still refuses to run unisolated. `tools/setup.sh` makes the Python venvs from
   `/usr/bin/python3.12` where it exists, so they run in the container; the code-review-graph venv is
