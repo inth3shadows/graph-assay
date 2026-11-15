@@ -10,6 +10,7 @@ import { config } from '../config.ts';
 import { SNAPSHOT_SCHEMA } from '../snapshot.ts';
 import { adapterHash } from '../provenance.ts';
 import { isMain } from '../main.ts';
+import * as sandbox from '../sandbox.ts';
 import type { Snapshot, SnapshotEdge, SnapshotNode } from '../types.ts';
 
 export const name = 'code-graph-rag';
@@ -20,12 +21,12 @@ export const defaultBuild = () => path.join(config.subjects, 'cgr/venv/bin/cgr')
 
 /**
  * Index `dir` with the cgr binary `build`: one `start --update-graph` (parse, sync into the
- * embedded store under HOME/.cgr, export the project), offline (`unshare -rn`: no network), with
+ * embedded store under HOME/.cgr, export the project), isolated (lib/sandbox.ts; never with network), with
  * an empty environment apart from PATH and the sandbox HOME. `home` keeps a HOME across calls.
  * `args` other than the default are run as `cgr <args>` in the same sandbox (queries).
  * Returns {ok, status, signal, output, stdout, ms}.
  */
-export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home = null, args = null, env: extra = {} } = {}) {
+export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home = null, args = null, nice = false, env: extra = {} } = {}) {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
   const ownHome = !home;
   const h = home ?? fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
@@ -37,9 +38,13 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
     '--no-start-stack', '--no-embeddings', '--exclude', OUT];
   const t0 = Date.now();
   try {
-    const r = spawnSync('unshare', ['-rn', build, ...argv], { cwd: dir, env, encoding: 'utf8', maxBuffer: 256 << 20, timeout: timeoutMs });
-    const output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
-    const ok = r.status === 0 && (args !== null || fs.existsSync(path.join(out, 'export.json')));
+    // Fail closed: code-graph-rag never indexes with network access (lib/sandbox.ts `require`).
+    const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [dir, h], ro: [], venv: true, require: true });
+    let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
+    // the tool could write its output dir: nothing in it may be a link or a special file
+    const bad = args === null ? sandbox.vet(out) : null;
+    if (bad) output += `\n${bad}`;
+    const ok = r.status === 0 && !bad && (args !== null || fs.existsSync(path.join(out, 'export.json')));
     return { ok, status: r.status, signal: r.signal, output, stdout: r.stdout ?? '', ms: Date.now() - t0 };
   } finally {
     if (ownHome) fs.rmSync(h, { recursive: true, force: true });
@@ -66,10 +71,18 @@ const edgeKind = (t) => KIND[t] ?? (/^(DEFINES|CONTAINS)/.test(t) ? 'contains' :
 /** Map `dir`'s cgr export (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
-  const g = JSON.parse(fs.readFileSync(path.join(dir, OUT, 'export.json'), 'utf8'));
+  // written by the sandboxed tool: follow no link it may have left out of the repo
+  const bad = sandbox.vet(path.join(dir, OUT)); if (bad) throw new Error(bad);
+  const g = JSON.parse(fs.readFileSync(sandbox.confined(dir, path.join(dir, OUT, 'export.json')), 'utf8'));
   const lines = new Map<string, number>();
+  // A module's path comes from the export: read it only as a plain file inside the repo (no `..`, no
+  // link out, no FIFO); otherwise its line count is unknown (1).
   const lineCount = (p: string) => {
-    if (!lines.has(p)) { let n = 1; try { n = fs.readFileSync(path.join(dir, p), 'utf8').split('\n').length; } catch { /* unreadable: 1 */ } lines.set(p, n); }
+    if (!lines.has(p)) {
+      let n = 1; const f = path.join(dir, p);
+      try { if (sandbox.within(dir, f) && fs.statSync(f).isFile()) n = fs.readFileSync(f, 'utf8').split('\n').length; } catch { /* unreadable: 1 */ }
+      lines.set(p, n);
+    }
     return lines.get(p);
   };
   // Module qualified names, by path: a definition's local name is its qname minus its module's.

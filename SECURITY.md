@@ -5,12 +5,27 @@
 graph-assay indexes source code it did not write: the public corpus, fixtures, and any repository
 you point the oracle at. Treat every indexed repository as untrusted input. What runs against it:
 
-- **The tools under test.** Both index in a temporary HOME, with telemetry off, without network
-  (`unshare -rn`, on Linux with unprivileged user namespaces) and with an allowlisted environment:
-  codegraph sees only paths, locale, `NODE_OPTIONS` and its own `CODEGRAPH_*` switches;
-  code-graph-rag sees only PATH, locale and its sandbox HOME. A malicious repository that exploits a bug in
-  either tool still runs with your user's file permissions. Where `unshare` is unavailable (macOS),
-  codegraph runs with network access.
+- **The tools under test.** Every subject indexes in a temporary HOME, with telemetry off and an
+  allowlisted environment (codegraph sees only paths, locale, `NODE_OPTIONS` and its own
+  `CODEGRAPH_*` switches; code-graph-rag only PATH, locale and its sandbox HOME), isolated by
+  `lib/sandbox.ts`, the first of these that works:
+  - `unshare -rn` (Linux with unprivileged user namespaces): no network, but the tool still runs
+    with your user's file permissions.
+  - A throwaway Docker container (`graph-assay-sandbox:1`, built by `tools/setup.sh`): no network, no
+    capabilities, no new privileges, read-only root, your uid, and only the indexed copy, the sandbox
+    HOME (read-write) and the tool's install (read-only) mounted. A repository that exploits a tool
+    cannot reach the network or read your files outside those mounts, and graph-assay refuses the
+    tool's output if it holds anything but plain files and directories (`lib/sandbox.ts` `vet`).
+    **Not yet contained:** the indexed copy, `.git` included, is writable inside the container, and the
+    oracle later runs `git` and writes files in that copy on the host, so an exploited tool can still
+    plant a git setting (such as `core.fsmonitor`) or a link there that the host then follows. Run
+    graph-assay only on repositories you would run your own tools on until the copy is mounted
+    read-only. This is the path on Ubuntu 24.04, whose AppArmor policy blocks
+    unprivileged user namespaces; do not lift that policy for `unshare` (it would let any process
+    create user namespaces). Being in the `docker` group is itself root-equivalent on the host.
+  - Neither (macOS, or no image): codegraph, codebase-memory-mcp and code-review-graph run with
+    network access and your file permissions; code-graph-rag refuses to run.
+  `GRAPH_ASSAY_ISOLATION=unshare|docker|none` picks one explicitly.
 - **The SCIP indexers.** scip-typescript, scip-python and scip-go type-check the code without running
   it. **scip-java builds the project**, which runs that project's build plugins. It therefore runs
   only inside its Docker image, as your uid, with the repository mounted.
