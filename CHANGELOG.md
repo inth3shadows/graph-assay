@@ -118,6 +118,11 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- The codebase-memory-mcp adapter dropped every Go definition. cbm 0.12.1 writes a `File` node but
+  no `Module` node for a Go file, and the adapter kept only nodes whose file had a Module. A code
+  file with only a File node is now the file. On gorilla/mux (corpus v1, dev) the snapshot goes from
+  0 to 17 Go files and its function-pair track from no pairs to 624 subject pairs; the other dev
+  repos are unchanged.
 - Fixture replay no longer scores a fixed route-caller fixture `CHANGED` (#29). The check that a
   fixture's caller is in the graph compared the last part of `from` with node names only, and a
   codegraph route node is named `GET /api/...`; only its qualified name is the fixture's `from`. A

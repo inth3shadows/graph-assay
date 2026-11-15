@@ -113,18 +113,24 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
                                     end_line AS "end" FROM nodes ORDER BY id`).all() as unknown as Row[];
     const er = db.prepare('SELECT source_id AS src, target_id AS dst, type, properties FROM edges ORDER BY id').all() as unknown as
       { src: number; dst: number; type: string; properties: string }[];
-    // A file is its Module node; File nodes (the same file) are folded into it.
+    // A file is its Module node; File nodes (the same file) are folded into it. cbm 0.12.1 writes no
+    // Module for some languages (Go), only a File node: there a code file's File node is the file.
     const moduleOf = new Map<string, Row>();
     for (const n of rows) if (n.label === 'Module' && n.file && !n.file.startsWith(`${OUT}/`)) moduleOf.set(n.file, n);
     const alias = new Map<number, number>();
-    for (const n of rows) if (n.label === 'File' && moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
+    for (const n of rows) {
+      if (n.label !== 'File' || !n.file || n.file.startsWith(`${OUT}/`)) continue;
+      if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
+      else if (lang(n.file)) moduleOf.set(n.file, { ...n, label: 'Module' });
+    }
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
       // no file: injected builtins (`builtins.len`), routes, the project and branch nodes
-      if (!n.file || SKIP.has(n.label) || n.file.startsWith(`${OUT}/`)) continue;
-      const mod = moduleOf.get(n.file);
+      const mod = n.file ? moduleOf.get(n.file) : null;
+      const isFile = n.label === 'Module' || mod?.id === n.id;
+      if (!n.file || (SKIP.has(n.label) && !isFile) || n.file.startsWith(`${OUT}/`)) continue;
       if (!mod) continue;
-      if (n.label === 'Module') {
+      if (isFile) {
         nodes.push({ id: String(n.id), kind: 'file', name: n.file, qname: n.file, file: n.file, language: lang(n.file), start: 1, end: Math.max(1, n.end) });
         continue;
       }
