@@ -255,7 +255,7 @@ check('every adapter mounts the indexed repo read-only and only its own output d
     withEnv({ GRAPH_ASSAY_ISOLATION: 'docker', PATH: `${bin}:${oldPath}` }, () => {
       sandbox.resetBackend();
       for (const [name, adapter, writes] of [['codegraph', codegraph, ['.codegraph']], ['code-graph-rag', cgr, ['.graph-assay']],
-        ['codebase-memory-mcp', cbm, []], ['code-review-graph', crg, []]] as const) {
+        ['codebase-memory-mcp', cbm, []], ['code-review-graph', crg, ['.code-review-graph']]] as const) {
         fs.rmSync(log, { force: true });
         adapter.index(work, build, { home: path.join(tmp, `home-${name}`) });
         const args = fs.readFileSync(log, 'utf8').split('\n');
@@ -332,6 +332,42 @@ check('a repo that tracks a link or file at an output dir gets no rw mount outsi
       assert.doesNotThrow(() => { r2 = codegraph.index(typo, build, { home: path.join(tmp, 'home-typo') }); });
       assert.equal(r2.ok, false); assert.equal(fs.existsSync(typo), false);
     });
+  } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-review-graph: a repo with no .git indexes; crg may write its marker dir, nothing else in the repo (#52 V1)', () => {
+  sandbox.resetBackend();
+  if (sandbox.backend() !== 'docker') { console.log('note: docker backend not in use; V1 not checked'); return; }
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-v1-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work); fs.writeFileSync(path.join(work, 'a.py'), 'x = 1\n');
+    // like crg 2.4: with no .git it makes <repo>/.code-review-graph, then writes its graph to CRG_DATA_DIR
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(probe, `#!${process.execPath}
+import * as fs from 'node:fs'; import { DatabaseSync } from 'node:sqlite';
+fs.mkdirSync('.code-review-graph', { recursive: true }); fs.writeFileSync('.code-review-graph/.gitignore', '*\\n');
+let rootWritable = true; try { fs.writeFileSync('planted', ''); } catch { rootWritable = false; }
+if (rootWritable) process.exit(3);
+fs.mkdirSync(process.env.CRG_DATA_DIR, { recursive: true });
+const db = new DatabaseSync(process.env.CRG_DATA_DIR + '/graph.db');
+db.exec("CREATE TABLE nodes (kind, name, qualified_name, file_path, line_start, line_end, language, parent_name); CREATE TABLE edges (id, kind, source_qualified, target_qualified, file_path, line, extra, confidence_tier, target_resolution)");
+db.close();\n`, { mode: 0o755 });
+    const r = crg.index(work, probe);
+    assert.equal(r.ok, true, r.output);
+    assert.equal(fs.existsSync(path.join(work, 'planted')), false);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+check('code-graph-rag: a run refused for want of isolation leaves the repo as it was (#52 V7)', () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-v7-')));
+  try {
+    const work = path.join(tmp, 'repo'); fs.mkdirSync(work); fs.writeFileSync(path.join(work, '.graph-assay'), 'tracked');
+    withEnv({ GRAPH_ASSAY_ISOLATION: 'none' }, () => {
+      sandbox.resetBackend();
+      const r = cgr.index(work, path.join(tmp, 'build'));
+      assert.equal(r.ok, false); assert.match(r.output, /refusing to run without isolation/);
+    });
+    assert.equal(fs.readFileSync(path.join(work, '.graph-assay'), 'utf8'), 'tracked');
   } finally { sandbox.resetBackend(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 

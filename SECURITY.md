@@ -14,7 +14,8 @@ you point the oracle at. Treat every indexed repository as untrusted input. What
   - A throwaway Docker container (`graph-assay-sandbox:1`, built by `tools/setup.sh`): no network, no
     capabilities, no new privileges, read-only root, your uid, and only these mounts: the indexed copy
     (`.git` included) and the tool's install read-only, the sandbox HOME and the tool's own output
-    dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`) read-write. A repository that exploits
+    dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`, code-review-graph's `.code-review-graph`
+    marker) read-write. A repository that exploits
     a tool cannot reach the network, read your files outside those mounts, or change the copy the
     host later runs `git` and the oracle in (no planted `core.fsmonitor`, no source file swapped for a
     link). The host makes each output dir itself, removing a link or file the repository tracks at

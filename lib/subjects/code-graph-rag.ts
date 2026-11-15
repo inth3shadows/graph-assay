@@ -39,7 +39,8 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   try {
     // its export dir, the only place in the repo it may write: a plain dir made here, emptied for an
     // index so an export the repository tracks is never taken for the tool's (sandbox.outputDir)
-    const prep = sandbox.outputDir(out, args === null);
+    // only where it will run: a run refused for want of isolation leaves the repo as it was
+    const prep = sandbox.isolated() ? sandbox.outputDir(out, args === null) : null;
     if (prep) return { ok: false, status: null, signal: null, output: prep, stdout: '', ms: Date.now() - t0 };
     // Fail closed: code-graph-rag never indexes with network access (lib/sandbox.ts `require`).
     const r = sandbox.run([path.resolve(build), ...argv], { cwd: dir, env, timeoutMs, nice, maxBuffer: 256 << 20, rw: [out, h], ro: [dir], venv: true, require: true });

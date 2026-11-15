@@ -105,12 +105,14 @@ export function dockerPlan(argv: string[], o: RunOptions, name: string): { args:
     if (v.error) return { error: v.error };
     if (v.root) ro.push(v.root);
   }
-  // A rw dir inside a ro one (an output dir in the repo) must be that dir itself: a link the repo
-  // tracks there (`.codegraph -> .`, `-> .git`, `-> ~`) would mount its target read-write (#52).
-  for (const w of o.rw) for (const r of ro) {
-    const rel = path.relative(path.resolve(r), path.resolve(w));
-    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
-    if (!rel || real(w) !== path.join(real(r), rel)) return { error: `refusing to mount ${w} read-write: it leads outside ${r}, or is it (a link the repository tracks?)` };
+  // A rw dir whose parent lies inside a ro mount (an output dir in the repo) must be a plain directory:
+  // a link the repo tracks there (`.codegraph -> .`, `-> .git`, `-> ~`) would mount its target
+  // read-write (#52). Real paths on both sides, so neither may be named through a link to dodge it.
+  for (const w of o.rw) {
+    const parent = real(path.dirname(path.resolve(w)));
+    if (!ro.some((r) => { const rr = real(r); return parent === rr || parent.startsWith(`${rr}/`); })) continue;
+    const st = fs.lstatSync(w, { throwIfNoEntry: false });
+    if (!st?.isDirectory()) return { error: `refusing to mount ${w} read-write: inside a read-only mount it must be a plain directory, not a link (one the repository tracks?) or a file` };
   }
   const binds = new Map<string, { src: string; ro: boolean }>(); // dst -> source
   let clash = '';
@@ -261,7 +263,7 @@ export function outputDir(p: string, fresh = false): string | null {
   try {
     const st = fs.lstatSync(p, { throwIfNoEntry: false });
     const keep = st?.isDirectory() && !fresh;
-    if (st && !keep) fs.rmSync(p, { recursive: true, force: true });
+    if (st && !keep) remove(p); // also a tree an earlier run left unreadable or too deep
     if (!keep) fs.mkdirSync(p);
     return null;
   } catch (e) {

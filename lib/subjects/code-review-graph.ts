@@ -60,11 +60,16 @@ export function index(dir, build = defaultBuild(), { timeoutMs = 600_000, home =
   if ((cmd[0] === 'build' || cmd[0] === 'update') && !cmd.some((a) => a === '--repo' || a.startsWith('--repo='))) cmd = [...cmd, '--repo', dir];
   const t0 = Date.now();
   try {
-    const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [h], ro: [dir], venv: true }); // the repo read-only: crg writes its graph under HOME
+    // the repo read-only: crg writes its graph under HOME, and its marker dir OWN in a repo with no
+    // .git (it fails without); a plain dir made here, a link or file the repository tracks there removed
+    const marker = path.join(dir, OWN);
+    const prep = sandbox.isolated() ? sandbox.outputDir(marker) : null;
+    if (prep) return { ok: false, status: null, signal: null, output: prep, stdout: '', ms: Date.now() - t0 };
+    const r = sandbox.run([path.resolve(build), ...cmd], { cwd: dir, env, timeoutMs, nice, rw: [marker, h], ro: [dir], venv: true });
     let output = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? `\n[graph-assay] spawn failed: ${r.error.message}` : ''}${r.signal ? `\n[graph-assay] killed by ${r.signal}` : ''}`;
     let ok = r.status === 0;
-    // the tool could write its store and the output dir: nothing in them may be a link or a special file
-    const bad = ok && indexing ? sandbox.vetAll(data, out) : null;
+    // the tool could write its store and its marker dir: nothing in them may be a link or a special file
+    const bad = ok && indexing ? sandbox.vetAll(data, marker, out) : null;
     if (bad) { ok = false; output += `\n${bad}`; }
     if (ok && indexing) {
       const store = path.join(data, 'graph.db');

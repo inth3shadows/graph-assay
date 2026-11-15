@@ -136,7 +136,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 - The docker sandbox mounts the indexed copy read-only, `.git` included (#51). Only the sandbox HOME
-  and the tool's own output dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`) are writable,
+  and the tool's own output dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`, code-review-graph's
+  `.code-review-graph` marker) are writable,
   so an exploited tool can no longer plant a git setting such as `core.fsmonitor`, or a link, in the
   copy where the host later runs `git` and the oracle. A link or file the repository itself tracks at
   an output dir is removed before the run, never followed into a read-write mount, and a committed

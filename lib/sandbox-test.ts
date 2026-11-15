@@ -190,14 +190,36 @@ try {
     const elsewhere = path.join(tmp, 'f1-host'); fs.mkdirSync(elsewhere);
     for (const target of ['.', '.git', elsewhere]) {
       const out = path.join(root, '.out'); fs.rmSync(out, { force: true }); fs.symlinkSync(target, out);
-      assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: root, rw: [out, home], ro: [root] }, 'n') as any).error ?? 'planned', /leads outside|read-only and read-write/, `.out -> ${target}`);
+      assert.match((sandbox.dockerPlan([exe], { ...opts, cwd: root, rw: [out, home], ro: [root] }, 'n') as any).error ?? 'planned', /must be a plain directory|read-only and read-write/, `.out -> ${target}`);
     }
     fs.rmSync(path.join(root, '.out')); fs.mkdirSync(path.join(root, '.out'));
     assert.ok(!('error' in sandbox.dockerPlan([exe], { ...opts, cwd: root, rw: [path.join(root, '.out'), home], ro: [root] }, 'n')));
     // the same place both read-only and read-write is refused, also when a ro link leads to a rw dir
-    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [work, home], ro: [work] }, 'n') as any).error, /read-write: it leads outside|read-only and read-write/);
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [work, home], ro: [work] }, 'n') as any).error, /read-only and read-write/);
     const homeLink = path.join(tmp, 'f1-home-link'); fs.symlinkSync(home, homeLink);
     assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [work, home], ro: [homeLink] }, 'n') as any).error, /read-only and read-write/);
+  });
+
+  check('docker: the nesting check follows real paths, only for the dir that holds the rw one (#52 V2/V3/V4)', () => {
+    // V2: a repo reached through a link that sits under another ro mount (a SANDBOX_RO prefix) is fine
+    const t = path.join(tmp, 'v2'); const disk = path.join(t, 'disk', 'work'); const top = path.join(t, 'top');
+    fs.mkdirSync(path.join(disk, '.codegraph'), { recursive: true }); fs.mkdirSync(top); fs.symlinkSync(disk, path.join(top, 'work'));
+    const viaLink = path.join(top, 'work');
+    const ok = sandbox.dockerPlan([exe], { ...opts, cwd: viaLink, rw: [path.join(viaLink, '.codegraph'), home], ro: [viaLink, top] }, 'n');
+    assert.ok(!('error' in ok), JSON.stringify(ok));
+    // V3: the ro dir named through a link, the rw dir by its real path, and a link to .git there
+    fs.mkdirSync(path.join(disk, '.git')); fs.rmSync(path.join(disk, '.codegraph'), { recursive: true }); fs.symlinkSync('.git', path.join(disk, '.codegraph'));
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [path.join(disk, '.codegraph'), home], ro: [viaLink] }, 'n') as any).error ?? 'planned', /must be a plain directory/);
+    // V4: a child named `..out` is a child, not a parent step
+    fs.symlinkSync('.git', path.join(disk, '..out'));
+    assert.match((sandbox.dockerPlan([exe], { ...opts, rw: [path.join(disk, '..out'), home], ro: [disk] }, 'n') as any).error ?? 'planned', /must be a plain directory/);
+  });
+
+  check('outputDir: emptying a dir the tool left unreadable or too deep works, through remove() (#52 V5)', () => {
+    if (process.getuid?.() === 0) return;
+    const out = path.join(tmp, 'v5'); fs.mkdirSync(path.join(out, 'locked', 'x'), { recursive: true }); fs.chmodSync(path.join(out, 'locked'), 0o000);
+    assert.equal(sandbox.outputDir(out, true), null);
+    assert.deepEqual(fs.readdirSync(out), []);
   });
 
   check('outputDir: a link or file there is removed (never its target), a dir is kept or emptied, a missing parent fails (#52 F1/F2/F4)', () => {
