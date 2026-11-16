@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { SPEC_VERSION } from '../lib/spec.ts';
+import { CORPUS, readRepos } from '../differential/builds.ts';
 const qa=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'cgqa-repro-test-'));let n=0;
 const check=(name,fn)=>{fn();n++;console.log(`ok    ${name}`);};
@@ -69,6 +70,25 @@ try{
   // tools/package.json decides how the entry point loads (#39 review L2).
   assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json (the entry point\'s module marker) missing from the repro manifest');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
  });
+ check('--split heldout needs --publish; the usage names every corpus repo; the split is recorded',()=>{
+  const go=(argv)=>spawnSync(process.execPath,[path.join(qa,'tools/repro.ts'),...argv],{cwd:qa,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
+  const refused=go(['--split','heldout','--repo','httpx','--out',path.join(tmp,'held-refused')]);
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/reserved for publication.*--publish/s);assert(!fs.existsSync(path.join(tmp,'held-refused')),'a refused run must not create its output');
+  // With --publish it passes parsing and reaches the (shimmed, failing) namespace check; no reproduction runs.
+  const out=path.join(tmp,'held-ok');const ok=go(['--split','heldout','--publish','--repo','httpx','--out',out]);
+  assert.equal(ok.status,1,ok.stdout+ok.stderr);const m=read(path.join(out,'manifest.json'));
+  assert.match(m.error,/namespace-check/);assert.equal(m.split,'heldout');assert.equal(m.publish,true);assert.deepEqual(m.repos.map(r=>r.name),['httpx']);
+  // A dev repo is not in the held-out split; --publish does not change the dev split.
+  assert.match(go(['--split','heldout','--publish','--repo','mux','--out',path.join(tmp,'h2')]).stderr,/Unknown heldout repo: mux/);
+  // --publish without --split heldout is refused, so a dev manifest never claims a publication run (#53 review L1).
+  for(const argv of [['--split','dev','--repo','mux','--publish'],['--publish','--repo','mux']]){const o=path.join(tmp,'dev-pub');const r=go([...argv,'--out',o]);
+   assert.notEqual(r.status,0);assert.match(r.stderr,/--publish applies only to --split heldout/,argv.join(' '));assert(!fs.existsSync(o),'a refused run must not create its output');}
+  const devPlain=path.join(tmp,'dev-plain');go(['--repo','mux','--out',devPlain]);const dm=read(path.join(devPlain,'manifest.json'));assert.equal(dm.split,'dev');assert.equal(dm.publish,false);
+  assert.match(go(['--split','bogus']).stderr,/Unknown split/);
+  // Every npm corpus entry has the frozen lock the image installs from, and a missing one fails before anything is fetched (#53 review H1).
+  for(const r of readRepos(CORPUS).filter(r=>r.setup==='npm'))assert(fs.existsSync(path.join(qa,'docker',`${r.name}-package-lock.json`)),`docker/${r.name}-package-lock.json missing`);
+    const help=go(['--help']);assert.equal(help.status,0);for(const name of ['mux','requests','httpx','cobra','got'])assert.match(help.stdout,new RegExp(name),`usage lacks ${name}`);
+ });
  shim('unshare','process.exit(0);');
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
  shim('bash',`const fs=require('node:fs'),path=require('node:path');const args=process.argv.slice(2);if(args[0]!=='oracle/run.sh')process.exit(9);
@@ -83,6 +103,16 @@ try{
  else if(script==='metamorphic/run.ts'){const status=Number(process.env.CGQA_T3_REPRO_STATUS??1);data=['decoy','shift','repeat'].map(relation=>({seed:'f',relation,subject,adapterSha256:'a'.repeat(64),challengeSha256:'b'.repeat(64),byteIdentical:relation==='repeat'?true:undefined,diffs:{LOST:status===1&&relation==='decoy'?['changed']:[]},...(status===2?{error:'synthetic index failure'}:{})}));fs.writeFileSync(output,JSON.stringify(data));process.exit(status);}
  else if(script==='labels/noise.ts')data={table:{},labellers:[],protocol:a.includes('--protocol')?{sha256:'0'.repeat(64),name:'test',promptTemplateSha256:'0'.repeat(64),labellers:{}}:null};else process.exit(9);
  fs.writeFileSync(output,JSON.stringify(data));`);
+ shim('npm',`const fs=require('node:fs');if(process.argv[2]!=='ci'||!fs.existsSync('package-lock.json'))process.exit(9);`);
+ check('a held-out publish run fetches, sets up and tables the held-out split, never dev',()=>{
+  // The split reaches the fetch, the npm setup (got's lock) and bench/tables.ts --split (#53 review M2, H1).
+  const out=path.join(tmp,'heldout');const held=readRepos(CORPUS,'heldout').map(r=>r.name).sort();
+  const r=spawnSync(process.execPath,[path.join(context,'tools/repro.ts'),'--split','heldout','--publish','--out',out],{cwd:context,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`,CGQA_T3_REPRO_STATUS:'0'}});
+  assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(read(path.join(out,'manifest.json')).status,'complete');
+  assert.deepEqual(fs.readdirSync(path.join(out,'repos')).sort(),held,'fetched repos are not the held-out split');
+  for(const n of held.filter(n=>readRepos(CORPUS,'heldout').find(r=>r.name===n).setup==='npm'))assert(fs.existsSync(path.join(out,'logs',`setup-${n}.log`)),`no npm setup for ${n}`);
+  const t=read(path.join(out,'tables.json'));assert.equal(t.split,'heldout');assert.deepEqual([...t.repos].sort(),held,'tables do not cover the held-out split');
+ });
  check('canonical orchestrator records exit1 findings and runs actual T1/T2/T3 table code',()=>{
   const out=path.join(tmp,'findings');const r=run(context,out,{CGQA_T3_REPRO_STATUS:'1'});assert.equal(r.status,0,r.stdout+r.stderr);
   const m=read(path.join(out,'manifest.json'));assert.equal(m.status,'complete');assert(m.files['differential/modes.ts']);

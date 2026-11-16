@@ -12,17 +12,26 @@ import { CORPUS, readRepos, fetchRepos } from '../differential/builds.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
-const usage = 'usage: tools/repro.ts [--split dev] [--repo mux|requests|click|ky|express] [--out /results]';
+const usage = `usage: tools/repro.ts [--split dev | --split heldout --publish] [--repo ${[...new Set(readRepos(CORPUS).map((r) => r.name))].join('|')}] [--out /results]\n  --split heldout is refused without --publish (held-out repos are indexed only for published tables, SPEC §9),\n  and --publish without it (a dev run is never a publication run)`;
 if (args.includes('--help')) { console.log(usage); process.exit(0); }
 const opts = { '--split': 'dev', '--out': '/results' };
+// --publish is a bare flag (no value); take it out before the key/value pairs are read.
+const publish = args.includes('--publish');
+for (let i = args.indexOf('--publish'); i >= 0; i = args.indexOf('--publish')) args.splice(i, 1);
 while (args.length) {
   const k = args.shift(); const v = args.shift();
   if (!['--split', '--repo', '--out'].includes(k) || !v || v.startsWith('--')) throw new Error(usage);
   opts[k] = v;
 }
-if (opts['--split'] !== 'dev') throw new Error('Only the dev split is supported; heldout is reserved for publication.');
-const repos = readRepos(CORPUS, 'dev').filter((r) => !opts['--repo'] || r.name === opts['--repo']);
-if (!repos.length) throw new Error(`Unknown dev repo: ${opts['--repo']}`);
+const split = opts['--split'];
+if (!['dev', 'heldout'].includes(split)) throw new Error(`Unknown split: ${split} (use dev or heldout)`);
+if (split === 'heldout' && !publish) throw new Error('The heldout split is reserved for publication: pass --publish together with --split heldout.');
+if (publish && split !== 'heldout') throw new Error('--publish applies only to --split heldout: a dev run is never a publication run.');
+const repos = readRepos(CORPUS, split).filter((r) => !opts['--repo'] || r.name === opts['--repo']);
+if (!repos.length) throw new Error(`Unknown ${split} repo: ${opts['--repo']}`);
+// An npm entry installs from its frozen lock (docker/<name>-package-lock.json); fail before fetching or indexing anything.
+const noLock = repos.filter((r) => r.setup === 'npm' && !fs.existsSync(path.join(qa, 'docker', `${r.name}-package-lock.json`))).map((r) => r.name);
+if (noLock.length) throw new Error(`No frozen npm lock for ${noLock.join(', ')}: add docker/<name>-package-lock.json`);
 const out = path.resolve(opts['--out']);
 if (fs.existsSync(out) && fs.readdirSync(out).length) throw new Error(`Output must be empty (prevents mixing runs): ${out}`);
 fs.mkdirSync(out, { recursive: true });
@@ -51,7 +60,7 @@ const note = 'Oracle noise is recomputed from the committed labels snapshot (lab
 // SPEC §10 run identity beyond the per-file hashes: corpus version, effective subject timeout,
 // expectation schema and labelling protocol (each oracle output records its position encodings).
 const manifest: Record<string, any> = { schema: 'graph-assay/repro@1', spec: SPEC_VERSION, snapshotSchema: 'graph-assay/snapshot@1', expectationSchema: 'graph-assay/expect@1',
-  corpus: { file: path.relative(qa, CORPUS), sha256: hash(CORPUS) }, subjectTimeoutMs: 600_000,
+  corpus: { file: path.relative(qa, CORPUS), sha256: hash(CORPUS) }, split, publish, subjectTimeoutMs: 600_000,
   labellingProtocol: hash(path.join(qa, 'labels', 'protocol.json')),
   adapters: Object.fromEntries(['codegraph', 'code-graph-rag'].map((name) => [name, adapterHash(name)])),
   started: new Date().toISOString(), platform: { os: os.release(), arch: os.arch(), node: process.version },
@@ -75,7 +84,7 @@ try {
   run('unshare', ['-rn', 'true'], 'namespace-check');
   run('node', ['-e', `console.log(JSON.stringify({codegraph:await (await import('./lib/subjects/codegraph.ts')).version(process.env.CODEGRAPH_BUILD),cgr:(await import('./lib/subjects/code-graph-rag.ts')).version(),tools:(await import('./lib/manifest.ts')).tools()}))`], 'versions');
   manifest.versions = JSON.parse(fs.readFileSync(path.join(out, 'logs/versions.log'), 'utf8'));
-  console.log('repro: fetch pinned dev corpus');
+  console.log(`repro: fetch pinned ${split} corpus`);
   const dirs = fetchRepos(path.join(out, 'repos'), repos);
   for (const [i, r] of repos.entries()) {
     if (r.setup === 'npm') {
@@ -107,13 +116,13 @@ try {
   const data = path.join(qa, 'labels', 'data');
   const samples = fs.readdirSync(data).sort().flatMap((d) => [path.join(data, d, 'items.jsonl'), path.join(data, d)]);
   run('node', ['labels/noise.ts', ...samples, '--protocol', path.join(qa, 'labels', 'protocol.json'), '--json', path.join(out, 'noise.json')], 'noise');
-  run('node', ['bench/tables.ts', '--canonical', '--corpus', corpus, '--split', 'dev', '--t1', path.join(out, 't1'), '--t3', path.join(out, 't3'), '--seed', '1',
+  run('node', ['bench/tables.ts', '--canonical', '--corpus', corpus, '--split', split, '--t1', path.join(out, 't1'), '--t3', path.join(out, 't3'), '--seed', '1',
     '--noise', path.join(out, 'noise.json'), '--md', path.join(out, 'tables.md'), '--json', path.join(out, 'tables.json')], 'tables');
   const table = JSON.parse(fs.readFileSync(path.join(out, 'tables.json'), 'utf8'));
   if (table.missingRuns.length) throw new Error(`Missing oracle runs: ${table.missingRuns.join(', ')}`);
   fs.appendFileSync(path.join(out, 'tables.md'), `\n${note}\n`);
   manifest.status = 'complete'; save();
-  console.log(`repro: complete — ${repos.length} dev repo(s), both subjects, T1 replay + PyCG + T3 robustness`);
+  console.log(`repro: complete — ${repos.length} ${split} repo(s), both subjects, T1 replay + PyCG + T3 robustness`);
   console.log(`repro: ${note}`);
   console.log(`repro: tables written to ${out}/tables.md and ${out}/tables.json`);
 } catch (error) {
