@@ -120,7 +120,8 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
     // As on the call-site track: a framework edge at its target's own declaration is no call.
     if (on('skip-framework-self-site') && e.line != null && e.sfile === e.tfile && e.line === e.tstart) { skippedEdges['skip-framework-self-site'] = (skippedEdges['skip-framework-self-site'] ?? 0) + 1; continue; }
     // A Go composite literal `T{...}` is no call, so it is no pair (SPEC §5 `skip-composite-literal`).
-    if (compositeLiteral(e)) { skippedEdges['skip-composite-literal'] = (skippedEdges['skip-composite-literal'] ?? 0) + 1; continue; }
+    // Guessed edges are counted as guessed below, as on the call-site track.
+    if (e.prov == null && compositeLiteral(e)) { skippedEdges['skip-composite-literal'] = (skippedEdges['skip-composite-literal'] ?? 0) + 1; continue; }
     const c = mapCaller(e); const d = c && mapTarget(e);
     if (!c) { unmappedEdges.caller++; continue; }
     if (!d) { unmappedEdges.target++; continue; }

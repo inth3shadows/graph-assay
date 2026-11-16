@@ -5,12 +5,13 @@ failures count, and how scores are aggregated and versioned. Every scorer must f
 SCIP oracle, fixture replay, PyCG, the metamorphic relations and the tables. Every adapter must
 emit what it requires.
 
-**Status: in force** from 2026-11-16. Results produced under it record `SPEC v3.0`. Results produced
-under SPEC v2.0 (in force from 2026-11-16) and SPEC v1.0 (in force from 2026-11-11) keep their labels, and results from before it stay labelled
-SPEC v0 (§12). v2.0 added `scip-name-mismatch` (§5). v3.0 adds one rule, `skip-composite-literal` (§5),
-prompted by a held-out result and re-validated on the dev split (§9).
+**Status: in force** from 2026-11-16. Results produced under it record `SPEC v3.0`. Results
+produced under SPEC v2.0 (in force from 2026-11-16) and SPEC v1.0 (in force from 2026-11-11) keep
+their labels, and results from before v1.0 stay labelled SPEC v0 (§12). v2.0 added
+`scip-name-mismatch` (§5). v3.0 adds one rule, `skip-composite-literal` (§5), prompted by a held-out
+result and re-validated on the dev split (§9).
 
-"Must" marks a requirement. A result conforms to v2 only if every "must" holds for it. Operational
+"Must" marks a requirement. A result conforms to v3 only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
 TECHNICAL.md and are not part of this specification.
 
@@ -37,7 +38,7 @@ TECHNICAL.md and are not part of this specification.
 - **Reported separately, not in the headline:** decorator applications (`@d`) (§4) and guessed
   edges (§4). Edges to bodiless declarations (`@decl`, §4) count in the headline and are also
   reported in their own column.
-- **Out of scope for v2** (reported, not scored): imports, type references, `contains`,
+- **Out of scope for v3** (reported, not scored): imports, type references, `contains`,
   inheritance, and calls into libraries or the standard library. An edge to a library can still be
   *wrong* (§5, `external`).
 - **Project** means the files of the repository at the pinned commit, minus the vendored and
@@ -88,7 +89,7 @@ TECHNICAL.md and are not part of this specification.
 | **Call-site** | `(S, D)` | the site line of every call edge |
 | **Function-pair** | `(C, D)`, deduplicated by caller and callee identity | caller and callee only |
 
-- Both tracks are part of v2. They are reported side by side and never combined.
+- Both tracks are part of v3. They are reported side by side and never combined.
 - A subject without site lines is scored on the function-pair track only. On the call-site track
   its edges are `skipped: no-site-line`.
 - A subject pair comes from a non-guessed call edge whose endpoints map to oracle definitions. The
@@ -117,7 +118,7 @@ TECHNICAL.md and are not part of this specification.
 
 | Case | Rule |
 |---|---|
-| Constructor | An edge to class `X` carries a constructor call `X()` / `new X()`. A node named `constructor`, `__init__` or `__new__` satisfies the §2 name condition for any definition its span holds, and a class node satisfies it for its own constructor. In precision, a Python edge to `__init__` is compared at the class name against the class's span (rule `ctor-init`), unless the site calls `__init__` by name (`super().__init__()`); whether a call is qualified is read from the site's text, never from the subject's reference. On the function-pair track a constructor stands for its class. Inherited constructors are not in v2 for the oracle (§13); PyCG's matching is in §9. |
+| Constructor | An edge to class `X` carries a constructor call `X()` / `new X()`. A node named `constructor`, `__init__` or `__new__` satisfies the §2 name condition for any definition its span holds, and a class node satisfies it for its own constructor. In precision, a Python edge to `__init__` is compared at the class name against the class's span (rule `ctor-init`), unless the site calls `__init__` by name (`super().__init__()`); whether a call is qualified is read from the site's text, never from the subject's reference. On the function-pair track a constructor stands for its class. Inherited constructors are not in v3 for the oracle (§13); PyCG's matching is in §9. |
 | Overloads | When the oracle defines a callee at several places (TypeScript overload signatures, Python `@overload` stubs), an edge to any of them, or to the implementation, matches (`ok-overload-set` for the Python stub case). |
 | Declaration target | An edge that resolves to a bodiless declaration (a `.d.ts` file, a type-literal or interface member) is tagged `@decl`. It counts in the headline and is also reported in its own column. |
 | Decorator | A decorator application `@d` matches an edge from `C` (the definition or file enclosing the decorator line) to `d`, or a `decorates` edge in either direction between `d` and the decorated definition. Decorator sites are scored only in their own **decorators** column, never in the headline. |
@@ -197,7 +198,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | `noise:external-target-outside-scip` | forward | the oracle says external, but never indexed the subject's target file |
 | `skip-framework-self-site` | forward | an edge recorded at its target's own declaration (a framework route) is skipped |
 | `skip-type-without-new` | missing, not Python | a type followed by `(` without `new` is not a call (a TS type position, a Go conversion `T(x)`) |
-| `skip-composite-literal` | both, Go | a Go composite literal is no call: a subject edge whose site line holds a reference to the called name, with a type symbol, followed by `{` (after an optional `[type arguments]`). Forward, the edge is skipped (counted in the waterfall); on the function-pair track it makes no pair, so it is neither subject-only nor an oracle disagreement. The missing direction takes only `name(` sites and needs no rule |
+| `skip-composite-literal` | forward and function pairs, Go | a Go composite literal is no call: a subject edge to a type (not a function or method) whose own site reference, nearest its column where columns compare, has a type symbol and is followed by `{` after any `[type arguments]`, and is not a function's result type (`func f() T {`). Literals of slice, array and map types (`[]T{...}`) count too. Forward, the edge is skipped (counted in the waterfall); on the function-pair track it makes no pair, so it is neither subject-only nor an oracle disagreement. A guessed edge stays counted as guessed. The missing direction takes only `name(` sites and needs no rule |
 | `skip-method-shorthand` | missing, not Python | an object literal's method shorthand opening is not a call (the pattern occurs only in TS/JS) |
 | `skip-external-module-binding` | missing, not Python | the definition is a binding of an installed package's `require` (TS/JS only in practice) |
 | `skip-module-member-alias` | missing, not Python | the definition is a binding to a member of a required module, where the oracle stops (TS/JS only in practice) |
@@ -378,13 +379,13 @@ run and must say so.
   Results are compared only within one spec major and one corpus version.
 - Results keep the version they were produced under. Results published under SPEC v0 stay labelled
   v0. They are never silently re-scored, and never mixed with results of another major in one table.
-- The snapshot (`snapshot@1`) and expectation (`expect@1`) schemas are versioned on their own. v2
+- The snapshot (`snapshot@1`) and expectation (`expect@1`) schemas are versioned on their own. v3
   reads `@1`, and a schema change that alters what a scorer can see requires a spec major.
 - Section numbers §1–§13 are stable within a major. Other documents cite them.
 
-## 13. Not in v2
+## 13. Not in v3
 
-These are not scored in v2 and carry no published numbers:
+These are not scored in v3 and carry no published numbers:
 - **T0, question accuracy** (oracle-verified answers to flow and impact questions). It is
   experimental until an agent-centric study shows that edge accuracy tracks agent answers.
 - Any-member matching for dispatch sets (`agree-in-set`): the SCIP oracle gives one symbol per

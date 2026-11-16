@@ -2,18 +2,45 @@
  "lang": "go",
  "mode": "missing",
  "inputs": "go-composite-literal",
- "note": "The pair side of go-composite-literal: the subject's caller->type pairs from `&T{}`, `T{}`, `shapes.Pt{}` (also inside NewT and NewPt) are no pair (rule skip-composite-literal), so they are neither subject-only nor an oracle disagreement. The four real calls still match.",
+ "note": "The pair side of go-composite-literal: the subject's caller->type pairs from `&T{}`, `T{}`, `shapes.Pt{}` (also inside NewT and NewPt) are no pair (rule skip-composite-literal), so they are neither subject-only nor an oracle disagreement. The four real calls still match. The method call s.Options(Options{...}) keeps its pair; only the literal on that line is skipped.",
  "expect": [],
  "pairs": {
-  "matched": ["controls -> NewPt", "controls -> NewT", "controls -> Norm", "controls -> Size"],
-  "subject": ["!literals -> T", "!literals -> Pt", "!NewT -> T", "!NewPt -> Pt"],
-  "disagrees": ["!literals -> T", "!literals -> Pt", "!NewT -> T", "!NewPt -> Pt"]
+  "matched": [
+   "controls -> NewPt",
+   "controls -> NewT",
+   "controls -> Norm",
+   "controls -> Size",
+   "collisions -> Options"
+  ],
+  "subject": [
+   "!literals -> T",
+   "!literals -> Pt",
+   "!NewT -> T",
+   "!NewPt -> Pt",
+   "!mk -> T",
+   "!mk2 -> T",
+   "!unicode -> T"
+  ],
+  "disagrees": [
+   "!literals -> T",
+   "!literals -> Pt",
+   "!NewT -> T",
+   "!NewPt -> Pt",
+   "!mk -> T",
+   "!mk2 -> T",
+   "!unicode -> T"
+  ]
  },
  "pairCounts": {
-  "oracle": 4,
-  "subject": 4,
-  "matched": 4,
-  "subjectOnly": { "oracleDisagrees": 0, "oracleSilent": 0 },
-  "skippedEdges": { "skip-composite-literal": 5 }
+  "oracle": 5,
+  "subject": 5,
+  "matched": 5,
+  "subjectOnly": {
+   "oracleDisagrees": 0,
+   "oracleSilent": 0
+  },
+  "skippedEdges": {
+   "skip-composite-literal": 9
+  }
  }
 }

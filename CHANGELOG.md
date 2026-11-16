@@ -76,14 +76,15 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
-- **SPEC v3.0** (major: it moves published numbers). New rule `skip-composite-literal` (Go, both
-  tracks): a composite literal `T{...}`, `&T{...}`, `pkg.T{...}` or `G[int]{...}` is not a call, as a
+- **SPEC v3.0** (major: it moves published numbers). New rule `skip-composite-literal` (Go, call-site
+  and function-pair tracks): a composite literal `T{...}`, `&T{...}`, `pkg.T{...}` or `G[int]{...}` is not a call, as a
   Go conversion `T(x)` is not. codegraph links the literal's type with an `instantiates` edge; the
   call-site track scored it `ok` (SCIP resolves the type name), while the function-pair track, which
   builds oracle units from call sites only, had no oracle pair for it and counted the subject's pair
   as an oracle disagreement. Now the edge is skipped forward (counted in the waterfall) and makes no
-  pair. Prompted by the held-out run (241 of 246 pair disagreements in cobra were literals); on dev
-  only the Go repository mux changes (the composite-literal units leave: 27 and 25 call-site units, 21 and 19 pair disagreements, codegraph and code-graph-rag). Self-tests
+  pair. The edge must target a type and sit on the literal itself, so a same-named method call on the
+  line (`s.Options(Options{})`) and a function's result type stay scored. Prompted by the held-out run
+  (cobra); on dev only the Go repository mux changes, and every unit that leaves is a literal. Self-tests
   `go-composite-literal`, `go-composite-literal-pairs`. Results under v2.0 and v1.0 keep their labels.
 - **SPEC v2.0** (major: it moves published numbers). New rule `scip-name-mismatch` (Python, both
   directions): where scip-python's symbol for a function, method or class the project defines names
