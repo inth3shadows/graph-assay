@@ -12,7 +12,7 @@ import { CORPUS, readRepos, fetchRepos } from '../differential/builds.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
-const usage = `usage: tools/repro.ts [--split dev|heldout [--publish]] [--repo ${[...new Set(readRepos(CORPUS).map((r) => r.name))].join('|')}] [--out /results]\n  --split heldout is refused without --publish (held-out repos are indexed only for published tables, SPEC §9)`;
+const usage = `usage: tools/repro.ts [--split dev | --split heldout --publish] [--repo ${[...new Set(readRepos(CORPUS).map((r) => r.name))].join('|')}] [--out /results]\n  --split heldout is refused without --publish (held-out repos are indexed only for published tables, SPEC §9),\n  and --publish without it (a dev run is never a publication run)`;
 if (args.includes('--help')) { console.log(usage); process.exit(0); }
 const opts = { '--split': 'dev', '--out': '/results' };
 // --publish is a bare flag (no value); take it out before the key/value pairs are read.
@@ -26,8 +26,12 @@ while (args.length) {
 const split = opts['--split'];
 if (!['dev', 'heldout'].includes(split)) throw new Error(`Unknown split: ${split} (use dev or heldout)`);
 if (split === 'heldout' && !publish) throw new Error('The heldout split is reserved for publication: pass --publish together with --split heldout.');
+if (publish && split !== 'heldout') throw new Error('--publish applies only to --split heldout: a dev run is never a publication run.');
 const repos = readRepos(CORPUS, split).filter((r) => !opts['--repo'] || r.name === opts['--repo']);
 if (!repos.length) throw new Error(`Unknown ${split} repo: ${opts['--repo']}`);
+// An npm entry installs from its frozen lock (docker/<name>-package-lock.json); fail before fetching or indexing anything.
+const noLock = repos.filter((r) => r.setup === 'npm' && !fs.existsSync(path.join(qa, 'docker', `${r.name}-package-lock.json`))).map((r) => r.name);
+if (noLock.length) throw new Error(`No frozen npm lock for ${noLock.join(', ')}: add docker/<name>-package-lock.json`);
 const out = path.resolve(opts['--out']);
 if (fs.existsSync(out) && fs.readdirSync(out).length) throw new Error(`Output must be empty (prevents mixing runs): ${out}`);
 fs.mkdirSync(out, { recursive: true });

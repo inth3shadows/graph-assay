@@ -8,7 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 - `tools/repro.ts --split heldout --publish`: the reproduction image can run the held-out split, which it
-  refuses without `--publish` (SPEC §9); the manifest records the split and the flag.
+  refuses without `--publish` (SPEC §9), and refuses `--publish` on dev; the manifest records the split and
+  the flag. `docker/got-package-lock.json` freezes got's install; an `npm` corpus entry without a lock fails
+  before anything is fetched.
 - Subject isolation where unprivileged user namespaces are blocked (Ubuntu 24.04's AppArmor default):
   `lib/sandbox.ts` runs every adapter's index process under `unshare -rn` where it works, else in a
   throwaway container (`docker/sandbox.Dockerfile`, built by `tools/setup.sh`; `--no-sandbox` skips)

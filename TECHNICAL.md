@@ -289,7 +289,7 @@ Nothing deploys. The oracle tools live outside the repo: `tools/setup-oracle-too
 
 ## Docker reproduction
 
-`Dockerfile` and `tools/repro.ts` reproduce the v1 **dev** call-site tables with
+`Dockerfile` and `tools/repro.ts` reproduce the v1 call-site tables, **dev** split by default, with
 the existing oracle, replay, PyCG and `bench/tables.ts`. The image supports
 Linux amd64; Python wheel hashes and SCIP binary checksums deliberately target
 that platform. No new harness runtime dependencies are added. `rsync` is needed by
@@ -309,7 +309,7 @@ supplies the adapter's existing `unshare` isolation.
 | code-graph-rag | `0.5.0`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.5.0/), matching SPEC's subject spike. `docker/requirements.lock` freezes the existing benchmark venv's transitive versions and PyPI wheel SHA256s (pip report, CPython 3.12/amd64). `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
 | codebase-memory-mcp | `0.12.1`; archive SHA256 `8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7` | [Release v0.12.1](https://github.com/DeusData/codebase-memory-mcp/releases/tag/v0.12.1) linux-amd64 asset; checksum from the release's `checksums.txt`. `tools/setup.sh` checks it before extraction (`--no-cbm` skips; other platforms are not pinned). Not in the Docker reproduction yet. |
 | code-review-graph | `2.4.0`, core (no extras) | [PyPI release](https://pypi.org/project/code-review-graph/2.4.0/). `docker/crg-requirements.lock` pins every dependency with all of its PyPI wheel hashes (`uv pip compile --generate-hashes`, resolved for CPython 3.12 x86_64); `tools/setup.sh` installs it with `--require-hashes --only-binary=:all:` (`--no-crg` skips; needs Python 3.11+ on Linux or macOS). Each lock installs into a fresh `venv-<first 12 hex of the lock's sha256>`, `venv` links to it only after pip succeeds, and venvs of earlier locks are then removed. `setup.sh` checks every part's platform before installing anything. No embeddings or enrichment. Not in the Docker reproduction yet. |
-| Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's upstream has no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata). Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Other dev entries need no setup. |
+| Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's and got's upstreams have no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata); `docker/got-package-lock.json` was resolved from got's `package.json` at the pinned commit with `npm install --package-lock-only --ignore-scripts --before=2026-10-30T08:45:40Z` (that commit's date), so the held-out entry was never indexed to make it. Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Every other entry needs no setup; `tools/repro.ts` refuses an `npm` entry without a lock before fetching anything. |
 | PyCG | `8d5dc40837803beef1d8d379fbf2cdad6cd94641` | Same public source pin as `tools/fetch-benchmarks.sh`; snippets are input data. |
 | Bootstrap | seed `1`, 2000 resamples | Existing `bench/tables.ts` defaults; the runner passes the seed explicitly. |
 
@@ -323,7 +323,7 @@ The runner configures `/opt` tools and `/results` outputs through existing confi
 environment overrides. It requires a fresh output directory, stops on an indexing
 failure, and retains logs and a failed manifest instead of emitting a success
 table. A subset run writes a selected corpus so the table does not claim to cover
-the whole dev split. The manifest hashes scorer/input files directly because the
+the whole split. The manifest hashes scorer/input files directly because the
 image has no harness `.git` directory. Scoring rules and historical results remain
 unchanged. Time, memory and generated dates are observations, not reproducible
 constants; the host kernel also remains visible in the platform record.
@@ -334,7 +334,7 @@ code with offline subject shims, including expected differences and failed-index
 
 Oracle noise is recomputed from the committed labels snapshot (`labels/data/`,
 every sample pooled) with `labels/noise.ts`; no labeller or credentials belong in
-this path. It covers the whole labelled sample whatever `--repo` selects. Heldout and JVM targets are outside this entry point's scope.
+this path. It covers the whole labelled sample whatever `--repo` selects. `--split heldout` runs only with `--publish`, and `--publish` only with it: held-out repos are indexed only for published tables (SPEC §9), and the manifest records `split` and `publish`. JVM targets are outside this entry point's scope.
 
 Run it from a clean clone (Linux amd64):
 
@@ -346,7 +346,8 @@ docker run --rm --security-opt seccomp=unconfined \
 ```
 
 Add `--repo mux` (or `--repo requests`) for a smoke run: T1 replay, PyCG and T3 still run in full;
-T2 covers only that repo. Each run needs an empty output directory. Results land under `/results`:
+T2 covers only that repo. The held-out publication run replaces `--split dev` with `--split heldout --publish`.
+Each run needs an empty output directory. Results land under `/results`:
 `tables.md`, `tables.json`, `t1/`, `t3/`, the oracle `work/`, `logs/` and `manifest.json`.
 code-graph-rag's adapter isolates indexing with `unshare -rn`, which Docker's default seccomp
 policy blocks; hence `seccomp=unconfined`. No host credentials or Docker socket are mounted.
