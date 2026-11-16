@@ -222,7 +222,7 @@ export function createContext(opts: Options) {
   // From just after a `func`: the offset of its body's `{`, or -1 when it has none (a func type in a
   // parameter, a field, `var f func() T = g`, a type declaration).
   const bodyOpen = (t: string, i: number) => {
-    for (const end = i + 4000; i < t.length && i < end;) {
+    while (i < t.length) {
       const k = lex().skipLex(t, i, 'x'); if (k !== i) { i = k; continue; }
       const c = t[i];
       if (c === '(' || c === '[') { i = skipGroup(t, i); if (i < 0) return -1; continue; }
@@ -254,7 +254,8 @@ export function createContext(opts: Options) {
         }
         prev = 'w'; prevWord = m[0]; j += m[0].length; continue;
       }
-      if (!/\s/.test(t[j])) { prev = t[j]; prevWord = ''; }
+      // A line break ends a type: Go inserts a semicolon after `]`, so `x[0]\nfunc f() T {` is a declaration.
+      if (t[j] === '\n') { prev = '\n'; prevWord = ''; } else if (!/\s/.test(t[j])) { prev = t[j]; prevWord = ''; }
       j++;
     }
     sigSpans.set(file, spans);

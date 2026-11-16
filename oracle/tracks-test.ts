@@ -105,6 +105,11 @@ check('a rule switched off through Options changes only its own verdict',
   check('skip-composite-literal: a func type without a body ends at `=`, so the next literal is one', !at(171, 'T') && at(172, 'T'));
   check('skip-composite-literal: a brace inside a func type\'s list does not close it', at(175, 'T'));
   check('skip-composite-literal: a `func` in a comment opens no signature', at(176, 'T'));
+  // Verify round: a line break ends a type, so a declaration after `x[0]` has a signature (K1), and a
+  // parameter list of any length does (K2).
+  check('skip-composite-literal: a function declared after a line ending in `]` has a result type (K1)', !at(182, 'T') && at(183, 'T'));
+  check('skip-composite-literal: a signature longer than 4,000 characters is a signature (K2)',
+    !at(454, 'T', { sfile: 'long.go' }) && at(455, 'T', { sfile: 'long.go' }));
 }
 // G6: a guessed literal edge is counted as guessed on the pair track, as on the call-site track, not as
 // skip-composite-literal.

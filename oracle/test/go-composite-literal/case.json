@@ -1,7 +1,7 @@
 {
  "lang": "go",
  "mode": "forward",
- "note": "A Go composite literal `T{...}`, `&T{...}`, `pkg.T{...}`, `[]T{...}` or `G[map[K]V]{...}` is not a call, as a conversion `T(x)` is not (rule skip-composite-literal, SPEC v4.0): codegraph's instantiates edge to the type is skipped, not scored. Lines 35-67 add a same-named method call on a literal's line (42, kept), result types (45, 47, 64), nested type arguments (52), a slice literal (53) and a non-ASCII line (59); tracks-test checks them in-process. Controls: NewT(), t.Size(), shapes.NewPt().Norm() keep their verdicts. Lines 67-109: literals inside functions whose signatures span lines (70, 76, 82), take `interface{}` (86), follow a leading `)` (91) or sit in a closure (98) are skipped. Lines 110-159: literals after a multi-line raw string (115) or block comment (121) holding a brace, in a closure whose signature spans lines (128) or takes `interface{}` (131), in a package-level func literal (141), and inside a conversion `T(T{})` (157), a `case T{}` (163), a package-level `var lit = T{...}` after a func-typed var (172) and a literal after a `/* see func */` comment (176) are skipped. tracks-test also checks their result types (127, 130, 140), a local type in a `type (` group (149) and literal types `map[T]struct{}{}`, `map[string]func(T) error{}`, `func(int, T) (T, error)` (154-156) and `[]func(interface{}, T) error{}` (175), and that a conversion `switch T(t) {` (162), a type assertion `v.(T).n {` (166) and a func-typed `var fv func() T = nil` (171) are not literals, in-process.",
+ "note": "A Go composite literal `T{...}`, `&T{...}`, `pkg.T{...}`, `[]T{...}` or `G[map[K]V]{...}` is not a call, as a conversion `T(x)` is not (rule skip-composite-literal, SPEC v4.0): codegraph's instantiates edge to the type is skipped, not scored. Lines 35-67 add a same-named method call on a literal's line (42, kept), result types (45, 47, 64), nested type arguments (52), a slice literal (53) and a non-ASCII line (59); tracks-test checks them in-process. Controls: NewT(), t.Size(), shapes.NewPt().Norm() keep their verdicts. Lines 67-109: literals inside functions whose signatures span lines (70, 76, 82), take `interface{}` (86), follow a leading `)` (91) or sit in a closure (98) are skipped. Lines 110-159: literals after a multi-line raw string (115) or block comment (121) holding a brace, in a closure whose signature spans lines (128) or takes `interface{}` (131), in a package-level func literal (141), and inside a conversion `T(T{})` (157), a `case T{}` (163), a package-level `var lit = T{...}` after a func-typed var (172) and a literal after a `/* see func */` comment (176) are skipped. tracks-test also checks their result types (127, 130, 140), a local type in a `type (` group (149) and literal types `map[T]struct{}{}`, `map[string]func(T) error{}`, `func(int, T) (T, error)` (154-156) and `[]func(interface{}, T) error{}` (175), and that a conversion `switch T(t) {` (162), a type assertion `v.(T).n {` (166) and a func-typed `var fv func() T = nil` (171) are not literals, in-process. A function declared after a line ending in `]` (182-183) and one whose parameter list runs past 4,000 characters (long.go:454-455) keep their signatures; their body literals are skipped.",
  "expect": [
   {
    "at": "main.go:9",
@@ -146,6 +146,16 @@
   },
   {
    "at": "main.go:176",
+   "name": "T",
+   "absent": true
+  },
+  {
+   "at": "main.go:183",
+   "name": "T",
+   "absent": true
+  },
+  {
+   "at": "long.go:455",
    "name": "T",
    "absent": true
   }

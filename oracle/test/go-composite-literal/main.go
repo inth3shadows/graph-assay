@@ -175,3 +175,10 @@ func lexed() int {
 	xs := []func(interface{}, T) error{}
 	/* see func */ return len(xs) + T{n: 3}.n
 }
+
+var tbl = []int{1}
+var first = tbl[0]
+
+func afterIndex() T {
+	return T{n: first}
+}

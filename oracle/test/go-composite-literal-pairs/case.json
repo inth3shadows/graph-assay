@@ -27,7 +27,9 @@
    "!closures -> T",
    "!typeExprs -> T",
    "!convs -> T",
-   "!lexed -> T"
+   "!lexed -> T",
+   "!afterIndex -> T",
+   "!longSig -> T"
   ],
   "disagrees": [
    "!literals -> T",
@@ -43,7 +45,9 @@
    "!closures -> T",
    "!typeExprs -> T",
    "!convs -> T",
-   "!lexed -> T"
+   "!lexed -> T",
+   "!afterIndex -> T",
+   "!longSig -> T"
   ]
  },
  "pairCounts": {
@@ -55,7 +59,7 @@
    "oracleSilent": 0
   },
   "skippedEdges": {
-   "skip-composite-literal": 25
+   "skip-composite-literal": 27
   }
  }
 }
