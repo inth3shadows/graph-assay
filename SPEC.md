@@ -10,7 +10,7 @@ under SPEC v1.0 (in force from 2026-11-11) keep that label, and results from bef
 SPEC v0 (§12). v2.0 adds one rule, `scip-name-mismatch` (§5), prompted by a held-out result and
 re-validated on the dev split (§9).
 
-"Must" marks a requirement. A result conforms to v1 only if every "must" holds for it. Operational
+"Must" marks a requirement. A result conforms to v2 only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
 TECHNICAL.md and are not part of this specification.
 
@@ -35,7 +35,7 @@ TECHNICAL.md and are not part of this specification.
 - **Reported separately, not in the headline:** decorator applications (`@d`) (§4) and guessed
   edges (§4). Edges to bodiless declarations (`@decl`, §4) count in the headline and are also
   reported in their own column.
-- **Out of scope for v1** (reported, not scored): imports, type references, `contains`,
+- **Out of scope for v2** (reported, not scored): imports, type references, `contains`,
   inheritance, and calls into libraries or the standard library. An edge to a library can still be
   *wrong* (§5, `external`).
 - **Project** means the files of the repository at the pinned commit, minus the vendored and
@@ -86,7 +86,7 @@ TECHNICAL.md and are not part of this specification.
 | **Call-site** | `(S, D)` | the site line of every call edge |
 | **Function-pair** | `(C, D)`, deduplicated by caller and callee identity | caller and callee only |
 
-- Both tracks are part of v1. They are reported side by side and never combined.
+- Both tracks are part of v2. They are reported side by side and never combined.
 - A subject without site lines is scored on the function-pair track only. On the call-site track
   its edges are `skipped: no-site-line`.
 - A subject pair comes from a non-guessed call edge whose endpoints map to oracle definitions. The
@@ -115,7 +115,7 @@ TECHNICAL.md and are not part of this specification.
 
 | Case | Rule |
 |---|---|
-| Constructor | An edge to class `X` carries a constructor call `X()` / `new X()`. A node named `constructor`, `__init__` or `__new__` satisfies the §2 name condition for any definition its span holds, and a class node satisfies it for its own constructor. In precision, a Python edge to `__init__` is compared at the class name against the class's span (rule `ctor-init`), unless the site calls `__init__` by name (`super().__init__()`); whether a call is qualified is read from the site's text, never from the subject's reference. On the function-pair track a constructor stands for its class. Inherited constructors are not in v1 for the oracle (§13); PyCG's matching is in §9. |
+| Constructor | An edge to class `X` carries a constructor call `X()` / `new X()`. A node named `constructor`, `__init__` or `__new__` satisfies the §2 name condition for any definition its span holds, and a class node satisfies it for its own constructor. In precision, a Python edge to `__init__` is compared at the class name against the class's span (rule `ctor-init`), unless the site calls `__init__` by name (`super().__init__()`); whether a call is qualified is read from the site's text, never from the subject's reference. On the function-pair track a constructor stands for its class. Inherited constructors are not in v2 for the oracle (§13); PyCG's matching is in §9. |
 | Overloads | When the oracle defines a callee at several places (TypeScript overload signatures, Python `@overload` stubs), an edge to any of them, or to the implementation, matches (`ok-overload-set` for the Python stub case). |
 | Declaration target | An edge that resolves to a bodiless declaration (a `.d.ts` file, a type-literal or interface member) is tagged `@decl`. It counts in the headline and is also reported in its own column. |
 | Decorator | A decorator application `@d` matches an edge from `C` (the definition or file enclosing the decorator line) to `d`, or a `decorates` edge in either direction between `d` and the decorated definition. Decorator sites are scored only in their own **decorators** column, never in the headline. |
@@ -187,7 +187,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | `ok-overload-set`, `ok-other-column`, `local-module-alias`, `cross-file-unimported`, `found-other-line`, `decl-tag` | as in the verdict tables | produce the verdict or tag of the same name |
 | `receiver-fallback` | forward | produces the forward verdict; the missing-direction cause of that name is a plain verdict, not a rule |
 | `corpus-exclude` | both | a unit from or to a path the corpus entry excludes (§1) is skipped |
-| `scip-name-mismatch` | both, Python | the oracle's symbol for a function, method or class names another definition than the token it sits on, with no constructor (§4) or alias (`import A as B`, `B = A`) to explain it: the oracle has no answer there. Forward, the verdict is unaligned; missing, the site is skipped; on the function-pair track the reference does not count as an oracle answer for the pair |
+| `scip-name-mismatch` | both, Python | the oracle's symbol for a function, method or class the project defines names another definition than the identifier it sits on, and no `import A as B` rename (directly or through a chain of them) explains it: the oracle has no answer there. Forward, the verdict is unaligned; missing, the site is skipped; on the function-pair track the reference does not count as an oracle answer for the pair |
 | `noise:scip-shorthand-property` | forward | the oracle defines the name at an object literal's shorthand property |
 | `noise:scip-builtin-shadowed` | forward, Python | the oracle says builtin, but the caller's own file defines the name at module level |
 | `noise:pytest-fixture-param` | forward, Python | the oracle sees a parameter, and the subject links the `@pytest.fixture` it receives |
@@ -374,14 +374,14 @@ run and must say so.
 - Corpus versions are separate files. A table names the spec version and the corpus version.
   Results are compared only within one spec major and one corpus version.
 - Results keep the version they were produced under. Results published under SPEC v0 stay labelled
-  v0. They are never silently re-scored, and never mixed with v1 results in one table.
-- The snapshot (`snapshot@1`) and expectation (`expect@1`) schemas are versioned on their own. v1
+  v0. They are never silently re-scored, and never mixed with results of another major in one table.
+- The snapshot (`snapshot@1`) and expectation (`expect@1`) schemas are versioned on their own. v2
   reads `@1`, and a schema change that alters what a scorer can see requires a spec major.
 - Section numbers §1–§13 are stable within a major. Other documents cite them.
 
-## 13. Not in v1
+## 13. Not in v2
 
-These are not scored in v1 and carry no published numbers:
+These are not scored in v2 and carry no published numbers:
 - **T0, question accuracy** (oracle-verified answers to flow and impact questions). It is
   experimental until an agent-centric study shows that edge accuracy tracks agent answers.
 - Any-member matching for dispatch sets (`agree-in-set`): the SCIP oracle gives one symbol per

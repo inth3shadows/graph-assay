@@ -77,8 +77,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 - **SPEC v2.0** (major: it moves published numbers). New rule `scip-name-mismatch` (Python, both
-  directions): where scip-python's symbol for a function, method or class names another definition than
-  the token it sits on, the oracle has no answer there. Forward the site is unaligned, missing it is
+  directions): where scip-python's symbol for a function, method or class the project defines names
+  another definition than the identifier it sits on (and no `import A as B` rename explains it), the
+  oracle has no answer there. Forward the site is unaligned, missing it is
   skipped (counted in the waterfall), and on the function-pair track the reference no longer makes a
   subject pair an oracle disagreement. scip-python 0.6.8 resolves names a package re-exports with
   `from ._m import *` to another definition of the module: in held-out httpx `httpx.Response` ->

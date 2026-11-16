@@ -17,3 +17,18 @@ def direct():
 class Sub(pkg.MockTransport):
     def __init__(self):
         super().__init__(lambda q: None)
+
+
+def chained():
+    from pkg._chain import Chain1
+    from pkg._chain2 import Chain2
+    return Chain1(), Chain2()
+
+
+def exists(p):
+    return p
+
+
+def stdlib_named():
+    import os
+    return os.path.exists("x"), exists("y")

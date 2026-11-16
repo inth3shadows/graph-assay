@@ -38,6 +38,16 @@
    "at": "main.py:19",
    "name": "__init__",
    "key": "missing|unresolved-ref|py|method"
+  },
+  {
+   "at": "main.py:25",
+   "name": "Chain1",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:25",
+   "name": "Chain2",
+   "key": "missing|found|py|type"
   }
  ],
  "pairs": {

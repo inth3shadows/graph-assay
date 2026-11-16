@@ -5,7 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
+import { CTOR, defName, rangeOf, scipKind } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -158,33 +158,38 @@ export function createContext(opts: Options) {
   const inTarget = (d, e, name, sym) => d && (!on('callee-name') || sameCallee(e, name, sym))
     && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || (name === e.tname && x.line >= e.tstart - 2)));
 
-  // SPEC §5 `scip-name-mismatch`, Python: the oracle's symbol names another definition than the token
-  // it sits on, so it gives no answer there. scip-python 0.6.8 resolves a name a package re-exports
-  // with a star import to another definition of the module (`httpx.Response` -> `_models/Request#`).
-  // Not a mismatch: a constructor (`Base()` or `super().__init__` -> `Base#__init__().`), or a name
-  // the project binds to another (`from m import A as B`, `B = A`). Go and TS/JS names legitimately
-  // differ from their symbols (scip-typescript's `<get>x`, a default export), so the rule is Python's.
-  let aliases: Set<string> | null = null;
+  // SPEC §5 `scip-name-mismatch`, Python: the oracle's symbol for a function, method or class the
+  // project defines names another definition than the identifier it sits on, so it gives no answer
+  // there. scip-python 0.6.8 resolves a name a package re-exports with a star import to another
+  // definition of the module (`httpx.Response` -> `_models/Request#`). Not a mismatch: a name imported
+  // under another (`from m import A as B`, through any chain of such renames). scip-python keeps an
+  // assignment alias's own name (`B = A` -> `B.`) and gives an instantiation the class symbol (`Foo#`),
+  // so neither needs an exemption. Go and TS/JS names legitimately differ from their symbols
+  // (scip-typescript's `<get>x`, a default export), so the rule is Python's.
+  let renamedFrom: Map<string, Set<string>> | null = null;
   const aliased = (name: string, token: string) => {
-    if (!aliases) {
-      aliases = new Set();
+    if (!renamedFrom) {
+      renamedFrom = new Map();
       for (const doc of index.documents) {
-        const t = fileText(doc.relative_path);
-        for (const m of t.matchAll(/\b([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)\b/g)) aliases.add(`${m[1]} ${m[2]}`);
-        for (const m of t.matchAll(/^[ \t]*([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\s*$/gm)) aliases.add(`${m[2]} ${m[1]}`);
+        for (const m of fileText(doc.relative_path).matchAll(/\b([\p{L}_][\p{L}\p{N}_]*)\s+as\s+([\p{L}_][\p{L}\p{N}_]*)\b/gu)) {
+          (renamedFrom.get(m[2]) ?? renamedFrom.set(m[2], new Set()).get(m[2])).add(m[1]);
+        }
       }
     }
-    return aliases.has(`${name} ${token}`);
+    // Every name `token` was renamed from, transitively (`A as B`, then `B as C`: C comes from A).
+    const seen = new Set([token]); const todo = [token];
+    while (todo.length) for (const from of renamedFrom.get(todo.pop()) ?? []) if (!seen.has(from)) { if (from === name) return true; seen.add(from); todo.push(from); }
+    return false;
   };
   const nameMismatch = (token: string, symbol: string) => {
     if (!PY || !on('scip-name-mismatch') || !symbol || symbol.includes('local ')) return false;
-    const s = unctor(symbol);
-    // A module symbol is an unresolved import, not a misresolved name (`noise:scip-unresolved-module`).
-    if (!['method', 'term', 'type'].includes(scipKind(s))) return false;
-    let n = defName(s);
-    if (!n || n === token) return false;
-    if (CTOR.has(n)) { if (CTOR.has(token)) return false; n = defName(s.replace(/[^#]+$/, '')) ?? n; }
-    return n !== token && !aliased(n, token);
+    // An identifier only: scip-python also writes a reference over a whole `real as r1` import clause.
+    if (!/^[\p{L}_][\p{L}\p{N}_]*$/u.test(token)) return false;
+    // A function, method or class the project defines (a module symbol is an unresolved import,
+    // `noise:scip-unresolved-module`; a library symbol is never a unit of the missing direction).
+    if (!['method', 'type'].includes(scipKind(symbol)) || !defs.has(symbol)) return false;
+    const n = defName(symbol);
+    return !!n && n !== token && !aliased(n, token);
   };
 
   return {
