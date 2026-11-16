@@ -1,16 +1,18 @@
-# Code-graph accuracy: scoring semantics (SPEC v4.0)
+# Code-graph accuracy: scoring semantics (SPEC v5.0)
 
 This document defines the unit being compared, when a subject and the reference agree, how
 failures count, and how scores are aggregated and versioned. Every scorer must follow it: the
 SCIP oracle, fixture replay, PyCG, the metamorphic relations and the tables. Every adapter must
 emit what it requires.
 
-**Status: in force** from 2026-11-16. Results produced under it record `SPEC v4.0`. Results
-produced under SPEC v3.0, v2.0 (both in force from 2026-11-16) and v1.0 (in force from 2026-11-11)
-keep their labels, and results from before v1.0 stay labelled SPEC v0 (§12). v2.0 added
+**Status: in force** from 2026-11-16. Results produced under it record `SPEC v5.0`. Results
+produced under SPEC v4.0, v3.0, v2.0 (all in force from 2026-11-16) and v1.0 (in force from
+2026-11-11) keep their labels, and results from before v1.0 stay labelled SPEC v0 (§12). v2.0 added
 `scip-name-mismatch` and v3.0 `skip-composite-literal` (§5), each prompted by a held-out result and
 re-validated on the dev split (§9). v4.0 changes `skip-composite-literal`: signatures are read from
 the source file itself, and a function-local type and any type in a literal's type expression count.
+v5.0 changes the diagnostic-language rule (§9): the labelled sample's strata are weighted by their
+share of the tabled run's sites, and a heavy stratum with too few labels makes a language diagnostic.
 
 "Must" marks a requirement. A result conforms to this version only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
@@ -292,8 +294,20 @@ folders, is indexed through an extra project that extends that config and lists 
 **T2.**
 - Precision and recall per §5, on both tracks, strict and tolerant.
 - **Diagnostic languages.** A language whose oracle is too noisy is diagnostic: its repositories are
-  shown and marked, and left out of the T2 averages. The rule is mechanical: the 95% Wilson lower
-  bound of "oracle right where it answers", in the labelled oracle-noise sample, is under 80%.
+  shown and marked, and left out of the T2 averages. The rule is mechanical, per tabled language:
+  - The sample's quotas over-represent some strata by design, so its pooled rate is never the gate.
+    Each stratum where the oracle answers (agree, disagree, oracle-only) is weighted by its share of
+    the tabled run's sites where the oracle answers: the stratum's sites in that run (every subject's
+    per-site results over the averaged repositories), times the sample's oracle-answered fraction of
+    the stratum.
+  - "Oracle right where it answers" is the weighted mean of the strata's rates. Its 95% lower bound
+    is a stratified normal interval on Agresti-Coull rates ((k+2)/(n+4) per stratum).
+  - The language is diagnostic when that bound is under 80%, or when a stratum carrying at least 5%
+    of the weight has fewer than 20 labelled oracle answers (unmeasured). A stratum with no labels and
+    less weight is left out and the other weights renormalised. A tabled language with no labelled
+    sample is diagnostic.
+  - Sites cluster by repository, and the sample draws from one or two dev repositories per language,
+    so a repository-cluster interval cannot be estimated; the interval treats sites as independent.
 - A rule change that brings a language back needs a fresh sample, never the sample that found the
   noise.
 

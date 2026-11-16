@@ -76,6 +76,13 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- **SPEC v5.0** (major: it moves published numbers). The diagnostic-language gate (§9) weights the
+  labelled sample's strata by their share of the tabled run's sites instead of pooling the sample,
+  whose quotas over-represent disagreements by design; a stratum carrying at least 5% of the weight
+  with fewer than 20 labelled answers makes the language diagnostic. TypeScript becomes diagnostic
+  on both splits: 2 labelled disagreements and 9 labelled oracle-only sites stand for about a quarter
+  of the sites each. The strata rule moves to `labels/strata.ts`, shared by the sampler and the
+  tables, which report each language's weights, weighted rate and bound. Issue #2.
 - **SPEC v4.0** (major: it moves a published number). `skip-composite-literal` reads every signature
   from the file's own source (from a declaration's or func literal's `func` to its body's `{`, the
   whole file lexed: comments, strings, raw strings), whatever its layout and never from the subject's

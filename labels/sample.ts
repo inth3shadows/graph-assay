@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 // Stratified sample of call sites for the oracle-noise study, from the oracle's per-site results
 // (run.sh with ORACLE_ALLSITES, both subjects) on the public corpus. One unit = one call site
-// (file:line + called name), whatever each subject and SCIP said about it. Strata:
-//   agree         every subject's edge there agrees with SCIP (`ok*`)
-//   disagree      some subject's edge contradicts SCIP (wrong-target, external, local-*, ...)
-//   scip-only     SCIP resolves a call there and some subject has no edge (missing: no-ref, ...)
-//   subject-only  a subject has an edge where SCIP has no reference (`no-scip-ref`)
+// (file:line + called name), whatever each subject and SCIP said about it. Strata: labels/strata.ts
+// (agree, disagree, scip-only, subject-only), the same rule the tables' noise gate weights by.
 // Candidates: SCIP's definition, every subject's target and same-named definitions, each
 // canonicalized to the innermost definition span (SCIP anchors at the name token, subjects at
 // the declaration or decorator), so one definition is one letter. Which source proposed which
@@ -19,6 +16,7 @@ import { config } from '../lib/config.ts';
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
+import { stratumOf } from './strata.ts';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
@@ -71,11 +69,7 @@ for (const lang of [...new Set(targets.map((t) => t.lang))]) {
       for (const s of JSON.parse(fs.readFileSync(path.join(`${w}${sfx}`, 'out-missing.json'), 'utf8')).sites ?? []) { const u = unit(s); u.miss[subj] = { key: s.key }; u.scip ??= s.scip; }
     }
     for (const u of byUnit.values()) {
-      const f = Object.values<any>(u.fwd).map((x) => x.key); const m = Object.values<any>(u.miss).map((x) => x.key);
-      const stratum = f.some((k) => /^(wrong-target|external|local-shadow|cross-file-unimported|scip-local-undefined)/.test(k)) || m.some((k) => /^missing\|wrong-edge/.test(k)) ? 'disagree'
-        : m.some((k) => /^missing\|(no-ref|unresolved-ref|not-extracted|target-not-a-node)/.test(k)) ? 'scip-only'
-          : f.some((k) => k.startsWith('no-scip-ref')) ? 'subject-only'
-            : f.length === Object.keys(SUBJECTS).length && f.every((k) => k.startsWith('ok')) ? 'agree' : null;
+      const stratum = stratumOf(Object.values<any>(u.fwd).map((x) => x.key), Object.values<any>(u.miss).map((x) => x.key), Object.keys(SUBJECTS).length);
       if (!stratum) continue;
       const [file, line] = [u.site.slice(0, u.site.lastIndexOf(':')), Number(u.site.slice(u.site.lastIndexOf(':') + 1))];
       const sources: Record<string, any> = {};

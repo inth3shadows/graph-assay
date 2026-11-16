@@ -7,7 +7,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { correct, parseAnswer, question, unstub } from './questions.ts';
-import { diagnosticLanguages, wilson } from './score.ts';
+import { diagnosticLanguages, noiseGate, wilson } from './score.ts';
+import { stratumCounts } from './strata.ts';
 
 let failed = 0; let n = 0;
 const check = (name, ok) => { n++; if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}`); };
@@ -43,8 +44,37 @@ check('unstub: precomputed stubs, no checkout read', unstub(pyStub, 'a.py:3') ==
 const dataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
 const snap = fs.existsSync(dataDir) ? fs.readdirSync(dataDir).map((d) => fs.readFileSync(path.join(dataDir, d, 'items.jsonl'), 'utf8')) : [];
 check('snapshot: items have relative repos and stubs, no home paths', snap.length > 0 && snap.every((t) => !t.includes('/home/') && t.split('\n').filter(Boolean).every((l) => { const i = JSON.parse(l); return !path.isAbsolute(i.repo) && i.stubs; })));
-const diag = diagnosticLanguages({ javascript: { ALL: { scip: [28, 47] } }, typescript: { ALL: { scip: [35, 36] } }, go: { ALL: { scip: [0, 0] } } });
-check('diagnostic: 28/47 (lower bound 45%) is diagnostic, 35/36 is not, no answers is', diag.has('javascript') && !diag.has('typescript') && diag.has('go') && Math.abs(diag.get('javascript').lower - 0.453) < 0.01);
+// SPEC §9 #2: the gate weights each stratum by its share of the tabled run's sites, not by the quotas.
+{
+  const st = (k, n, consensus = n) => ({ scip: [k, n], consensus });
+  const diag = diagnosticLanguages({
+    // Pooled 78/97 (Wilson lower bound 71%); weighted by 9,000 agree and 500 disagree sites it is 98%.
+    python: { agree: st(50, 50), disagree: st(28, 47) },
+    // 785 of 3,319 sites are disagreements, and 2 are labelled: unmeasured.
+    typescript: { agree: st(25, 25), disagree: st(1, 2), 'scip-only': st(9, 9) },
+    // SCIP never answers in the labelled disagree stratum (no weight); 2 unlabelled scip-only sites are dropped.
+    javascript: { agree: st(25, 25), disagree: st(0, 0, 35) },
+    go: { agree: st(28, 47) },
+  }, { python: { agree: 9000, disagree: 500, 'subject-only': 70 }, typescript: { agree: 1644, disagree: 785, 'scip-only': 890 },
+    javascript: { agree: 311, disagree: 855, 'scip-only': 2 }, go: { agree: 100 }, java: { agree: 10 } });
+  const py = noiseGate({ agree: st(50, 50), disagree: st(28, 47) }, { agree: 9000, disagree: 500 });
+  check('noise gate: strata weighted by the run\'s sites, not the quotas (pooled 78/97 would fail)', !diag.has('python') && Math.abs(py.strata.agree.weight - 9000 / 9500) < 1e-9 && py.lower > 0.9 && py.lower < py.estimate);
+  check('noise gate: a stratum with >= 5% of the weight and < 20 labelled answers is unmeasured', diag.get('typescript')?.unmeasured.join() === 'disagree,scip-only');
+  const js = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 35) }, { agree: 311, disagree: 855, 'scip-only': 2 });
+  check('noise gate: a stratum where SCIP never answers has no weight; an unlabelled sliver is dropped', !diag.has('javascript') && !('disagree' in js.strata) && js.dropped.join() === 'scip-only' && js.estimate === 1);
+  check('noise gate: a low rate is diagnostic (28/47 alone)', diag.has('go') && diag.get('go').lower < 0.8);
+  check('noise gate: a tabled language with no labelled sample is diagnostic', diag.get('java')?.labelled === false);
+  check('noise gate: only tabled languages are gated', diag.size === 3);
+}
+// labels/strata.ts: one unit per site and name; both subjects' keys decide its stratum.
+{
+  const out = (fwd, miss) => ({ fwd: { sites: fwd.map(([site, key]) => ({ site, name: 'f', key })) }, miss: { sites: miss.map(([site, key]) => ({ site, name: 'f', key })) } });
+  const counts = stratumCounts([
+    out([['a:1', 'ok|x'], ['a:2', 'ok|x'], ['a:3', 'ok|x'], ['a:5', 'no-scip-ref|x'], ['a:6', 'ok|x']], [['a:4', 'missing|no-ref|x']]),
+    out([['a:1', 'ok|y'], ['a:2', 'wrong-target|y'], ['a:4', 'ok|y'], ['a:5', 'ok|y']], []),
+  ]);
+  check('strata: agree, disagree, scip-only, subject-only; a site one subject has no edge at is in none', JSON.stringify(Object.entries(counts).sort()) === JSON.stringify([['agree', 1], ['disagree', 1], ['scip-only', 1], ['subject-only', 1]]));
+}
 // noise.ts: a later sample's meta.json retires a language from an earlier sample when pooling.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-noise-'));
