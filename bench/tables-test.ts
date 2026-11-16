@@ -20,13 +20,13 @@ const repos = readRepos(undefined, 'dev').map((r) => r.name);
 
 const PAIRS = (o?) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
   decorators: { total: 0, found: 0 }, unmappedEdges: { caller: 2, target: 1 }, skippedEdges: { 'skip-framework-self-site': 4 }, callerRanges: { enclosing: 5, braces: 0 }, unitsAtFileLevel: 1, ...o });
-function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'], sites = false, bareSites = null, noMissSites = null, noScip = null } = {}) {
+function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'], sites = false, bareSites = null, noMissSites = null, noScip = null, missFailed = null } = {}) {
   fs.rmSync(work, { recursive: true, force: true });
   for (const r of repos) {
     for (const sfx of sfxs) {
       const dir = path.join(work, `w-pub-${r}${sfx}`);
       if (`${r}${sfx}` === missingDir) continue;
-      if (`${r}${sfx}` === failed) {
+      if ([].concat(failed).includes(`${r}${sfx}`)) {
         write(path.join(dir, 'out.json'), { buckets: {}, skipped: {}, subjectFailed: 'index exited 1', spec });
         write(path.join(dir, 'out-missing.json'), { buckets: { 'missing|file-not-indexed|py|method': 10 }, subjectFailed: 'index exited 1', decorators: { total: 0, causes: {} },
           pairs: PAIRS({ subject: 0, matched: 0, subjectOnly: { oracleDisagrees: 0, oracleSilent: 0 } }), spec });
@@ -41,7 +41,7 @@ function fabricate(work, { failed = null, missingDir = null, noPairs = null, spe
         write(path.join(dir, 'out.json'), { buckets: `${r}${sfx}` === noScored ? {} : { 'ok|calls': 9, 'wrong-target|calls|-|method>method': 1 }, skipped: {}, spec, siteLines: lines, ...(sites && `${r}${sfx}` !== bareSites ? { sites: fwdSites } : {}) });
         write(path.join(dir, 'out-missing.json'), { buckets: { 'missing|found|py|method': 8, 'missing|no-ref|py|method': 2 }, decorators: { total: 0, causes: {} },
           skipped: { 'corpus-exclude': 1 }, waterfall: { filesInCorpus: 7, excluded: 2, supportedLanguage: 5, indexedBySubject: 4, indexedByOracle: 5 },
-          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines, ...(sites && ![bareSites, noMissSites].includes(`${r}${sfx}`) ? { sites: missSites } : {}) });
+          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines, ...(`${r}${sfx}` === missFailed ? { subjectFailed: 'timeout' } : {}), ...(sites && ![bareSites, noMissSites].includes(`${r}${sfx}`) ? { sites: missSites } : {}) });
       }
     }
   }
@@ -212,36 +212,60 @@ try {
     assert.equal(both.python.strata.disagree.sites, 4); // a.x:2 and a.x:4 in requests and click
     assert.deepEqual(tables(work, ['--noise', noise, '--subjects', 'codegraph']).json.noiseGate, both);
   });
-  check('a failed subject never moves a language out: a language with no counted repo is not gated (P1)', () => {
-    fabricate(work, { sites: true, failed: 'mux' }); // mux is dev's only Go repo
+  // Round 3 (Q1): a failure never decides whether a language is gated. Where one subject failed on a
+  // repo, the repo's strata come from the other; only where both failed is there nothing to weigh.
+  check('a repo where one subject failed is counted over the other; the failed repo stays in the averages (Q1)', () => {
+    fabricate(work, { sites: true, failed: 'click' }); // python keeps requests (both) and click (code-graph-rag only)
     const { status, json, md } = tables(work, ['--noise', noise]);
     assert.equal(status, 0);
-    assert.deepEqual(json.noiseLeftOut, ['mux (codegraph failed)']);
-    assert.deepEqual(json.noiseNotEvaluated, ['go']);
-    assert.ok(!('go' in json.diagnostic) && !('go' in json.noiseGate));
-    // SPEC §8: mux stays in codegraph's recall averages at 0.
-    assert.equal(json.subjects.codegraph.agg['recall strict'].macro, (0.8 * (repos.length - 1)) / repos.length);
-    assert.match(md, /Not evaluated, so not excluded: go \(no repo where both codegraph and code-graph-rag ran without failure\)/);
+    assert.deepEqual(json.noiseOneSubject, ['click (codegraph failed)']);
+    assert.ok(!('python' in json.diagnostic) && json.noisePopulationRepos.includes('click'));
+    // SPEC §8: click stays in codegraph's recall average at 0 (mux is out: go is unmeasured in this fixture).
+    assert.equal(json.subjects.codegraph.agg['recall strict'].macro, (0.8 * (repos.length - 2)) / (repos.length - 1));
+    assert.match(md, /from one subject where the other failed: click \(codegraph failed\)/);
+  });
+  check('a failure on a language\'s only repo still gates it, on the surviving subject (Q1)', () => {
+    fabricate(work, { sites: true, failed: 'mux' }); // mux is dev's only Go repo; go is unmeasured either way
+    const { json } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseOneSubject, ['mux (codegraph failed)']);
+    assert.deepEqual(json.noiseGate.go.unmeasured, ['disagree']); assert.ok('go' in json.diagnostic);
+    fabricate(work, { sites: true, missFailed: 'mux-code-graph-rag' }); // a failure recorded in out-missing.json only
+    assert.deepEqual(tables(work, ['--noise', noise]).json.noiseOneSubject, ['mux (code-graph-rag failed)']);
+  });
+  check('a language where both subjects failed on every repo is diagnostic, and says so (Q1)', () => {
+    fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'] });
+    const { json, md } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseLeftOut, ['mux (both subjects failed)']); assert.ok('go' in json.diagnostic);
+    assert.match(md, /go \(both subjects failed on every repo: no sites to weigh\)/);
   });
   check('a gated language whose run has no site where SCIP answers is diagnostic, and says so', () => {
     fabricate(work, { sites: true, noScip: 'mux' });
     const { status, json, md } = tables(work, ['--noise', noise]);
     assert.equal(status, 0);
     assert.equal(json.noiseGate.go.estimate, null); assert.ok('go' in json.diagnostic);
-    assert.match(md, /go \(no run sites where SCIP answers in a labelled stratum\)/);
+    assert.match(md, /go \(no run sites where SCIP answers\)/);
   });
-  check('a non-canonical table leaves a repo the other canonical subject never ran out of the population (P4)', () => {
+  check('an unmeasured heavy stratum is the reason given, even with no estimate (P2)', () => {
+    const bare = path.join(tmp, 'noise-bare.json');
+    write(bare, { labellers: ['opus', 'sol'], protocol: null, sided: {}, table: { python: good, typescript: good, javascript: good, go: { ...good, disagree: { scip: [0, 0], consensus: 3 } } } });
+    fabricate(work, { sites: true });
+    const { json, md } = tables(work, ['--noise', bare]);
+    assert.equal(json.noiseGate.go.estimate, null);
+    assert.match(md, /go \(unmeasured: disagree carries 50\.0% of the weight with 0 labelled answers\)/);
+  });
+  check('the noise gate refuses a missing canonical subject run, whatever --subjects picks (Q2)', () => {
     fabricate(work, { sites: true, missingDir: `${repos[0]}-code-graph-rag` });
-    const { status, json } = tables(work, ['--noise', noise, '--subjects', 'codegraph']);
-    assert.equal(status, 0);
-    assert.deepEqual(json.noiseLeftOut, [`${repos[0]} (no code-graph-rag run)`]);
+    const { status, stderr } = tables(work, ['--noise', noise, '--subjects', 'codegraph']);
+    assert.equal(status, 2); assert.match(stderr, new RegExp(`${repos[0]} has no code-graph-rag run`));
   });
-  check('the per-site refusal covers either file, and not a repo already left out for a failure (P5)', () => {
+  check('the per-site refusal covers either file of every counted subject, not a failed one (P5)', () => {
     fabricate(work, { sites: true, noMissSites: 'click' });
     const one = tables(work, ['--noise', noise]);
     assert.equal(one.status, 2); assert.match(one.stderr, /w-pub-click lacks them/);
-    fabricate(work, { sites: true, failed: 'mux', bareSites: 'mux-code-graph-rag' });
+    fabricate(work, { sites: true, failed: 'mux' }); // the failed run has no site records: ignored
     assert.equal(tables(work, ['--noise', noise]).status, 0);
+    fabricate(work, { sites: true, failed: 'mux', bareSites: 'mux-code-graph-rag' }); // the survivor has none: refused
+    assert.equal(tables(work, ['--noise', noise]).status, 2);
   });
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
