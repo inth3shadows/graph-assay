@@ -106,3 +106,72 @@ func local() int {
 	k := key{n: 1}
 	return k.n
 }
+
+func rawjson() T {
+	s := `{
+	"a": 1
+}`
+	_ = s
+	return T{n: 1}
+}
+
+func blockComment() T {
+	/* closing }
+	*/
+	return T{n: 2}
+}
+
+func closures() {
+	fn := func(
+		a int,
+	) T {
+		return T{n: a}
+	}
+	do(func(v interface{}) T {
+		return T{}
+	})
+	_ = fn
+}
+
+func do(f func(interface{}) T) T { return f(nil) }
+
+var h = func(
+	a int,
+) T {
+	return T{n: a}
+}
+
+func grouped() int {
+	type (
+		key2 struct{ n int }
+		val  int
+	)
+	k := key2{n: 1}
+	return k.n + int(val(0))
+}
+
+func typeExprs() int {
+	set := map[T]struct{}{}
+	hs := map[string]func(T) error{}
+	pairs := map[string]func(int, T) (T, error){}
+	conv := T(T{})
+	return len(set) + len(hs) + len(pairs) + conv.n
+}
+
+func convs(t T, v interface{}) int {
+	switch T(t) {
+	case T{}:
+		return 0
+	}
+	switch v.(T).n {
+	}
+	return 1
+}
+
+var fv func() T = nil
+var lit = T{n: 1}
+
+func lexed() int {
+	xs := []func(interface{}, T) error{}
+	/* see func */ return len(xs) + T{n: 3}.n
+}

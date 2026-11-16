@@ -5,6 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
+import { braces } from './braces.ts';
 import { CTOR, defName, rangeOf, reLit, scipKind, segs } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -193,54 +194,119 @@ export function createContext(opts: Options) {
   };
 
   // SPEC §5 `skip-composite-literal`, Go: a composite literal (`T{...}`, `&T{...}`, `pkg.T{...}`,
-  // `G[map[K]V]{...}`, and of a slice, array or map type: `[]T{...}`, `map[T]V{...}`) builds a value; it
-  // is not a call, as a conversion `T(x)` is not (`skip-type-without-new`). The edge must be an
-  // `instantiates` edge to a type, and the SCIP reference it sits on (nearest its column where the
-  // columns compare, as forward.ts picks) must be a type (or a function-local type) whose type
-  // expression reaches `{`. A reference in a function's signature is not a literal: inside the caller,
-  // no `{` is open yet before it (`func f(\n\ta int,\n) T {`), or it follows a closure's `func (...)`
-  // on its line. scip-go writes UTF-8 byte columns, so a non-ASCII line's offsets are converted.
-  const typeArgsEnd = (text: string, i: number) => {
-    let depth = 0;
-    for (let k = i; k < text.length; k++) {
-      if (text[k] === '[') depth++;
-      else if (text[k] === ']' && --depth === 0) return k + 1;
+  // `G[map[K]V]{...}`, and of a slice, array or map type: `[]T{...}`, `map[T]struct{}{...}`,
+  // `map[string]func(T) error{...}`) builds a value; it is not a call, as a conversion `T(x)` is not
+  // (`skip-type-without-new`). The edge must be an `instantiates` edge to a type, and the SCIP reference
+  // it sits on (nearest its column where the columns compare, as forward.ts picks) must be a type (or a
+  // function-local type) whose type expression reaches `{`. A reference in a signature is not a
+  // literal: it lies between a declaration's or a func literal's `func` and its body's `{`
+  // (`func f(\n\ta int,\n) T {`, `fn := func(v interface{}) T {`). A func type inside another type
+  // (`[]func() T{...}`, `map[K]func() T{}`, `chan func() T`) has no body. Signatures are read from the
+  // file's own source, lexed whole (comments, strings, raw strings), never from the subject's caller.
+  // scip-go writes UTF-8 byte columns, so a non-ASCII line's offsets are converted.
+  const ASCII = /^[\x00-\x7f]*$/;
+  const WORD = /[\p{L}_][\p{L}\p{N}_]*/uy;
+  let lexer: ReturnType<typeof braces> | null = null;
+  const lex = () => (lexer ??= braces(fileText, true));
+  // t[i] is `(` or `[`: the index just after its match, or -1.
+  const skipGroup = (t: string, i: number) => {
+    let d = 0;
+    for (let j = i; j < t.length;) {
+      const k = lex().skipLex(t, j, 'x'); if (k !== j) { j = k; continue; }
+      const c = t[j];
+      if (c === '(' || c === '[') d++; else if ((c === ')' || c === ']') && --d === 0) return j + 1;
+      j++;
     }
     return -1;
   };
-  // From just after the type name, the rest of the literal's type (`]int`, `[K]`, `.Inner`, `*T`) to `{`.
+  // From just after a `func`: the offset of its body's `{`, or -1 when it has none (a func type in a
+  // parameter, a field, `var f func() T = g`, a type declaration).
+  const bodyOpen = (t: string, i: number) => {
+    for (const end = i + 4000; i < t.length && i < end;) {
+      const k = lex().skipLex(t, i, 'x'); if (k !== i) { i = k; continue; }
+      const c = t[i];
+      if (c === '(' || c === '[') { i = skipGroup(t, i); if (i < 0) return -1; continue; }
+      // The first `{` outside the lists. A `struct{`/`interface{` result type's brace ends the span early,
+      // which changes no verdict: a type inside one is never followed by `{`.
+      if (c === '{') return i;
+      if ('\n)],;=:}'.includes(c)) return -1;
+      i++;
+    }
+    return -1;
+  };
+  // Each signature in a file, as [offset of `func`, offset of the body's `{`).
+  const sigSpans = new Map<string, [number, number][]>();
+  const signatures = (file: string) => {
+    let spans = sigSpans.get(file);
+    if (spans) return spans;
+    spans = [];
+    const t = fileText(file);
+    let prev = '\n'; let prevWord = '';
+    for (let j = 0; j < t.length;) {
+      const k = lex().skipLex(t, j, 'x'); if (k !== j) { j = k; prev = 'x'; prevWord = ''; continue; }
+      WORD.lastIndex = j;
+      const m = WORD.exec(t);
+      if (m) {
+        // A `func` right after `[`, `]`, `*`, `.` (`...func`) or `chan` is a func type inside another type.
+        if (m[0] === 'func' && !['[', ']', '*', '.'].includes(prev) && prevWord !== 'chan') {
+          const open = bodyOpen(t, j + 4);
+          if (open >= 0) spans.push([j, open]);
+        }
+        prev = 'w'; prevWord = m[0]; j += m[0].length; continue;
+      }
+      if (!/\s/.test(t[j])) { prev = t[j]; prevWord = ''; }
+      j++;
+    }
+    sigSpans.set(file, spans);
+    return spans;
+  };
+  const inSignature = (file: string, line: number, col: number) => {
+    const off = lex().lineStarts(file)[line - 1] + col;
+    return signatures(file).some(([a, b]) => a <= off && off < b);
+  };
+  // The `(` and `[` still open before column i of a line, innermost last: `f` for a func's parameter or
+  // result list, `p` for any other `(`, `b` for `[`. Braces are not groups here (`func(interface{}, T)`).
+  const groupsBefore = (text: string, i: number) => {
+    const st: string[] = [];
+    for (let k = 0; k < i;) {
+      const n = lex().skipLex(text, k, 'x'); if (n !== k) { k = n; continue; }
+      const c = text[k];
+      if (c === '(') st.push(/(?:\bfunc|\))\s*$/.test(text.slice(0, k)) ? 'f' : 'p');
+      else if (c === '[') st.push('b');
+      else if (c === ')' || c === ']') st.pop();
+      k++;
+    }
+    return st;
+  };
+  // From just after the type name, the rest of the literal's type to its `{`: `]int`, `[K]`, `.Inner`,
+  // `*T`, `]struct{ a int }`, and out of a func type's lists (`func(T) error`, `func(a, T) (T, error)`).
   const literalAfter = (text: string, i: number) => {
+    const outer = groupsBefore(text, i);
+    const st: string[] = [];
+    let funcNext = false; // a `(` here opens a func's parameter or result list
     for (let k = i; k < text.length;) {
       const c = text[k];
-      if (/\s/.test(c) || c === ']' || c === '*' || c === '.') { k++; continue; }
-      if (c === '[') { k = typeArgsEnd(text, k); if (k < 0) return false; continue; }
+      if (/\s/.test(c) || c === '*' || c === '.') { k++; continue; }
       if (c === '{') return true;
-      const w = /^[\p{L}_][\p{L}\p{N}_]*/u.exec(text.slice(k));
-      if (!w || ['struct', 'interface', 'func'].includes(w[0])) return false;
-      k += w[0].length;
-    }
-    return false;
-  };
-  // A closure's result type on its own line (`f := func() T {`, `do(func() T {`), not a func element
-  // type (`[]func() T{...}` is a literal).
-  const closureResult = (before: string) => /(?:^|[^\]\w.])func\b[^{]*\)[\s\w.*[\]]*$/.test(before);
-  // Still in the caller's signature: from its first line to the reference, no `{` is left open
-  // (strings, runes and comments skipped; `interface{}` in a parameter closes again).
-  const inSignature = (e: { sfile: string; sstart?: number; skind?: string }, line: number, col: number) => {
-    if (e.skind !== 'function' && e.skind !== 'method') return false;
-    if (e.sstart == null || e.sstart > line) return false;
-    let depth = 0;
-    for (let l = e.sstart; l <= line; l++) {
-      const t = l === line ? lineOf(e.sfile, l).slice(0, col) : lineOf(e.sfile, l);
-      for (let k = 0; k < t.length; k++) {
-        const c = t[k];
-        if (c === '/' && t[k + 1] === '/') break;
-        if (c === '"' || c === '\'' || c === '`') { const q = c; k++; while (k < t.length && t[k] !== q) { if (t[k] === '\\' && q !== '`') k++; k++; } continue; }
-        if (c === '{') depth++;
-        else if (c === '}') depth--;
+      if (c === '[' || (c === '(' && funcNext)) { st.push(c === '[' ? 'b' : 'f'); funcNext = false; k++; continue; }
+      if (c === ')' || c === ']') {
+        const g = st.length ? st.pop() : outer.pop();
+        if (c === ')' ? g !== 'f' : g === 'f' || g === 'p') return false;
+        funcNext = c === ')'; k++; continue;
+      }
+      // Inside a group (a func's list, type arguments): its `)` is still checked above.
+      if (c === ',') { funcNext = false; k++; continue; }
+      WORD.lastIndex = k;
+      const w = WORD.exec(text);
+      if (!w) return false;
+      k += w[0].length; funcNext = w[0] === 'func';
+      if (w[0] === 'struct' || w[0] === 'interface') {
+        while (/\s/.test(text[k] ?? '')) k++;
+        if (text[k] !== '{') return false;
+        k = lex().skipBlock(text, k); if (k < 0) return false;
       }
     }
-    return depth <= 0;
+    return false;
   };
   const siteRefs = new Map<string, { start: number; end: number; symbol: string; s: number; t: number }[]>();
   const refsOn = (file: string, line: number) => {
@@ -248,16 +314,36 @@ export function createContext(opts: Options) {
     let list = siteRefs.get(key);
     if (!list) {
       const text = lineOf(file, line);
-      const bytes = docEncoding.get(file) === 'utf8' && !/^[\x00-\x7f]*$/.test(text) ? Buffer.from(text, 'utf8') : null;
+      const bytes = docEncoding.get(file) === 'utf8' && !ASCII.test(text) ? Buffer.from(text, 'utf8') : null;
       const at = (n: number) => (bytes ? bytes.subarray(0, n).toString('utf8').length : n);
       list = (refsAt.get(key) ?? []).map((r) => ({ ...r, s: at(r.start), t: at(r.end) }));
       siteRefs.set(key, list);
     }
     return list;
   };
-  const typeSymbol = (r: { symbol: string }, name: string) => scipKind(r.symbol) === 'type'
-    || (r.symbol.includes('#local ') && (defs.get(r.symbol) ?? []).some((d) => new RegExp(`\\btype\\s+${reLit(name)}\\b`).test(lineOf(d.file, d.line))));
-  const compositeLiteral = (e: { kind: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string; sstart?: number; skind?: string }) => {
+  // A function-local type's definition line: `type key struct{...}`, or `key struct{...}` in a
+  // `type (` group.
+  const localTypeDef = (file: string, line: number, name: string) => {
+    const text = lineOf(file, line);
+    if (new RegExp(`\\btype\\s+${reLit(name)}\\b`).test(text)) return true;
+    if (!new RegExp(`^\\s*${reLit(name)}\\b`).test(text)) return false;
+    for (let l = line - 1; l > 0 && l > line - 200; l--) {
+      const t = lineOf(file, l);
+      if (/^\s*\)/.test(t)) return false;
+      const g = /\b(type|var|const)\s*\(\s*(?:\/\/.*)?$/.exec(t);
+      if (g) return g[1] === 'type';
+    }
+    return false;
+  };
+  const localType = new Map<string, boolean>();
+  const typeSymbol = (r: { symbol: string }, name: string) => {
+    if (scipKind(r.symbol) === 'type') return true;
+    if (!r.symbol.includes('#local ')) return false;
+    let v = localType.get(r.symbol);
+    if (v == null) localType.set(r.symbol, v = (defs.get(r.symbol) ?? []).some((d) => localTypeDef(d.file, d.line, name)));
+    return v;
+  };
+  const compositeLiteral = (e: { kind: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string }) => {
     if (opts.lang !== 'go' || !on('skip-composite-literal') || e.line == null) return false;
     // An `instantiates` edge to a type: a `calls` edge is a call even where a literal sits on the line.
     if (e.kind !== 'instantiates' || e.tkind === 'function' || e.tkind === 'method') return false;
@@ -265,11 +351,10 @@ export function createContext(opts: Options) {
     const name = parts[parts.length - 1];
     const text = lineOf(e.sfile, e.line);
     let refs = refsOn(e.sfile, e.line).filter((r) => text.slice(r.s, r.t) === name);
-    if (e.col != null && refs.length > 1 && (subjectEncoding === docEncoding.get(e.sfile) || /^[\x00-\x7f]*$/.test(text))) {
+    if (e.col != null && refs.length > 1 && (subjectEncoding === docEncoding.get(e.sfile) || ASCII.test(text))) {
       refs = [refs.sort((x, y) => Math.abs(x.start - e.col) - Math.abs(y.start - e.col))[0]];
     }
-    return refs.some((r) => typeSymbol(r, name) && literalAfter(text, r.t)
-      && !inSignature(e, e.line, r.s) && !closureResult(text.slice(0, r.s).replace(/[\w]+\.\s*$/, '')));
+    return refs.some((r) => typeSymbol(r, name) && literalAfter(text, r.t) && !inSignature(e.sfile, e.line, r.s));
   };
 
   return {

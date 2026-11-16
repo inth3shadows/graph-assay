@@ -9,9 +9,8 @@ emit what it requires.
 produced under SPEC v3.0, v2.0 (both in force from 2026-11-16) and v1.0 (in force from 2026-11-11)
 keep their labels, and results from before v1.0 stay labelled SPEC v0 (§12). v2.0 added
 `scip-name-mismatch` and v3.0 `skip-composite-literal` (§5), each prompted by a held-out result and
-re-validated on the dev split (§9). v4.0 changes `skip-composite-literal`: a result type is read from
-the caller's own signature, and a function-local type and any type in a literal's type expression
-count.
+re-validated on the dev split (§9). v4.0 changes `skip-composite-literal`: signatures are read from
+the source file itself, and a function-local type and any type in a literal's type expression count.
 
 "Must" marks a requirement. A result conforms to this version only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
@@ -200,7 +199,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | `noise:external-target-outside-scip` | forward | the oracle says external, but never indexed the subject's target file |
 | `skip-framework-self-site` | forward | an edge recorded at its target's own declaration (a framework route) is skipped |
 | `skip-type-without-new` | missing, not Python | a type followed by `(` without `new` is not a call (a TS type position, a Go conversion `T(x)`) |
-| `skip-composite-literal` | forward and function pairs, Go | a Go composite literal is no call: a subject `instantiates` edge to a type (not a function or method) whose own site reference, nearest its column where columns compare, is a type (a function-local type included) inside a type expression that reaches `{` (`T{`, `&T{`, `pkg.T{`, `G[map[K]V]{`, `[]T{`, `map[T]V{`, `[]func() T{`), and is not in a signature: neither in the caller's own signature (no `{` open yet from the caller's first line to the reference, whatever its layout) nor a closure's result type on its line (`func() T {`). Forward, the edge is skipped (counted in the waterfall); on the function-pair track it makes no pair, so it is neither subject-only nor an oracle disagreement. A guessed edge stays counted as guessed. The missing direction takes only `name(` sites and needs no rule |
+| `skip-composite-literal` | forward and function pairs, Go | a Go composite literal is no call: a subject `instantiates` edge to a type (not a function or method) whose own site reference, nearest its column where columns compare, is a type (a function-local type included) inside a type expression that reaches `{` (`T{`, `&T{`, `pkg.T{`, `G[map[K]V]{`, `[]T{`, `map[T]struct{}{`, `[]func() T{`, `map[string]func(T) error{`; a conversion `T(x)` is not one), and is not in a signature: between a function declaration's or func literal's `func` and its body's `{`, read from the source file, lexed whole, never from the subject's caller. A func type inside another type (`[]func() T`, `chan func() T`) and one without a body (`var f func() T = g`) have no signature span. Forward, the edge is skipped (counted in the waterfall); on the function-pair track it makes no pair, so it is neither subject-only nor an oracle disagreement. A guessed edge stays counted as guessed. The missing direction takes only `name(` sites and needs no rule |
 | `skip-method-shorthand` | missing, not Python | an object literal's method shorthand opening is not a call (the pattern occurs only in TS/JS) |
 | `skip-external-module-binding` | missing, not Python | the definition is a binding of an installed package's `require` (TS/JS only in practice) |
 | `skip-module-member-alias` | missing, not Python | the definition is a binding to a member of a required module, where the oracle stops (TS/JS only in practice) |

@@ -76,11 +76,14 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
-- **SPEC v4.0** (major: it moves a published number). `skip-composite-literal` reads a result type from
-  the caller's own signature, whatever its layout (a signature closing on its last parameter line, a
-  receiver or type-parameter list over several lines, an `interface{}` parameter), instead of matching
-  line shapes, so a literal after a leading `)` is skipped too. A function-local struct type and any
-  type in a literal's type expression (`map[T]V{}`, `[]func() T{}`) count. On the corpus only
+- **SPEC v4.0** (major: it moves a published number). `skip-composite-literal` reads every signature
+  from the file's own source (from a declaration's or func literal's `func` to its body's `{`, the
+  whole file lexed: comments, strings, raw strings), whatever its layout and never from the subject's
+  caller, instead of matching line shapes. So a signature over several lines, a closure's, and one
+  taking `interface{}` are signatures, and a literal after a leading `)` or after a multi-line raw
+  string holding a brace is a literal. A function-local type (in a `type (` group too) and any type in
+  a literal's type expression (`map[T]V{}`, `map[T]struct{}{}`, `[]func() T{}`,
+  `map[string]func(T) error{}`) count; a conversion `T(x)` before a block's `{` does not. On the corpus only
   code-graph-rag's held-out cobra changes: eight literals of a function-local struct type are skipped.
   Follow-ups from the #57 review.
 - **SPEC v3.0** (major: it moves published numbers). New rule `skip-composite-literal` (Go, call-site
