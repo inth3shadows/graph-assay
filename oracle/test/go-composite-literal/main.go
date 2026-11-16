@@ -58,3 +58,9 @@ func nested() int {
 func unicode() T {
 	s := "héllo→"; _ = s; return T{n: 3}
 }
+
+func long(
+	a int,
+) T {
+	return T{n: a}
+}

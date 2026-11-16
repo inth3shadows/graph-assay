@@ -67,9 +67,13 @@ check('a rule switched off through Options changes only its own verdict',
 // recognises nested type arguments (G3) and slice literals.
 {
   const { ctx } = run('go-composite-literal');
-  const at = (line: number, tname: string, extra = {}) => ctx.compositeLiteral({ sfile: 'main.go', line, tname, tkind: 'struct', ...extra });
+  const at = (line: number, tname: string, extra = {}) => ctx.compositeLiteral({ kind: 'instantiates', sfile: 'main.go', line, tname, tkind: 'struct', ...extra });
   check('skip-composite-literal: a method call named like a literal type on its line is kept (G1)', !at(42, 'Options', { tkind: 'method', ref: 's.Options' }) && at(42, 'Options'));
   check('skip-composite-literal: a function\'s result type is not a literal (G2)', !at(47, 'T') && !at(45, 'T', { col: 10 }) && at(45, 'T', { col: 21 }));
+  // Round 2: a `calls` edge resolved to a same-named type (code-graph-rag leaves `ref` null) is a call,
+  // and a multi-line signature's closing `) T {` is a result type.
+  check('skip-composite-literal: a calls edge is never a literal, even to a type (round 2)', !at(42, 'Options', { kind: 'calls', tkind: 'class' }));
+  check('skip-composite-literal: a multi-line signature\'s `) T {` is a result type (round 2)', !at(64, 'T') && at(65, 'T'));
   check('skip-composite-literal: nested type arguments and slice literals are literals (G3)', at(52, 'G') && at(53, 'T'));
   check('skip-composite-literal: a non-ASCII line is read in scip-go\'s byte columns (G4)', at(59, 'T'));
 }
@@ -84,8 +88,8 @@ check('a rule switched off through Options changes only its own verdict',
   fs.writeFileSync(tmpSnap, JSON.stringify(snap));
   const ctx = createContext({ repo: dir, scipFile: path.join(dir, 'index.scip.json'), lang: 'go', missing: true, redact: false, allSites: false,
     show: 0, disabled: new Set(), exclude: '', snapshot: tmpSnap });
-  const pairs = missing(ctx).extra.pairs;
-  check('skip-composite-literal: a guessed literal edge counts as guessed on the pair track (G6)', pairs.skippedEdges['skip-composite-literal'] === 8);
+  const pairs = (missing(ctx).extra as { pairs: { skippedEdges: Record<string, number> } }).pairs;
+  check('skip-composite-literal: a guessed literal edge counts as guessed on the pair track (G6)', pairs.skippedEdges['skip-composite-literal'] === 9);
   fs.rmSync(path.dirname(tmpSnap), { recursive: true, force: true });
 }
 

@@ -1,7 +1,7 @@
 {
  "lang": "go",
  "mode": "forward",
- "note": "A Go composite literal `T{...}`, `&T{...}`, `pkg.T{...}` is not a call, as a conversion `T(x)` is not (rule skip-composite-literal, SPEC v3.0): codegraph's instantiates edge to the type is skipped, not scored. Controls: the calls NewT(), t.Size(), shapes.NewPt().Norm() keep their verdicts.",
+ "note": "A Go composite literal `T{...}`, `&T{...}`, `pkg.T{...}`, `[]T{...}` or `G[map[K]V]{...}` is not a call, as a conversion `T(x)` is not (rule skip-composite-literal, SPEC v3.0): codegraph's instantiates edge to the type is skipped, not scored. Lines 35-67 add a same-named method call on a literal's line (42, kept), result types (45, 47, 64), nested type arguments (52), a slice literal (53) and a non-ASCII line (59); tracks-test checks them in-process. Controls: NewT(), t.Size(), shapes.NewPt().Norm() keep their verdicts.",
  "expect": [
   {
    "at": "main.go:9",
@@ -66,6 +66,11 @@
   },
   {
    "at": "main.go:59",
+   "name": "T",
+   "absent": true
+  },
+  {
+   "at": "main.go:65",
    "name": "T",
    "absent": true
   }

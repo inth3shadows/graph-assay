@@ -82,9 +82,10 @@ All notable changes to this project are recorded here. The format follows
   call-site track scored it `ok` (SCIP resolves the type name), while the function-pair track, which
   builds oracle units from call sites only, had no oracle pair for it and counted the subject's pair
   as an oracle disagreement. Now the edge is skipped forward (counted in the waterfall) and makes no
-  pair. The edge must target a type and sit on the literal itself, so a same-named method call on the
-  line (`s.Options(Options{})`) and a function's result type stay scored. Prompted by the held-out run
-  (cobra); on dev only the Go repository mux changes, and every unit that leaves is a literal. Self-tests
+  pair. The edge must be an `instantiates` edge to a type and sit on the literal itself, so a
+  same-named method call on the line (`s.Options(Options{})`) and a function's result type stay
+  scored. Prompted by the held-out run (cobra); on dev only the Go repository mux changes, and every
+  unit that leaves is a literal. Self-tests
   `go-composite-literal`, `go-composite-literal-pairs`. Results under v2.0 and v1.0 keep their labels.
 - **SPEC v2.0** (major: it moves published numbers). New rule `scip-name-mismatch` (Python, both
   directions): where scip-python's symbol for a function, method or class the project defines names

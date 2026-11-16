@@ -212,10 +212,12 @@ export function createContext(opts: Options) {
     if (text[k] === '[') { k = typeArgsEnd(text, k); if (k < 0) return false; while (/\s/.test(text[k] ?? '')) k++; }
     return text[k] === '{';
   };
-  const resultType = (before: string) => /\bfunc\b[^{]*\)[\s\w.*[\]]*$/.test(before);
-  const compositeLiteral = (e: { sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string }) => {
+  // `func f() T {`, or the closing `) T {` line of a signature written over several lines.
+  const resultType = (before: string) => /\bfunc\b[^{]*\)[\s\w.*[\]]*$/.test(before) || /^\s*\)[\s\w.*[\]]*$/.test(before);
+  const compositeLiteral = (e: { kind?: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string }) => {
     if (opts.lang !== 'go' || !on('skip-composite-literal') || e.line == null) return false;
-    if (e.tkind === 'function' || e.tkind === 'method') return false;
+    // An `instantiates` edge to a type: a `calls` edge is a call even where a literal sits on the line.
+    if (e.kind !== 'instantiates' || e.tkind === 'function' || e.tkind === 'method') return false;
     const parts = segs(e.ref ?? e.tname);
     const name = parts[parts.length - 1];
     const text = lineOf(e.sfile, e.line);
