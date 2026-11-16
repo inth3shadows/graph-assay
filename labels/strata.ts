@@ -20,7 +20,7 @@ export function stratumOf(fwd: string[], miss: string[], subjects: number): Stra
   return fwd.length === subjects && fwd.every((k) => k.startsWith('ok')) ? 'agree' : null;
 }
 
-export interface StratumCount { sites: number; answered: number }
+export interface StratumCount { sites: number; scipSites: number }
 /** Sites per stratum in one repository, and how many of them SCIP answers (a SCIP symbol, unless the
  * oracle found it a local SCIP never defines, `scip-local-undefined`, as the sampler's `none`), from
  * each subject's oracle outputs (out.json, out-missing.json written with ORACLE_ALLSITES, as
@@ -38,9 +38,10 @@ export function stratumCounts(outputs: { fwd: { sites?: any[] }; miss: { sites?:
     const fwd = Object.values(u.fwd); const miss = Object.values(u.miss);
     const s = stratumOf(fwd, miss, outputs.length);
     if (!s) continue;
-    const c = (counts[s] ??= { sites: 0, answered: 0 });
+    const c = (counts[s] ??= { sites: 0, scipSites: 0 });
     c.sites++;
-    if (u.scip && ![...fwd, ...miss].some((k) => k.startsWith('scip-local-undefined'))) c.answered++;
+    // Only the forward track records `scip-local-undefined` (oracle/forward.ts).
+    if (u.scip && !fwd.some((k) => k.startsWith('scip-local-undefined'))) c.scipSites++;
   }
   return counts;
 }

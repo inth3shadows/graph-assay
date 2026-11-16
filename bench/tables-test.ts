@@ -20,7 +20,7 @@ const repos = readRepos(undefined, 'dev').map((r) => r.name);
 
 const PAIRS = (o?) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
   decorators: { total: 0, found: 0 }, unmappedEdges: { caller: 2, target: 1 }, skippedEdges: { 'skip-framework-self-site': 4 }, callerRanges: { enclosing: 5, braces: 0 }, unitsAtFileLevel: 1, ...o });
-function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'], sites = false } = {}) {
+function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'], sites = false, bareSites = null, noMissSites = null, noScip = null } = {}) {
   fs.rmSync(work, { recursive: true, force: true });
   for (const r of repos) {
     for (const sfx of sfxs) {
@@ -37,10 +37,11 @@ function fabricate(work, { failed = null, missingDir = null, noPairs = null, spe
         const fwdSites = [{ site: 'a.x:1', name: 'f', key: 'ok|calls', scip: 's#' }, { site: 'a.x:2', name: 'f', key: sfx ? 'ok|calls' : 'wrong-target|calls', scip: 's#' },
           { site: 'a.x:4', name: 'f', key: sfx ? 'wrong-target|calls' : 'ok|calls', scip: 's#' }];
         const missSites = sfx ? [] : [{ site: 'a.x:3', name: 'f', key: 'missing|no-ref|x', scip: 's#' }];
-        write(path.join(dir, 'out.json'), { buckets: `${r}${sfx}` === noScored ? {} : { 'ok|calls': 9, 'wrong-target|calls|-|method>method': 1 }, skipped: {}, spec, siteLines: lines, ...(sites ? { sites: fwdSites } : {}) });
+        if (r === noScip) for (const x of [...fwdSites, ...missSites]) delete x.scip;
+        write(path.join(dir, 'out.json'), { buckets: `${r}${sfx}` === noScored ? {} : { 'ok|calls': 9, 'wrong-target|calls|-|method>method': 1 }, skipped: {}, spec, siteLines: lines, ...(sites && `${r}${sfx}` !== bareSites ? { sites: fwdSites } : {}) });
         write(path.join(dir, 'out-missing.json'), { buckets: { 'missing|found|py|method': 8, 'missing|no-ref|py|method': 2 }, decorators: { total: 0, causes: {} },
           skipped: { 'corpus-exclude': 1 }, waterfall: { filesInCorpus: 7, excluded: 2, supportedLanguage: 5, indexedBySubject: 4, indexedByOracle: 5 },
-          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines, ...(sites ? { sites: missSites } : {}) });
+          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines, ...(sites && ![bareSites, noMissSites].includes(`${r}${sfx}`) ? { sites: missSites } : {}) });
       }
     }
   }
@@ -211,13 +212,36 @@ try {
     assert.equal(both.python.strata.disagree.sites, 4); // a.x:2 and a.x:4 in requests and click
     assert.deepEqual(tables(work, ['--noise', noise, '--subjects', 'codegraph']).json.noiseGate, both);
   });
-  check('the noise gate leaves a repo with a failed subject out of the population (N7)', () => {
-    fabricate(work, { sites: true, failed: 'mux' });
+  check('a failed subject never moves a language out: a language with no counted repo is not gated (P1)', () => {
+    fabricate(work, { sites: true, failed: 'mux' }); // mux is dev's only Go repo
     const { status, json, md } = tables(work, ['--noise', noise]);
     assert.equal(status, 0);
-    assert.ok(!json.noisePopulationRepos.includes('mux'));
-    assert.equal(json.noiseGate.go.estimate, null);
+    assert.deepEqual(json.noiseLeftOut, ['mux (codegraph failed)']);
+    assert.deepEqual(json.noiseNotEvaluated, ['go']);
+    assert.ok(!('go' in json.diagnostic) && !('go' in json.noiseGate));
+    // SPEC §8: mux stays in codegraph's recall averages at 0.
+    assert.equal(json.subjects.codegraph.agg['recall strict'].macro, (0.8 * (repos.length - 1)) / repos.length);
+    assert.match(md, /Not evaluated, so not excluded: go \(no repo where both codegraph and code-graph-rag ran without failure\)/);
+  });
+  check('a gated language whose run has no site where SCIP answers is diagnostic, and says so', () => {
+    fabricate(work, { sites: true, noScip: 'mux' });
+    const { status, json, md } = tables(work, ['--noise', noise]);
+    assert.equal(status, 0);
+    assert.equal(json.noiseGate.go.estimate, null); assert.ok('go' in json.diagnostic);
     assert.match(md, /go \(no run sites where SCIP answers in a labelled stratum\)/);
+  });
+  check('a non-canonical table leaves a repo the other canonical subject never ran out of the population (P4)', () => {
+    fabricate(work, { sites: true, missingDir: `${repos[0]}-code-graph-rag` });
+    const { status, json } = tables(work, ['--noise', noise, '--subjects', 'codegraph']);
+    assert.equal(status, 0);
+    assert.deepEqual(json.noiseLeftOut, [`${repos[0]} (no code-graph-rag run)`]);
+  });
+  check('the per-site refusal covers either file, and not a repo already left out for a failure (P5)', () => {
+    fabricate(work, { sites: true, noMissSites: 'click' });
+    const one = tables(work, ['--noise', noise]);
+    assert.equal(one.status, 2); assert.match(one.stderr, /w-pub-click lacks them/);
+    fabricate(work, { sites: true, failed: 'mux', bareSites: 'mux-code-graph-rag' });
+    assert.equal(tables(work, ['--noise', noise]).status, 0);
   });
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

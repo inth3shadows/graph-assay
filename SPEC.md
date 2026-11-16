@@ -299,14 +299,17 @@ folders, is indexed through an extra project that extends that config and lists 
     Each stratum where the oracle answers (agree, disagree, oracle-only) is weighted by its share of
     the tabled run's sites where the oracle answers. The strata are counted as the sample drew them:
     over both canonical subjects' per-site results, whatever subjects a table shows, over the averaged
-    repositories where no subject's run failed. A table without per-site results is refused.
+    repositories where both ran without failure. A language with no such repository is not gated and
+    stays in the averages, so a subject failure never moves a language out (§8). A table without
+    per-site results is refused.
   - "Oracle right where it answers" is the weighted mean of the strata's labelled rates. Its 95% lower
     bound is a stratified normal interval on Agresti-Coull rates ((k+2)/(n+4) per stratum), centred
     on their weighted mean.
   - The language is diagnostic when that bound is under 80%, or when a stratum carrying at least 5%
-    of the weight has fewer than 20 labelled oracle answers (unmeasured). A stratum with no labelled
-    oracle answers and less weight is left out and the other weights renormalised. A tabled language
-    with no labelled sample, or with no run sites where the oracle answers, is diagnostic.
+    of the weight has fewer than 20 labelled oracle answers (unmeasured; with none at all there is no
+    estimate). A stratum with no labelled oracle answers and less weight is left out and the other
+    weights renormalised. A gated language with no labelled sample, or with no run sites where the
+    oracle answers, is diagnostic.
   - Sites cluster by repository, and the sample draws from one or two dev repositories per language,
     so a repository-cluster interval cannot be estimated; the interval treats sites as independent.
 - A rule change that brings a language back needs a fresh sample, never the sample that found the

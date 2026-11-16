@@ -131,7 +131,7 @@ counts-and-sites comparison there.
 | `labels/export.ts`, `labels/data/` | `export.ts <sample.jsonl> <answers dir> <dest>` freezes a labelled sample: `items.jsonl` with `repo` relative to the oracle work dir and `stubs` (each Python `@overload` stub answer mapped to its implementation, so `unstub` needs no checkout), plus the last ok answer per item for each labeller. `labels/data/v1` (Python, Go), `labels/data/v2-tsjs` (TypeScript ky, JavaScript express) and `labels/data/v3-js` (express after `skip-module-member-alias`; its `meta.json` retires v2's JavaScript items) are committed; `noise.ts` takes any number of `<items.jsonl> <dir>` pairs and pools them. |
 | `bench/triage.ts` (`graph-assay triage`) | Bug triage from finished oracle work dirs (no model, runs nothing). For each subject with a work dir in the split or a `--t3` file (or those named by `--subjects`; with none found, every subject, each listing its repos as not run), every strict non-match bucket is a shape, clustered across repositories and ranked by headline points at stake: the macro strict precision or recall gain if every unit of the shape were right (an upper bound). Shapes sharing at least half their call sites are linked as the same calls, since one cause shows once per direction. Noise verdicts are counted, not ranked. Each top shape lists its largest groups (subject target vs compiler definition, code, a `oracle/site.ts` command), and `--t3` adds decoy captures. With `fixtures/known-shapes.json` (default `--known`), each codegraph shape lists the filed fixtures whose bug produces it in the same language, with their replay verdict from `--t1`: a candidate match, since one shape key can hold several bugs. `bench/triage-test.ts` pins it. |
 | `tools/triage/tag-fixtures.ts`, `fixtures/known-shapes.json` | `tag-fixtures.ts <codegraph.js>` indexes every oracle-candidate fixture with that build and its SCIP indexer, runs the oracle in both directions, and records the fixture's strict non-match shapes in `fixtures/known-shapes.json`. Re-run it when fixtures are added or the reference build moves. A fixture that fails to tag leaves the file unchanged and exits 1, unless `--allow-failures` records it untagged. Java, Kotlin and PHP fixtures are listed untagged. At f72c9d2e, 30 fixtures produce shapes and 6 produce none (fixed at that build, or outside what the oracle sees). |
-| `bench/tables.ts`, `bench/robustness.ts` | Tables v1 from oracle work dirs (T2 call-site and function-pair tracks side by side), T1 (`--t1`), noise (`--noise`) and T3 (`--t3`: meta-<tag>.json). `--subjects a,b` picks the subjects; the default is every subject with a work dir (with none, every subject with a T1 or T3 file), or codegraph and code-graph-rag under `--canonical`, which refuses any other set. The averages cover the repos every chosen subject ran (SPEC §8); a default selection that narrows them warns on stderr. T3 compares the challenges of every subject with a T3 run against the first such subject's. T3 counts errors in eligible denominators; excludes N/A and unverified legacy rows; missing data is NOT RUN. Canonical T3 requires complete shared challenge evidence. `bench/robustness-test.ts` pins accounting and actual runner/table integration. |
+| `bench/tables.ts`, `bench/robustness.ts` | Tables v1 from oracle work dirs (T2 call-site and function-pair tracks side by side), T1 (`--t1`), noise (`--noise`: the SPEC §9 gate; it needs per-site records in every counted repo's outputs and counts strata over codegraph and code-graph-rag, listing the repos it left out) and T3 (`--t3`: meta-<tag>.json). `--subjects a,b` picks the subjects; the default is every subject with a work dir (with none, every subject with a T1 or T3 file), or codegraph and code-graph-rag under `--canonical`, which refuses any other set. The averages cover the repos every chosen subject ran (SPEC §8); a default selection that narrows them warns on stderr. T3 compares the challenges of every subject with a T3 run against the first such subject's. T3 counts errors in eligible denominators; excludes N/A and unverified legacy rows; missing data is NOT RUN. Canonical T3 requires complete shared challenge evidence. `bench/robustness-test.ts` pins accounting and actual runner/table integration. |
 | `corpus/v1.txt` | The preregistered corpus: name, clone URL, pinned SHA, language, license, split (dev / heldout), category, setup (`npm` = `npm install --ignore-scripts`). `differential/builds.ts` and the edgediff workflow read its dev split. |
 | `corpus/v2.txt` | v1's rows unchanged plus a `regression` split (effect, vscode at pinned commits): large TypeScript code bases for build-vs-build graph diffs only (`builds.ts --fetch <dest> corpus/v2.txt regression`). Never in the tables: they break v1's size rule and would dominate a micro average. |
 | `benchmarks/pycg.ts` | Indexes each PyCG micro-benchmark snippet and reports per-category recall (expected project edges present) and extra edges. `--subject` picks the tool; names map through definition spans, not qname format. Guessed edges (any provenance) never count as hits or extras; expected edges only a guess would satisfy are counted per category as `guessOnly` (SPEC §4). `PYCG_VERBOSE=1` also lists passing snippets. |
@@ -472,11 +472,10 @@ the noise rates (including the two candidates not used, Kimi and GLM).
 repos are shown per repo, marked, and left out of the T2 averages. The rule is mechanical: each
 stratum of the labelled sample where SCIP answers is weighted by its share of the tabled run's sites
 where SCIP answers (`labels/strata.ts` counts them from codegraph's and code-graph-rag's per-site
-results, leaving out repos with a failed subject; tables without per-site results are refused), and
-the language is
+results, over the repos where both ran without failure; a language with no such repo is not gated
+and stays in the averages; tables without per-site results are refused), and the language is
 diagnostic when the 95% lower bound of the weighted "SCIP right where it answers" is under 80%, or a
-stratum with at least 5% of the weight has under 20 labelled answers (`labels/score.ts` `noiseGate`,
-`diagnosticLanguages`). The tables list each language's weights, rate and bound. A rule change that lifts a language back needs a fresh
+stratum with at least 5% of the weight has under 20 labelled answers (`labels/score.ts` `noiseGate`). The tables list each language's weights, rate and bound. A rule change that lifts a language back needs a fresh
 sample, never the one that found the noise: the new sample's `meta.json` retires that language's
 items from the earlier one when samples are pooled.
 
@@ -492,9 +491,11 @@ bounds, SPEC v4.0 and earlier).
 
 SPEC v5.0 (#2) gates on the strata weighted by the tabled run's sites instead. On the v3.0 canonical
 outputs TypeScript becomes diagnostic on both splits: its disagree and scip-only strata each carry
-about a quarter of the weight with 2 and 9 labelled answers. Python, Go and JavaScript stay scored
-(JavaScript's disagree sites where SCIP answers are under 5% of its weight, so the 25 agree labels
-stand for it).
+about a quarter of the weight with 2 and 9 labelled answers. Python, Go and JavaScript stay scored.
+JavaScript stays by one site: SCIP answers at 16 of express's 329 SCIP-answering sites in the
+disagree stratum (4.9%, under the 5% line), 13 of them from code-graph-rag-only records, and that
+subject is not deterministic across runs. One more such site would make the unlabelled stratum
+unmeasured and JavaScript diagnostic; a fresh sample of JavaScript disagreements removes the margin.
 
 ### Adapter provenance, canonical runs and determinism
 

@@ -48,7 +48,7 @@ check('snapshot: items have relative repos and stubs, no home paths', snap.lengt
 // not by the sample's quotas.
 {
   const st = (k, n, consensus = n) => ({ scip: [k, n], consensus });
-  const sites = (o) => Object.fromEntries(Object.entries<number>(o).map(([k, v]) => [k, { sites: v, answered: v }]));
+  const sites = (o) => Object.fromEntries(Object.entries<number>(o).map(([k, v]) => [k, { sites: v, scipSites: v }]));
   // Pooled 78/97 (Wilson lower bound 71%); weighted by 9,000 agree and 500 disagree sites it is 98%.
   const py = noiseGate({ agree: st(50, 50), disagree: st(28, 47) }, sites({ agree: 9000, disagree: 500, 'subject-only': 70 }));
   check('noise gate: strata weighted by the run\'s sites, not the quotas (pooled 78/97 would fail)', !py.diagnostic && Math.abs(py.strata.agree.weight - 9000 / 9500) < 1e-9 && py.lower > 0.85 && py.lower < py.estimate);
@@ -58,9 +58,9 @@ check('snapshot: items have relative repos and stubs, no home paths', snap.lengt
   // N1: the weight is the run's SCIP-answering sites, not the sample's answered fraction: a stratum the
   // sample saw SCIP answer nowhere still carries its run sites, and is unmeasured when heavy.
   const heavy = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 1) }, sites({ agree: 300, disagree: 900 }));
-  check('noise gate: a heavy stratum with no labelled answers is unmeasured, never weightless (N1)', heavy.diagnostic && heavy.unmeasured.join() === 'disagree');
+  check('noise gate: a heavy stratum with no labelled answers is unmeasured, never weightless, and leaves no estimate (N1, P3)', heavy.diagnostic && heavy.unmeasured.join() === 'disagree' && heavy.estimate === null && heavy.lower === 0 && heavy.dropped.length === 0 && heavy.strata.disagree.weight === 0.75);
   // SCIP answers at 16 of 855 run disagreements (4.9% of the weight): too light to gate; dropped.
-  const js = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 35) }, { agree: { sites: 311, answered: 311 }, disagree: { sites: 855, answered: 16 }, 'scip-only': { sites: 2, answered: 2 } });
+  const js = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 35) }, { agree: { sites: 311, scipSites: 311 }, disagree: { sites: 855, scipSites: 16 }, 'scip-only': { sites: 2, scipSites: 2 } });
   check('noise gate: an unlabelled stratum under 5% of the weight is dropped', !js.diagnostic && js.dropped.join() === 'disagree,scip-only' && js.estimate === 1);
   check('noise gate: a low rate is diagnostic (28/47 alone)', noiseGate({ agree: st(28, 47) }, sites({ agree: 100 })).diagnostic);
   const none = noiseGate(undefined, sites({ agree: 10 }));
@@ -82,7 +82,7 @@ check('snapshot: items have relative repos and stubs, no home paths', snap.lengt
     { fwd: { sites: [{ site: 'b:1', name: 'f', key: 'wrong-target|x', scip: 's#' }, { site: 'b:2', name: 'f', key: 'scip-local-undefined|x', scip: 'local 3' }, { site: 'b:3', name: 'f', key: 'external|x' }] }, miss: { sites: [] } },
     { fwd: { sites: [{ site: 'b:1', name: 'f', key: 'ok|y' }, { site: 'b:2', name: 'f', key: 'ok|y' }, { site: 'b:3', name: 'f', key: 'ok|y' }] }, miss: { sites: [] } },
   ]);
-  check('strata: SCIP-answered sites exclude a local SCIP never defines and a site with no symbol', ans.disagree.sites === 3 && ans.disagree.answered === 1);
+  check('strata: SCIP-answered sites exclude a local SCIP never defines and a site with no symbol', ans.disagree.sites === 3 && ans.disagree.scipSites === 1);
 }
 // noise.ts: a later sample's meta.json retires a language from an earlier sample when pooling.
 {
