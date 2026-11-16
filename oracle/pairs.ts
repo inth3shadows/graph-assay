@@ -19,7 +19,7 @@ import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
 export interface Unit { file: string; line: number; sym: string; decorator?: boolean }
 
 export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
-  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch } = ctx;
+  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch, compositeLiteral } = ctx;
   const ALLSITES = ctx.opts.allSites;
   const name = (sym) => {
     let n = defName(sym);
@@ -119,6 +119,8 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
     if (!CALL_KINDS.has(e.kind) || !LANGS.has(e.slang) || excluded(e.sfile) || excluded(e.tfile)) continue;
     // As on the call-site track: a framework edge at its target's own declaration is no call.
     if (on('skip-framework-self-site') && e.line != null && e.sfile === e.tfile && e.line === e.tstart) { skippedEdges['skip-framework-self-site'] = (skippedEdges['skip-framework-self-site'] ?? 0) + 1; continue; }
+    // A Go composite literal `T{...}` is no call, so it is no pair (SPEC §5 `skip-composite-literal`).
+    if (compositeLiteral(e)) { skippedEdges['skip-composite-literal'] = (skippedEdges['skip-composite-literal'] ?? 0) + 1; continue; }
     const c = mapCaller(e); const d = c && mapTarget(e);
     if (!c) { unmappedEdges.caller++; continue; }
     if (!d) { unmappedEdges.target++; continue; }

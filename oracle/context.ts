@@ -5,7 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { CTOR, defName, rangeOf, scipKind } from './symbols.ts';
+import { CTOR, defName, rangeOf, scipKind, segs } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -192,9 +192,22 @@ export function createContext(opts: Options) {
     return !!n && n !== token && !aliased(n, token);
   };
 
+  // SPEC §5 `skip-composite-literal`, Go: `T{...}`, `&T{...}`, `pkg.T{...}` and `G[int]{...}` build a value;
+  // they are not calls, as a conversion `T(x)` is not (`skip-type-without-new`). The subject edge's site
+  // line holds a reference to the called name whose symbol is a type, followed by `{` (after an optional
+  // type-argument list). Written from the reference's own span, so `if ok {` or `range xs {` never match.
+  const compositeLiteral = (e: { sfile: string; line?: number | null; ref?: string | null; tname: string }) => {
+    if (opts.lang !== 'go' || !on('skip-composite-literal') || e.line == null) return false;
+    const parts = segs(e.ref ?? e.tname);
+    const name = parts[parts.length - 1];
+    const text = lineOf(e.sfile, e.line);
+    return (refsAt.get(`${e.sfile}:${e.line}`) ?? []).some((r) => text.slice(r.start, r.end) === name
+      && scipKind(r.symbol) === 'type' && /^\s*(?:\[[^\]]*\])?\s*\{/.test(text.slice(r.end)));
+  };
+
   return {
     opts, on, index, snap, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding,
-    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch,
+    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch, compositeLiteral,
   };
 }
 

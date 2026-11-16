@@ -1,0 +1,16 @@
+{
+ "lang": "go",
+ "mode": "forward",
+ "note": "A Go composite literal `T{...}`, `&T{...}`, `pkg.T{...}` is not a call, as a conversion `T(x)` is not (rule skip-composite-literal, SPEC v3.0): codegraph's instantiates edge to the type is skipped, not scored. Controls: the calls NewT(), t.Size(), shapes.NewPt().Norm() keep their verdicts.",
+ "expect": [
+  { "at": "main.go:9", "name": "T", "absent": true },
+  { "at": "main.go:14", "name": "T", "absent": true },
+  { "at": "main.go:15", "name": "T", "absent": true },
+  { "at": "main.go:17", "name": "Pt", "absent": true },
+  { "at": "shapes/shapes.go:7", "name": "Pt", "absent": true },
+  { "at": "main.go:24", "name": "NewT", "key": "ok|calls|exact-match" },
+  { "at": "main.go:30", "name": "Size", "key": "ok|calls|instance-method" },
+  { "at": "main.go:32", "name": "Norm", "key": "ok|calls|instance-method" },
+  { "at": "main.go:32", "name": "NewPt", "key": "ok|calls|import" }
+ ]
+}

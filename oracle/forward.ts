@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 export function forward(ctx: Context): Tally {
   const { on, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding, fileText, lineOf, LANGS, PY,
-    CALL_KINDS, excluded, skip, allSites, inTarget, nameMismatch } = ctx;
+    CALL_KINDS, excluded, skip, allSites, inTarget, nameMismatch, compositeLiteral } = ctx;
   const ALLSITES = ctx.opts.allSites;
   for (const e of allEdges) {
     if (!CALL_KINDS.has(e.kind) || !LANGS.has(e.slang)) continue;
@@ -26,6 +26,8 @@ export function forward(ctx: Context): Tally {
     if ((excluded(e.sfile) || excluded(e.tfile)) && skip('corpus-exclude')) continue;
     // A framework edge recorded at the target's own declaration (Next.js route -> page).
     if (on('skip-framework-self-site') && e.sfile === e.tfile && e.line === e.tstart && skip('skip-framework-self-site')) continue;
+    // SPEC §5: a Go composite literal `T{...}` is not a call.
+    if (compositeLiteral(e) && skip('skip-composite-literal')) continue;
     // A file the SCIP index didn't cover (outside the tsconfig's include).
     if (!scipFiles.has(e.sfile)) {
       buckets['outside-scip'] = (buckets['outside-scip'] ?? 0) + 1;

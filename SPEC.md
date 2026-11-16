@@ -1,14 +1,14 @@
-# Code-graph accuracy: scoring semantics (SPEC v2.0)
+# Code-graph accuracy: scoring semantics (SPEC v3.0)
 
 This document defines the unit being compared, when a subject and the reference agree, how
 failures count, and how scores are aggregated and versioned. Every scorer must follow it: the
 SCIP oracle, fixture replay, PyCG, the metamorphic relations and the tables. Every adapter must
 emit what it requires.
 
-**Status: in force** from 2026-11-16. Results produced under it record `SPEC v2.0`. Results produced
-under SPEC v1.0 (in force from 2026-11-11) keep that label, and results from before it stay labelled
-SPEC v0 (§12). v2.0 adds one rule, `scip-name-mismatch` (§5), prompted by a held-out result and
-re-validated on the dev split (§9).
+**Status: in force** from 2026-11-16. Results produced under it record `SPEC v3.0`. Results produced
+under SPEC v2.0 (in force from 2026-11-16) and SPEC v1.0 (in force from 2026-11-11) keep their labels, and results from before it stay labelled
+SPEC v0 (§12). v2.0 added `scip-name-mismatch` (§5). v3.0 adds one rule, `skip-composite-literal` (§5),
+prompted by a held-out result and re-validated on the dev split (§9).
 
 "Must" marks a requirement. A result conforms to v2 only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
@@ -32,6 +32,8 @@ TECHNICAL.md and are not part of this specification.
 
 - **In scope:** call relations between definitions in the project. These are a function or method
   call, a constructor call (`new X()`, Python `X()`), and a call through a member (`a.b.m()`).
+  A Go composite literal (`T{...}`, `&T{...}`, `pkg.T{...}`, `G[int]{...}`) is not a call, as a Go
+  conversion `T(x)` is not: it is in neither track (§5, `skip-composite-literal`).
 - **Reported separately, not in the headline:** decorator applications (`@d`) (§4) and guessed
   edges (§4). Edges to bodiless declarations (`@decl`, §4) count in the headline and are also
   reported in their own column.
@@ -101,7 +103,7 @@ TECHNICAL.md and are not part of this specification.
 - Function-pair recall is the number of oracle pairs that some non-guessed subject edge maps to
   (source mapped to `C`, target holding `D`), divided by the number of oracle pairs.
 - An edge recorded at its target's own declaration (`skip-framework-self-site`) forms no pair, as
-  on the call-site track. Edges with an endpoint the oracle never indexed form no pair. Both are
+  on the call-site track, and so does a Go composite literal (`skip-composite-literal`). Edges with an endpoint the oracle never indexed form no pair. Both are
   counted and shown.
 - Pairs carried only by decorator sites go to the decorators column (§4), pairs carried only by
   skipped sites are skipped (§7), and oracle pairs that only guessed edges carry are counted as
@@ -195,6 +197,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | `noise:external-target-outside-scip` | forward | the oracle says external, but never indexed the subject's target file |
 | `skip-framework-self-site` | forward | an edge recorded at its target's own declaration (a framework route) is skipped |
 | `skip-type-without-new` | missing, not Python | a type followed by `(` without `new` is not a call (a TS type position, a Go conversion `T(x)`) |
+| `skip-composite-literal` | both, Go | a Go composite literal is no call: a subject edge whose site line holds a reference to the called name, with a type symbol, followed by `{` (after an optional `[type arguments]`). Forward, the edge is skipped (counted in the waterfall); on the function-pair track it makes no pair, so it is neither subject-only nor an oracle disagreement. The missing direction takes only `name(` sites and needs no rule |
 | `skip-method-shorthand` | missing, not Python | an object literal's method shorthand opening is not a call (the pattern occurs only in TS/JS) |
 | `skip-external-module-binding` | missing, not Python | the definition is a binding of an installed package's `require` (TS/JS only in practice) |
 | `skip-module-member-alias` | missing, not Python | the definition is a binding to a member of a required module, where the oracle stops (TS/JS only in practice) |

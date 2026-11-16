@@ -11,7 +11,7 @@ A code-graph tool (an MCP server or CLI that answers "who calls this?", "what br
 this?") is only as good as its edges. A call linked to the wrong definition makes every answer
 built on it confidently wrong, and these defects rarely show up in the tool's own test suite.
 
-**Status.** SPEC v2.0 is in force. Two tools are measured:
+**Status.** SPEC v3.0 is in force. Two tools are measured:
 [codegraph](https://github.com/colbymchenry/codegraph) and
 [code-graph-rag](https://github.com/vitali87/code-graph-rag). The compiler oracle covers
 TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 43 codegraph

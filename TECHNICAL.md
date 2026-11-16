@@ -148,6 +148,7 @@ counts-and-sites comparison there.
 | `receiver-fallback` | codegraph linked the receiver object for a member it couldn't find (`db.insert()` → `db`) | codegraph convention |
 | `local-module-alias` | a local bound from `import()` or `require()`; codegraph followed it into the module | fine |
 | `scip-local-undefined` | SCIP has a local with no definition (usually an indexing gap) | check the indexing |
+| `skip-composite-literal` | Go: the subject linked a composite literal `T{...}` / `&T{...}` / `G[int]{...}` (an `instantiates` edge to the type); a literal is no call, as a conversion is not, so forward skips the edge and the pair track makes no pair from it | oracle scope, not scored |
 | `scip-name-mismatch` | Python: SCIP's symbol for a function, method or class the project defines names another definition than the identifier it sits on, and no `import A as B` rename explains it (scip-python 0.6.8 misresolves a name re-exported by a star import, `httpx.Response` → `Request#`); the recall side skips the site | oracle error, not scored |
 | `no-scip-ref` | no SCIP reference with that name on that line | alignment gap |
 | `outside-scip` | the source file isn't in the SCIP index (outside the tsconfig `include`) | excluded |

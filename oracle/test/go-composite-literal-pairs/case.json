@@ -1,0 +1,19 @@
+{
+ "lang": "go",
+ "mode": "missing",
+ "inputs": "go-composite-literal",
+ "note": "The pair side of go-composite-literal: the subject's caller->type pairs from `&T{}`, `T{}`, `shapes.Pt{}` (also inside NewT and NewPt) are no pair (rule skip-composite-literal), so they are neither subject-only nor an oracle disagreement. The four real calls still match.",
+ "expect": [],
+ "pairs": {
+  "matched": ["controls -> NewPt", "controls -> NewT", "controls -> Norm", "controls -> Size"],
+  "subject": ["!literals -> T", "!literals -> Pt", "!NewT -> T", "!NewPt -> Pt"],
+  "disagrees": ["!literals -> T", "!literals -> Pt", "!NewT -> T", "!NewPt -> Pt"]
+ },
+ "pairCounts": {
+  "oracle": 4,
+  "subject": 4,
+  "matched": 4,
+  "subjectOnly": { "oracleDisagrees": 0, "oracleSilent": 0 },
+  "skippedEdges": { "skip-composite-literal": 5 }
+ }
+}
