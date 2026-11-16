@@ -1,0 +1,59 @@
+{
+ "lang": "python",
+ "mode": "missing",
+ "inputs": "py-star-import",
+ "note": "The recall side of py-star-import: an oracle site whose symbol names another definition than its token is skipped (rule scip-name-mismatch), not a miss. Controls: the alias `Reply` (symbol Response#) and the constructor token `__init__` (symbol MockTransport#__init__) are kept. On the pair track the subject's pairs to the misresolved names are unaligned (oracle silent), not oracle-disagrees.",
+ "expect": [
+  {
+   "at": "main.py:8",
+   "name": "Headers",
+   "absent": true
+  },
+  {
+   "at": "main.py:10",
+   "name": "build",
+   "absent": true
+  },
+  {
+   "at": "main.py:7",
+   "name": "Response",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:9",
+   "name": "MockTransport",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:14",
+   "name": "Reply",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:14",
+   "name": "Request",
+   "key": "missing|found|py|type"
+  },
+  {
+   "at": "main.py:19",
+   "name": "__init__",
+   "key": "missing|unresolved-ref|py|method"
+  }
+ ],
+ "pairs": {
+  "silent": [
+   "through_package -> Headers",
+   "through_package -> build"
+  ],
+  "disagrees": [
+   "!through_package -> Headers",
+   "!through_package -> build"
+  ]
+ },
+ "pairCounts": {
+  "subjectOnly": {
+   "oracleDisagrees": 0,
+   "oracleSilent": 2
+  }
+ }
+}

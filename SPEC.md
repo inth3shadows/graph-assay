@@ -1,12 +1,14 @@
-# Code-graph accuracy: scoring semantics (SPEC v1.0)
+# Code-graph accuracy: scoring semantics (SPEC v2.0)
 
 This document defines the unit being compared, when a subject and the reference agree, how
 failures count, and how scores are aggregated and versioned. Every scorer must follow it: the
 SCIP oracle, fixture replay, PyCG, the metamorphic relations and the tables. Every adapter must
 emit what it requires.
 
-**Status: in force** from 2026-11-11. Results produced under it record `SPEC v1.0`; results from
-before it stay labelled SPEC v0 (§12).
+**Status: in force** from 2026-11-16. Results produced under it record `SPEC v2.0`. Results produced
+under SPEC v1.0 (in force from 2026-11-11) keep that label, and results from before it stay labelled
+SPEC v0 (§12). v2.0 adds one rule, `scip-name-mismatch` (§5), prompted by a held-out result and
+re-validated on the dev split (§9).
 
 "Must" marks a requirement. A result conforms to v1 only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
@@ -127,9 +129,10 @@ Each unit receives exactly one verdict. An implementation that produces a verdic
 tables is in error, and must fail the run rather than leave the unit out.
 
 **Precedence.** Where several verdicts could apply, the first in this order wins.
-- Forward: `ok`, `receiver-fallback`, then `scip-local-undefined` or `external` (no oracle
-  definition), `local-module-alias` or `local-shadow` (an oracle local), `wrong-target`. A
-  disagreement other than `receiver-fallback`, `local-module-alias` or `scip-local-undefined` is
+- Forward: `scip-name-mismatch`, `ok`, `receiver-fallback`, then `scip-local-undefined` or
+  `external` (no oracle definition), `local-module-alias` or `local-shadow` (an oracle local),
+  `wrong-target`. A disagreement other than `receiver-fallback`, `local-module-alias`,
+  `scip-local-undefined` or `scip-name-mismatch` is
   then refined by the first that applies of `ok-other-column`, `ok-overload-set`, the noise rules
   in table order, and `cross-file-unimported`.
 - Missing: `found`, `found-heuristic-only`, `found-other-line`, `receiver-fallback`,
@@ -150,7 +153,7 @@ tables is in error, and must fail the run rather than leave the unit out.
 | `cross-file-unimported` | Python: an unqualified call linked to a file the caller never imports | non-match | non-match |
 | `receiver-fallback` | the edge links the receiver, not the member | non-match | non-match |
 | `noise:<rule>` | a documented oracle artifact (rule table below) | non-match | excluded |
-| `no-scip-ref`, `outside-scip`, `scip-local-undefined` | no oracle answer at the site | unaligned | unaligned |
+| `no-scip-ref`, `outside-scip`, `scip-local-undefined`, `scip-name-mismatch` | no oracle answer at the site | unaligned | unaligned |
 
 Precision = match ÷ (match + non-match). Unaligned units, guessed edges and `skipped` edges are never
 in either count, but are always shown.
@@ -184,6 +187,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | `ok-overload-set`, `ok-other-column`, `local-module-alias`, `cross-file-unimported`, `found-other-line`, `decl-tag` | as in the verdict tables | produce the verdict or tag of the same name |
 | `receiver-fallback` | forward | produces the forward verdict; the missing-direction cause of that name is a plain verdict, not a rule |
 | `corpus-exclude` | both | a unit from or to a path the corpus entry excludes (§1) is skipped |
+| `scip-name-mismatch` | both, Python | the oracle's symbol for a function, method or class names another definition than the token it sits on, with no constructor (§4) or alias (`import A as B`, `B = A`) to explain it: the oracle has no answer there. Forward, the verdict is unaligned; missing, the site is skipped; on the function-pair track the reference does not count as an oracle answer for the pair |
 | `noise:scip-shorthand-property` | forward | the oracle defines the name at an object literal's shorthand property |
 | `noise:scip-builtin-shadowed` | forward, Python | the oracle says builtin, but the caller's own file defines the name at module level |
 | `noise:pytest-fixture-param` | forward, Python | the oracle sees a parameter, and the subject links the `@pytest.fixture` it receives |

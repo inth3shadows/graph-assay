@@ -76,6 +76,16 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- **SPEC v2.0** (major: it moves published numbers). New rule `scip-name-mismatch` (Python, both
+  directions): where scip-python's symbol for a function, method or class names another definition than
+  the token it sits on, the oracle has no answer there. Forward the site is unaligned, missing it is
+  skipped (counted in the waterfall), and on the function-pair track the reference no longer makes a
+  subject pair an oracle disagreement. scip-python 0.6.8 resolves names a package re-exports with
+  `from ._m import *` to another definition of the module: in held-out httpx `httpx.Response` ->
+  `Request#`, `httpx.MockTransport` -> `ASGITransport#` (595 call sites), which v1.0 scored as the
+  subjects' wrong targets. Prompted by the first held-out run; on dev it touches no scored unit (the
+  57 mismatches in requests and click are standard-library targets). Self-tests `py-star-import`,
+  `py-star-import-missing`. Results under v1.0 keep that label.
 - `replay` prints `unfiled` for a fixture with no upstream issue (`issue` null or 0), as `bench/triage.mjs`
   does, and sizes the name column to the longest fixture name.
 - `lib/` is TypeScript: every `lib/**/*.mjs` is now `.ts`, run by Node's type stripping with no build

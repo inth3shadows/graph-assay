@@ -5,7 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { CTOR, defName, rangeOf } from './symbols.ts';
+import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -158,9 +158,38 @@ export function createContext(opts: Options) {
   const inTarget = (d, e, name, sym) => d && (!on('callee-name') || sameCallee(e, name, sym))
     && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || (name === e.tname && x.line >= e.tstart - 2)));
 
+  // SPEC §5 `scip-name-mismatch`, Python: the oracle's symbol names another definition than the token
+  // it sits on, so it gives no answer there. scip-python 0.6.8 resolves a name a package re-exports
+  // with a star import to another definition of the module (`httpx.Response` -> `_models/Request#`).
+  // Not a mismatch: a constructor (`Base()` or `super().__init__` -> `Base#__init__().`), or a name
+  // the project binds to another (`from m import A as B`, `B = A`). Go and TS/JS names legitimately
+  // differ from their symbols (scip-typescript's `<get>x`, a default export), so the rule is Python's.
+  let aliases: Set<string> | null = null;
+  const aliased = (name: string, token: string) => {
+    if (!aliases) {
+      aliases = new Set();
+      for (const doc of index.documents) {
+        const t = fileText(doc.relative_path);
+        for (const m of t.matchAll(/\b([A-Za-z_]\w*)\s+as\s+([A-Za-z_]\w*)\b/g)) aliases.add(`${m[1]} ${m[2]}`);
+        for (const m of t.matchAll(/^[ \t]*([A-Za-z_]\w*)\s*=\s*(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\s*$/gm)) aliases.add(`${m[2]} ${m[1]}`);
+      }
+    }
+    return aliases.has(`${name} ${token}`);
+  };
+  const nameMismatch = (token: string, symbol: string) => {
+    if (!PY || !on('scip-name-mismatch') || !symbol || symbol.includes('local ')) return false;
+    const s = unctor(symbol);
+    // A module symbol is an unresolved import, not a misresolved name (`noise:scip-unresolved-module`).
+    if (!['method', 'term', 'type'].includes(scipKind(s))) return false;
+    let n = defName(s);
+    if (!n || n === token) return false;
+    if (CTOR.has(n)) { if (CTOR.has(token)) return false; n = defName(s.replace(/[^#]+$/, '')) ?? n; }
+    return n !== token && !aliased(n, token);
+  };
+
   return {
     opts, on, index, snap, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding,
-    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget,
+    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch,
   };
 }
 

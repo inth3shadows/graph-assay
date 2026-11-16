@@ -42,6 +42,7 @@ export const MEANING = {
   'no-scip-ref': 'SCIP has no reference at this call (unaligned, not scored)',
   'outside-scip': 'the file is outside the SCIP index (unaligned, not scored)',
   'scip-local-undefined': 'SCIP names a local it never defines: no answer (unaligned, not scored)',
+  'scip-name-mismatch': 'SCIP\'s symbol names another definition than the token it sits on: no answer (unaligned, not scored)',
   noise: 'a known SCIP quirk (the rule is in the key), counted as mismatch in strict and left out in tolerant',
   found: 'missing-edge mode: the subject has a located edge to SCIP\'s definition here',
   'found-other-line': 'missing-edge mode: the subject has the edge within 3 lines of the site (tolerant only)',

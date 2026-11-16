@@ -67,7 +67,7 @@ try {
   const { oracleRules } = await import('./test/rules.ts');
   check('--mutate rules come from the modules the oracle imports', JSON.stringify(oracleRules(path.join(tmp, 'oracle.ts'))) === '["rule-a","rule-b"]');
   const real = oracleRules(path.join(here, 'oracle.ts'));
-  check('the real oracle has 22 rules, corpus-exclude and skip-framework-self-site among them', real.length === 22 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
+  check('the real oracle has 23 rules, corpus-exclude and skip-framework-self-site among them', real.length === 23 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
 } catch (e) {
   check(`--mutate rule discovery (${e?.message})`, false);
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
