@@ -5,7 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { CTOR, defName, rangeOf, scipKind } from './symbols.ts';
+import { CTOR, defName, rangeOf, scipKind, segs } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -192,9 +192,51 @@ export function createContext(opts: Options) {
     return !!n && n !== token && !aliased(n, token);
   };
 
+  // SPEC §5 `skip-composite-literal`, Go: a composite literal (`T{...}`, `&T{...}`, `pkg.T{...}`,
+  // `G[map[K]V]{...}`, and of a slice, array or map type `[]T{...}`) builds a value; it is not a call,
+  // as a conversion `T(x)` is not (`skip-type-without-new`). The edge must target a type, and the SCIP
+  // reference it sits on (nearest its column where the columns compare, as forward.ts picks) must be a
+  // type followed by `{` after any type arguments, and not a function's result type (`func f() T {`).
+  // scip-go writes UTF-8 byte columns, so a non-ASCII line's offsets are converted before slicing.
+  const typeArgsEnd = (text: string, i: number) => {
+    let depth = 0;
+    for (let k = i; k < text.length; k++) {
+      if (text[k] === '[') depth++;
+      else if (text[k] === ']' && --depth === 0) return k + 1;
+    }
+    return -1;
+  };
+  const literalAfter = (text: string, i: number) => {
+    let k = i;
+    while (/\s/.test(text[k] ?? '')) k++;
+    if (text[k] === '[') { k = typeArgsEnd(text, k); if (k < 0) return false; while (/\s/.test(text[k] ?? '')) k++; }
+    return text[k] === '{';
+  };
+  // `func f() T {`, or the closing `) T {` line of a signature written over several lines.
+  const resultType = (before: string) => /\bfunc\b[^{]*\)[\s\w.*[\]]*$/.test(before) || /^\s*\)[\s\w.*[\]]*$/.test(before);
+  const compositeLiteral = (e: { kind?: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string }) => {
+    if (opts.lang !== 'go' || !on('skip-composite-literal') || e.line == null) return false;
+    // An `instantiates` edge to a type: a `calls` edge is a call even where a literal sits on the line.
+    if (e.kind !== 'instantiates' || e.tkind === 'function' || e.tkind === 'method') return false;
+    const parts = segs(e.ref ?? e.tname);
+    const name = parts[parts.length - 1];
+    const text = lineOf(e.sfile, e.line);
+    const ascii = /^[\x00-\x7f]*$/.test(text);
+    const utf8 = docEncoding.get(e.sfile) === 'utf8';
+    const bytes = utf8 && !ascii ? Buffer.from(text, 'utf8') : null;
+    const at = (n: number) => (bytes ? bytes.subarray(0, n).toString('utf8').length : n);
+    let refs = (refsAt.get(`${e.sfile}:${e.line}`) ?? []).map((r) => ({ ...r, s: at(r.start), t: at(r.end) }))
+      .filter((r) => text.slice(r.s, r.t) === name);
+    if (e.col != null && refs.length > 1 && (subjectEncoding === docEncoding.get(e.sfile) || ascii)) {
+      refs = [refs.sort((x, y) => Math.abs(x.start - e.col) - Math.abs(y.start - e.col))[0]];
+    }
+    return refs.some((r) => scipKind(r.symbol) === 'type' && literalAfter(text, r.t)
+      && !resultType(text.slice(0, r.s).replace(/[\w]+\.\s*$/, '')));
+  };
+
   return {
     opts, on, index, snap, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding,
-    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch,
+    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch, compositeLiteral,
   };
 }
 

@@ -1,0 +1,48 @@
+{
+ "lang": "go",
+ "mode": "missing",
+ "inputs": "go-composite-literal",
+ "note": "Pairs of go-composite-literal: a Go composite literal makes no pair (rule skip-composite-literal), so a caller -> literal type pair is neither subject-only nor an oracle disagreement. The method call s.Options(Options{...}) keeps its pair; only the literal on that line is skipped.",
+ "expect": [],
+ "pairs": {
+  "matched": [
+   "controls -> NewPt",
+   "controls -> NewT",
+   "controls -> Norm",
+   "controls -> Size",
+   "collisions -> Options"
+  ],
+  "subject": [
+   "!literals -> T",
+   "!literals -> Pt",
+   "!NewT -> T",
+   "!NewPt -> Pt",
+   "!mk -> T",
+   "!mk2 -> T",
+   "!unicode -> T",
+   "!long -> T"
+  ],
+  "disagrees": [
+   "!literals -> T",
+   "!literals -> Pt",
+   "!NewT -> T",
+   "!NewPt -> Pt",
+   "!mk -> T",
+   "!mk2 -> T",
+   "!unicode -> T",
+   "!long -> T"
+  ]
+ },
+ "pairCounts": {
+  "oracle": 5,
+  "subject": 5,
+  "matched": 5,
+  "subjectOnly": {
+   "oracleDisagrees": 0,
+   "oracleSilent": 0
+  },
+  "skippedEdges": {
+   "skip-composite-literal": 10
+  }
+ }
+}

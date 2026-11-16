@@ -62,6 +62,37 @@ check('a rule switched off through Options changes only its own verdict',
   check('scip-name-mismatch: a module variable is not a function, method or class (F4)', !ctx.nameMismatch('other', `${project('_models')}\`/__all__.`));
 }
 
+// #57 review: skip-composite-literal skips only the literal the edge sits on (real scip-go lines in
+// go-composite-literal/main.go), never a same-named call (G1) or a function's result type (G2), and
+// recognises nested type arguments (G3) and slice literals.
+{
+  const { ctx } = run('go-composite-literal');
+  const at = (line: number, tname: string, extra = {}) => ctx.compositeLiteral({ kind: 'instantiates', sfile: 'main.go', line, tname, tkind: 'struct', ...extra });
+  check('skip-composite-literal: a method call named like a literal type on its line is kept (G1)', !at(42, 'Options', { tkind: 'method', ref: 's.Options' }) && at(42, 'Options'));
+  check('skip-composite-literal: a function\'s result type is not a literal (G2)', !at(47, 'T') && !at(45, 'T', { col: 10 }) && at(45, 'T', { col: 21 }));
+  // Round 2: a `calls` edge resolved to a same-named type (code-graph-rag leaves `ref` null) is a call,
+  // and a multi-line signature's closing `) T {` is a result type.
+  check('skip-composite-literal: a calls edge is never a literal, even to a type (round 2)', !at(42, 'Options', { kind: 'calls', tkind: 'class' }));
+  check('skip-composite-literal: a multi-line signature\'s `) T {` is a result type (round 2)', !at(64, 'T') && at(65, 'T'));
+  check('skip-composite-literal: nested type arguments and slice literals are literals (G3)', at(52, 'G') && at(53, 'T'));
+  check('skip-composite-literal: a non-ASCII line is read in scip-go\'s byte columns (G4)', at(59, 'T'));
+}
+// G6: a guessed literal edge is counted as guessed on the pair track, as on the call-site track, not as
+// skip-composite-literal.
+{
+  const dir = path.join(here, 'test', 'go-composite-literal');
+  const snap = JSON.parse(fs.readFileSync(path.join(dir, 'snapshot.json'), 'utf8'));
+  const lit = snap.edges.find((e) => e.kind === 'instantiates' && e.line === 59);
+  lit.provenance = 'heuristic';
+  const tmpSnap = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-guess-')), 'snapshot.json');
+  fs.writeFileSync(tmpSnap, JSON.stringify(snap));
+  const ctx = createContext({ repo: dir, scipFile: path.join(dir, 'index.scip.json'), lang: 'go', missing: true, redact: false, allSites: false,
+    show: 0, disabled: new Set(), exclude: '', snapshot: tmpSnap });
+  const pairs = (missing(ctx).extra as { pairs: { skippedEdges: Record<string, number> } }).pairs;
+  check('skip-composite-literal: a guessed literal edge counts as guessed on the pair track (G6)', pairs.skippedEdges['skip-composite-literal'] === 9);
+  fs.rmSync(path.dirname(tmpSnap), { recursive: true, force: true });
+}
+
 // F5 (#30 review): an unknown language is refused in-process too, not read as TS/JS.
 const tsOpts = (lang: string): Options => ({ repo: path.join(here, 'test', 'ts-forward'), scipFile: path.join(here, 'test', 'ts-forward', 'index.scip.json'), lang,
   missing: false, redact: false, allSites: false, show: 0, disabled: new Set(), exclude: '', snapshot: path.join(here, 'test', 'ts-forward', 'snapshot.json') });
@@ -79,7 +110,7 @@ try {
   const { oracleRules } = await import('./test/rules.ts');
   check('--mutate rules come from the modules the oracle imports', JSON.stringify(oracleRules(path.join(tmp, 'oracle.ts'))) === '["rule-a","rule-b"]');
   const real = oracleRules(path.join(here, 'oracle.ts'));
-  check('the real oracle has 23 rules, corpus-exclude and skip-framework-self-site among them', real.length === 23 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
+  check('the real oracle has 24 rules, corpus-exclude and skip-framework-self-site among them', real.length === 24 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
 } catch (e) {
   check(`--mutate rule discovery (${e?.message})`, false);
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
