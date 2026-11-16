@@ -38,8 +38,8 @@ import { SUBJECT_NAMES, TAG, workSuffix, parseSubjects } from '../lib/subjects/n
 import { recordedAdapterHash } from '../lib/provenance.ts';
 import { forward, missing, pairs } from '../lib/scores.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
-import { DIAGNOSTIC_FLOOR, MIN_STRATUM_LABELS, MIN_STRATUM_WEIGHT, diagnosticLanguages, noiseGate } from '../labels/score.ts';
-import { stratumCounts } from '../labels/strata.ts';
+import { DIAGNOSTIC_FLOOR, MIN_STRATUM_LABELS, MIN_STRATUM_WEIGHT, noiseGate } from '../labels/score.ts';
+import { stratumCounts, type StratumCount } from '../labels/strata.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
 
 const args = process.argv.slice(2);
@@ -117,18 +117,35 @@ if (canonical && result.otherSpec.length) { console.error(`canonical tables need
 result.averagedRepos = repos.map((r) => r.name).filter((n) => !notRun.has(n));
 // SPEC §9: a language whose oracle is too noisy to score against is diagnostic. Its repos are shown
 // per repo but left out of the T2 averages. The labelled sample's strata are weighted by their share of
-// this run's sites (labels/strata.ts, over the averaged repos and every chosen subject's outputs); see
-// labels/score.ts noiseGate for the rule. Without --noise nothing is excluded.
-const population: Record<string, Record<string, number>> = {};
+// this run's sites where SCIP answers (labels/score.ts noiseGate). The strata are counted as the sample
+// drew them: over codegraph's and code-graph-rag's per-site results, whatever --subjects picks, and
+// over the averaged repos where neither subject failed (a failed run's misses would all count as
+// scip-only). Without --noise nothing is excluded.
+const NOISE_SUBJECTS = ['codegraph', 'code-graph-rag'];
+const population: Record<string, Record<string, StratumCount>> = {};
+result.noisePopulationRepos = [];
 if (noiseFile) {
   for (const r of repos.filter((x) => !notRun.has(x.name))) {
-    const counts = stratumCounts(Object.values<any>(SUBJECTS).map(({ sfx }) => { const w = workDir(r.name, sfx); return { fwd: readJson(path.join(w, 'out.json')), miss: readJson(path.join(w, 'out-missing.json')) }; }));
+    const outputs = NOISE_SUBJECTS.map((s) => {
+      const w = workDir(r.name, workSuffix(s));
+      if (!w) { console.error(`the noise gate counts strata over ${NOISE_SUBJECTS.join(' and ')} (the sample's subjects); ${r.name} has no ${s} run`); process.exit(2); }
+      const o = { fwd: readJson(path.join(w, 'out.json')), miss: readJson(path.join(w, 'out-missing.json')) };
+      if (!o.fwd.subjectFailed && !o.miss.subjectFailed && (!Array.isArray(o.fwd.sites) || !Array.isArray(o.miss.sites))) {
+        console.error(`the noise gate needs per-site records (oracle run with ORACLE_ALLSITES=1, not redacted): ${w} has none`); process.exit(2);
+      }
+      return o;
+    });
+    if (outputs.some((o) => o.fwd.subjectFailed || o.miss.subjectFailed)) continue;
+    result.noisePopulationRepos.push(r.name);
     const pop = (population[r.language] ??= {});
-    for (const [k, n] of Object.entries(counts)) pop[k] = (pop[k] ?? 0) + n;
+    for (const [k, c] of Object.entries(stratumCounts(outputs))) { pop[k] ??= { sites: 0, answered: 0 }; pop[k].sites += c.sites; pop[k].answered += c.answered; }
   }
+  // A tabled language whose every repo had a failed subject has no population: it is gated as having no sites.
+  for (const r of repos.filter((x) => !notRun.has(x.name))) population[r.language] ??= {};
 }
 const noiseTable = noiseFile ? readJson(noiseFile).table : null;
-const diagnostic = noiseTable ? diagnosticLanguages(noiseTable, population) : new Map();
+const gates = noiseTable ? Object.fromEntries(Object.entries(population).map(([l, p]) => [l, noiseGate(noiseTable[l], p)])) : {};
+const diagnostic = new Map(Object.entries(gates).filter(([, g]) => g.diagnostic));
 if (subjectsOpt === null && notRun.size) {
   const short = Object.keys(SUBJECTS).filter((s) => repos.some((r) => !workDir(r.name, workSuffix(s))));
   console.error(`tables: ${short.join(', ')} ran on fewer repos; every subject's averages cover only ${result.averagedRepos.join(', ') || 'none'} (SPEC §8). Pass --subjects to choose.`);
@@ -152,7 +169,7 @@ for (const v of Object.values<any>(result.subjects)) {
 }
 result.repos = repos.map((r) => r.name);
 result.diagnostic = Object.fromEntries(diagnostic);
-result.noiseGate = noiseTable ? Object.fromEntries(Object.entries(population).map(([l, p]) => [l, noiseGate(noiseTable[l], p)])) : null;
+result.noiseGate = noiseTable ? gates : null;
 
 const md = [`# Benchmark tables v1 — corpus ${result.corpus}, split \`${split}\``, '',
   'Edge tiers lead (decision 2026-11-05); T0 question accuracy is experimental and not shown here. Both T2 tracks (SPEC §3), side by side, never combined.',
@@ -166,7 +183,7 @@ for (const [s, { agg }] of Object.entries<any>(result.subjects)) {
   const g = (k, m) => `${pct(agg[k][m])}${ci(agg[k][`${m}CI`])}`;
   md.push(`| ${s} | ${g('precision strict', 'macro')} | ${g('precision strict', 'micro')} | ${g('precision tolerant', 'macro')} | ${g('recall strict', 'macro')} | ${g('recall strict', 'micro')} | ${g('recall tolerant', 'macro')} |`);
 }
-const diagNote = [...diagnostic].map(([l, d]) => `${l} (${!d.labelled ? 'no labelled sample' : d.unmeasured.length
+const diagNote = [...diagnostic].map(([l, d]) => `${l} (${!d.labelled ? 'no labelled sample' : d.estimate == null ? 'no run sites where SCIP answers in a labelled stratum' : d.unmeasured.length
   ? `unmeasured: ${d.unmeasured.map((s) => `${s} carries ${pct(d.strata[s].weight)} of the weight with ${d.strata[s].answered} labelled answers`).join('; ')}`
   : `SCIP right where it answers, stratum-weighted ${pct(d.estimate)}, 95% lower bound ${pct(d.lower)}`})`).join(', ');
 const zeroNotes = Object.entries<any>(result.subjects).flatMap(([s, v]) => Object.entries<any>(v.agg).filter(([, a]) => a.zeroDenominator.length).map(([k, a]) => `${s} ${k}: ${a.zeroDenominator.join(', ')}`));

@@ -20,17 +20,27 @@ export function stratumOf(fwd: string[], miss: string[], subjects: number): Stra
   return fwd.length === subjects && fwd.every((k) => k.startsWith('ok')) ? 'agree' : null;
 }
 
-/** Sites per stratum in one repository, from each subject's oracle outputs (out.json, out-missing.json
- * written with ORACLE_ALLSITES, as oracle/run.sh always does). */
+export interface StratumCount { sites: number; answered: number }
+/** Sites per stratum in one repository, and how many of them SCIP answers (a SCIP symbol, unless the
+ * oracle found it a local SCIP never defines, `scip-local-undefined`, as the sampler's `none`), from
+ * each subject's oracle outputs (out.json, out-missing.json written with ORACLE_ALLSITES, as
+ * oracle/run.sh always does). */
 export function stratumCounts(outputs: { fwd: { sites?: any[] }; miss: { sites?: any[] } }[]) {
   // One key per subject and unit (the last site record wins, as in the sampler).
-  const units = new Map<string, { fwd: Record<number, string>; miss: Record<number, string> }>();
-  const unit = (s) => { const k = `${s.site}|${s.name}`; if (!units.has(k)) units.set(k, { fwd: {}, miss: {} }); return units.get(k); };
+  const units = new Map<string, { fwd: Record<number, string>; miss: Record<number, string>; scip: boolean }>();
+  const unit = (s) => { const k = `${s.site}|${s.name}`; if (!units.has(k)) units.set(k, { fwd: {}, miss: {}, scip: false }); const u = units.get(k); if (s.scip) u.scip = true; return u; };
   outputs.forEach((o, i) => {
     for (const s of o.fwd.sites ?? []) unit(s).fwd[i] = s.key;
     for (const s of o.miss.sites ?? []) unit(s).miss[i] = s.key;
   });
-  const counts: Partial<Record<Stratum, number>> = {};
-  for (const u of units.values()) { const s = stratumOf(Object.values(u.fwd), Object.values(u.miss), outputs.length); if (s) counts[s] = (counts[s] ?? 0) + 1; }
+  const counts: Partial<Record<Stratum, StratumCount>> = {};
+  for (const u of units.values()) {
+    const fwd = Object.values(u.fwd); const miss = Object.values(u.miss);
+    const s = stratumOf(fwd, miss, outputs.length);
+    if (!s) continue;
+    const c = (counts[s] ??= { sites: 0, answered: 0 });
+    c.sites++;
+    if (u.scip && ![...fwd, ...miss].some((k) => k.startsWith('scip-local-undefined'))) c.answered++;
+  }
   return counts;
 }

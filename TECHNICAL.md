@@ -471,7 +471,9 @@ the noise rates (including the two candidates not used, Kimi and GLM).
 **Diagnostic languages:** a language whose oracle is too noisy to score against is diagnostic: its
 repos are shown per repo, marked, and left out of the T2 averages. The rule is mechanical: each
 stratum of the labelled sample where SCIP answers is weighted by its share of the tabled run's sites
-(`labels/strata.ts` counts them from every subject's per-site results), and the language is
+where SCIP answers (`labels/strata.ts` counts them from codegraph's and code-graph-rag's per-site
+results, leaving out repos with a failed subject; tables without per-site results are refused), and
+the language is
 diagnostic when the 95% lower bound of the weighted "SCIP right where it answers" is under 80%, or a
 stratum with at least 5% of the weight has under 20 labelled answers (`labels/score.ts` `noiseGate`,
 `diagnosticLanguages`). The tables list each language's weights, rate and bound. A rule change that lifts a language back needs a fresh
@@ -485,7 +487,14 @@ where no subject should link. The oracle now skips those sites in missing-edge m
 an unrelated same-named function is a real error). Fresh sample v3 (express, seed 2, no v2 site):
 SCIP right 25/25 where it answers, lower bound 87%, so JavaScript is scored again. Those 25 are all
 `agree` sites: the sample has no JavaScript site where SCIP answers and a subject disagrees, so it
-says little about SCIP on wrong-target sites. Python 89%, Go 92%, TypeScript 86%.
+says little about SCIP on wrong-target sites. Python 89%, Go 92%, TypeScript 86% (pooled lower
+bounds, SPEC v4.0 and earlier).
+
+SPEC v5.0 (#2) gates on the strata weighted by the tabled run's sites instead. On the v3.0 canonical
+outputs TypeScript becomes diagnostic on both splits: its disagree and scip-only strata each carry
+about a quarter of the weight with 2 and 9 labelled answers. Python, Go and JavaScript stay scored
+(JavaScript's disagree sites where SCIP answers are under 5% of its weight, so the 25 agree labels
+stand for it).
 
 ### Adapter provenance, canonical runs and determinism
 

@@ -77,9 +77,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 - **SPEC v5.0** (major: it moves published numbers). The diagnostic-language gate (§9) weights the
-  labelled sample's strata by their share of the tabled run's sites instead of pooling the sample,
-  whose quotas over-represent disagreements by design; a stratum carrying at least 5% of the weight
-  with fewer than 20 labelled answers makes the language diagnostic. TypeScript becomes diagnostic
+  labelled sample's strata by their share of the tabled run's sites where SCIP answers instead of
+  pooling the sample, whose quotas over-represent disagreements by design; the bound is a stratified
+  Agresti-Coull interval, and a stratum carrying at least 5% of the weight with fewer than 20
+  labelled answers makes the language diagnostic. The strata are counted over both canonical
+  subjects, leaving out repos with a failed subject; tables without per-site results are refused. TypeScript becomes diagnostic
   on both splits: 2 labelled disagreements and 9 labelled oracle-only sites stand for about a quarter
   of the sites each. The strata rule moves to `labels/strata.ts`, shared by the sampler and the
   tables, which report each language's weights, weighted rate and bound. Issue #2.
