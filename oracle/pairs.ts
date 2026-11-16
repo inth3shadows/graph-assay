@@ -19,7 +19,7 @@ import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
 export interface Unit { file: string; line: number; sym: string; decorator?: boolean }
 
 export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
-  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges } = ctx;
+  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch } = ctx;
   const ALLSITES = ctx.opts.allSites;
   const name = (sym) => {
     let n = defName(sym);
@@ -102,8 +102,9 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
   const refNames = new Map();
   for (const [k, list] of refsAt) {
     const i = k.lastIndexOf(':'); const file = k.slice(0, i); const line = Number(k.slice(i + 1)); const text = lineOf(file, line);
-    // A local the oracle never defines is no answer (forward `scip-local-undefined`, SPEC §5).
-    for (const r of list) if (!r.symbol.includes('#local ') || defs.has(r.symbol)) (refNames.get(file) ?? refNames.set(file, []).get(file)).push({ line, name: text.slice(r.start, r.end) });
+    // A local the oracle never defines is no answer (forward `scip-local-undefined`, SPEC §5), nor is a
+    // symbol named otherwise than its token (`scip-name-mismatch`).
+    for (const r of list) if ((!r.symbol.includes('#local ') || defs.has(r.symbol)) && !nameMismatch(text.slice(r.start, r.end), r.symbol)) (refNames.get(file) ?? refNames.set(file, []).get(file)).push({ line, name: text.slice(r.start, r.end) });
   }
   const rangesOf = new Map();
   for (const [file, list] of containers) for (const c of list) (rangesOf.get(c.sym) ?? rangesOf.set(c.sym, []).get(c.sym)).push({ file, s: c.s, e: c.e });

@@ -1,7 +1,7 @@
 // Shared T2 bucket mapping for benchmark tables and build-vs-build effect-size gating.
 const STRICT_OK = /^(ok|ok-overload-set)\|/; const TOL_OK = /^(ok-other-column|local-module-alias)\|/;
 const MISMATCH = /^(wrong-target|external|local-shadow|cross-file-unimported|receiver-fallback)\|/;
-const NOISE = /^noise:/; const UNALIGNED = /^(no-scip-ref|outside-scip|scip-local-undefined)/;
+const NOISE = /^noise:/; const UNALIGNED = /^(no-scip-ref|outside-scip|scip-local-undefined|scip-name-mismatch)/;
 
 /** Verdict counts keyed `verdict|...` (oracle out-forward.json / out-missing.json `buckets`). */
 type Buckets = Record<string, number>;

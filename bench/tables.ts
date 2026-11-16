@@ -21,7 +21,8 @@
 //   mismatch  wrong-target, external, local-shadow, cross-file-unimported, receiver-fallback;
 //             noise:* counts as mismatch in strict and is left out in tolerant
 //   unaligned no-scip-ref, outside-scip, scip-local-undefined (SCIP names a local it never defines:
-//             the oracle has no answer, e.g. CommonJS require under an inferred tsconfig); not scored
+//             the oracle has no answer, e.g. CommonJS require under an inferred tsconfig), scip-name-mismatch
+//             (Python: SCIP's symbol names another definition than its token); not scored
 // T2 call-site, missing (recall over SCIP-resolved call sites): found; tolerant adds found-other-line.
 //   found-heuristic-only (the subject's only edge there is a guess) is reported, never counted.
 // T2 function-pair (SPEC §3, out-missing.json `pairs`): matched (caller, callee) pairs over the oracle's

@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 export function forward(ctx: Context): Tally {
   const { on, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding, fileText, lineOf, LANGS, PY,
-    CALL_KINDS, excluded, skip, allSites, inTarget } = ctx;
+    CALL_KINDS, excluded, skip, allSites, inTarget, nameMismatch } = ctx;
   const ALLSITES = ctx.opts.allSites;
   for (const e of allEdges) {
     if (!CALL_KINDS.has(e.kind) || !LANGS.has(e.slang)) continue;
@@ -75,7 +75,9 @@ export function forward(ctx: Context): Tally {
       const r = cands[0];
       scip = unctor(r.symbol);
       const d = defs.get(scip) ?? defs.get(r.symbol);
-      if (inTarget(d, t, want, scip)) verdict = 'ok';
+      // SPEC §5: the oracle's symbol names another definition than the token it sits on: no answer.
+      if (nameMismatch(text.slice(r.start, r.end), r.symbol)) verdict = 'scip-name-mismatch';
+      else if (inTarget(d, t, want, scip)) verdict = 'ok';
       else if (on('receiver-fallback') && receiverFallback) verdict = 'receiver-fallback';
       else if (!d) verdict = r.symbol.includes('#local ') ? 'scip-local-undefined' : 'external';
       else if (r.symbol.includes('#local ')) {
@@ -85,8 +87,8 @@ export function forward(ctx: Context): Tally {
         const bound = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => lineOf(d[0].file, d[0].line + k)).join(' ');
         verdict = on('local-module-alias') && /^[^;]*\b(import|require)\(/.test(bound) ? 'local-module-alias' : 'local-shadow';
       } else verdict = 'wrong-target';
-      // SPEC §5: `scip-local-undefined` is unaligned (no oracle answer), so no refinement applies.
-      if (verdict !== 'ok' && verdict !== 'receiver-fallback' && verdict !== 'local-module-alias' && verdict !== 'scip-local-undefined') {
+      // SPEC §5: `scip-local-undefined` and `scip-name-mismatch` are unaligned (no oracle answer), so no refinement applies.
+      if (verdict !== 'ok' && verdict !== 'receiver-fallback' && verdict !== 'local-module-alias' && verdict !== 'scip-local-undefined' && verdict !== 'scip-name-mismatch') {
         if (on('ok-other-column') && cands.slice(1).some((c) => inTarget(defs.get(unctor(c.symbol)) ?? defs.get(c.symbol), e, member, unctor(c.symbol)))) verdict = 'ok-other-column';
         // SPEC §4 overload set, Python: scip-python defines an `@overload`ed function at its first stub;
         // a subject may keep only the implementation. Same file, same name, every SCIP definition an

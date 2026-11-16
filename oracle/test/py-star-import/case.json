@@ -1,0 +1,47 @@
+{
+ "lang": "python",
+ "mode": "forward",
+ "note": "scip-python 0.6.8 resolves a name re-exported by a star import to another definition (pkg.Headers -> Response#, pkg.build -> Response#, as httpx.Response -> Request#). The oracle's symbol names something other than the token it sits on, so it gives no answer there (rule scip-name-mismatch). Controls: a correctly resolved re-export, an `import ... as` alias, a plain import. A name renamed twice (`RealCls as Chain1`, then `Chain1 as Chain2`) is still an alias.",
+ "expect": [
+  {
+   "at": "main.py:8",
+   "name": "Headers",
+   "key": "scip-name-mismatch"
+  },
+  {
+   "at": "main.py:10",
+   "name": "build",
+   "key": "scip-name-mismatch"
+  },
+  {
+   "at": "main.py:7",
+   "name": "Response",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "main.py:9",
+   "name": "MockTransport",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "main.py:14",
+   "name": "Reply",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "main.py:14",
+   "name": "Request",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "main.py:25",
+   "name": "Chain1",
+   "key": "ok|instantiates"
+  },
+  {
+   "at": "main.py:25",
+   "name": "Chain2",
+   "key": "ok|instantiates"
+  }
+ ]
+}

@@ -50,6 +50,18 @@ check('a rule switched off through Options changes only its own verdict',
   && !keyAt(off.ctx.allSites, 'api.ts:10', 'buildMember').startsWith('noise:')
   && on.ctx.allSites.length === off.ctx.allSites.length && rest(on.ctx.allSites) === rest(off.ctx.allSites));
 
+// #55 review: scip-name-mismatch fires only on an identifier whose project symbol names another
+// definition, never on a library symbol (F2), an import clause's span (F7) or a chain of renames (F1).
+{
+  const { ctx } = run('py-star-import');
+  const project = (d) => `scip-python python repo 0 \`pkg.${d}`;
+  check('scip-name-mismatch: a project symbol named otherwise than its identifier is a mismatch', ctx.nameMismatch('Headers', `${project('_models')}\`/Response#`));
+  check('scip-name-mismatch: a library symbol is never a mismatch (F2)', !ctx.nameMismatch('exists', 'scip-python python python-stdlib 3.11 posixpath/abspath().'));
+  check('scip-name-mismatch: an import clause\'s span is not an identifier (F7)', !ctx.nameMismatch('Response as Reply', `${project('_models')}\`/Response#`));
+  check('scip-name-mismatch: a name renamed twice is an alias (F1)', !ctx.nameMismatch('Chain2', `${project('_impl')}\`/RealCls#`));
+  check('scip-name-mismatch: a module variable is not a function, method or class (F4)', !ctx.nameMismatch('other', `${project('_models')}\`/__all__.`));
+}
+
 // F5 (#30 review): an unknown language is refused in-process too, not read as TS/JS.
 const tsOpts = (lang: string): Options => ({ repo: path.join(here, 'test', 'ts-forward'), scipFile: path.join(here, 'test', 'ts-forward', 'index.scip.json'), lang,
   missing: false, redact: false, allSites: false, show: 0, disabled: new Set(), exclude: '', snapshot: path.join(here, 'test', 'ts-forward', 'snapshot.json') });
@@ -67,7 +79,7 @@ try {
   const { oracleRules } = await import('./test/rules.ts');
   check('--mutate rules come from the modules the oracle imports', JSON.stringify(oracleRules(path.join(tmp, 'oracle.ts'))) === '["rule-a","rule-b"]');
   const real = oracleRules(path.join(here, 'oracle.ts'));
-  check('the real oracle has 22 rules, corpus-exclude and skip-framework-self-site among them', real.length === 22 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
+  check('the real oracle has 23 rules, corpus-exclude and skip-framework-self-site among them', real.length === 23 && real.includes('corpus-exclude') && real.includes('skip-framework-self-site'));
 } catch (e) {
   check(`--mutate rule discovery (${e?.message})`, false);
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

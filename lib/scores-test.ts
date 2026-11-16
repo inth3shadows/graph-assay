@@ -24,9 +24,9 @@ check('shared mapping preserves strict, tolerant, unaligned, noise and skipped c
   const f = forward({ buckets: { ok: 10, 'ok-overload-set|calls': 2, 'ok-other-column|calls': 3,
     'local-module-alias|calls': 4, 'wrong-target|calls': 5, 'external|calls': 6, 'local-shadow|calls': 7,
     'cross-file-unimported|calls': 8, 'receiver-fallback|calls': 9, 'noise:scip|calls': 10,
-    'no-scip-ref|calls': 11, 'outside-scip': 12, 'scip-local-undefined|calls': 13 }, skipped: { guessed: 15 } });
+    'no-scip-ref|calls': 11, 'outside-scip': 12, 'scip-local-undefined|calls': 13, 'scip-name-mismatch|calls': 14 }, skipped: { guessed: 15 } });
   assert.deepEqual(f.strict, [12, 64]); assert.deepEqual(f.tolerant, [19, 54]);
-  assert.equal(f.unaligned, 36); assert.equal(f.skipped, 15);
+  assert.equal(f.unaligned, 50); assert.equal(f.skipped, 15);
   assert.throws(() => forward({ buckets: { 'unknown|calls': 1 } }), /unknown forward verdict/);
   assert.throws(() => missing({ buckets: { 'missing|mystery|ts': 1 } }), /unknown missing-edge verdict/);
   const cols = missing({ buckets: { 'missing|found|ts|method@decl>method': 2, 'missing|no-ref|ts|method@decl': 1, 'missing|found|ts|method': 5 },

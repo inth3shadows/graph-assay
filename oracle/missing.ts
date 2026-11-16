@@ -22,7 +22,7 @@ import type { Tally } from './report.ts';
 import { rangeOf, reLit, scipKind, unctor } from './symbols.ts';
 
 export function missing(ctx: Context): Tally {
-  const { on, index, snap, allEdges, defs, fileText, lineOf, LANGS, PY, CALL_KINDS, excluded, skip, allSites, inTarget } = ctx;
+  const { on, index, snap, allEdges, defs, fileText, lineOf, LANGS, PY, CALL_KINDS, excluded, skip, allSites, inTarget, nameMismatch } = ctx;
   const ALLSITES = ctx.opts.allSites;
   const nodesByFile = new Map();
   for (const n of snap.nodes) {
@@ -111,6 +111,9 @@ export function missing(ctx: Context): Tally {
       };
       if (on('skip-module-member-alias') && !PY && d.every(memberAlias) && skipUnit('skip-module-member-alias')) continue;
       if ((excluded(file) || d.every((x) => excluded(x.file))) && skipUnit('corpus-exclude')) continue;
+      // SPEC §5: the oracle's symbol names another definition than the token (`httpx.Response` -> `Request#`):
+      // the oracle has no answer for this call, so it is no unit of either track.
+      if (nameMismatch(name, o.symbol) && skipUnit('scip-name-mismatch')) continue;
       if (!decorator) considered++;
       units.push({ file, line, start, sym, kind, d, name, text, decorator });
     }
