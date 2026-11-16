@@ -5,7 +5,7 @@
 import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { CTOR, defName, rangeOf, scipKind, segs } from './symbols.ts';
+import { CTOR, defName, rangeOf, reLit, scipKind, segs } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -193,11 +193,13 @@ export function createContext(opts: Options) {
   };
 
   // SPEC §5 `skip-composite-literal`, Go: a composite literal (`T{...}`, `&T{...}`, `pkg.T{...}`,
-  // `G[map[K]V]{...}`, and of a slice, array or map type `[]T{...}`) builds a value; it is not a call,
-  // as a conversion `T(x)` is not (`skip-type-without-new`). The edge must target a type, and the SCIP
-  // reference it sits on (nearest its column where the columns compare, as forward.ts picks) must be a
-  // type followed by `{` after any type arguments, and not a function's result type (`func f() T {`).
-  // scip-go writes UTF-8 byte columns, so a non-ASCII line's offsets are converted before slicing.
+  // `G[map[K]V]{...}`, and of a slice, array or map type: `[]T{...}`, `map[T]V{...}`) builds a value; it
+  // is not a call, as a conversion `T(x)` is not (`skip-type-without-new`). The edge must be an
+  // `instantiates` edge to a type, and the SCIP reference it sits on (nearest its column where the
+  // columns compare, as forward.ts picks) must be a type (or a function-local type) whose type
+  // expression reaches `{`. A reference in a function's signature is not a literal: inside the caller,
+  // no `{` is open yet before it (`func f(\n\ta int,\n) T {`), or it follows a closure's `func (...)`
+  // on its line. scip-go writes UTF-8 byte columns, so a non-ASCII line's offsets are converted.
   const typeArgsEnd = (text: string, i: number) => {
     let depth = 0;
     for (let k = i; k < text.length; k++) {
@@ -206,32 +208,68 @@ export function createContext(opts: Options) {
     }
     return -1;
   };
+  // From just after the type name, the rest of the literal's type (`]int`, `[K]`, `.Inner`, `*T`) to `{`.
   const literalAfter = (text: string, i: number) => {
-    let k = i;
-    while (/\s/.test(text[k] ?? '')) k++;
-    if (text[k] === '[') { k = typeArgsEnd(text, k); if (k < 0) return false; while (/\s/.test(text[k] ?? '')) k++; }
-    return text[k] === '{';
+    for (let k = i; k < text.length;) {
+      const c = text[k];
+      if (/\s/.test(c) || c === ']' || c === '*' || c === '.') { k++; continue; }
+      if (c === '[') { k = typeArgsEnd(text, k); if (k < 0) return false; continue; }
+      if (c === '{') return true;
+      const w = /^[\p{L}_][\p{L}\p{N}_]*/u.exec(text.slice(k));
+      if (!w || ['struct', 'interface', 'func'].includes(w[0])) return false;
+      k += w[0].length;
+    }
+    return false;
   };
-  // `func f() T {`, or the closing `) T {` line of a signature written over several lines.
-  const resultType = (before: string) => /\bfunc\b[^{]*\)[\s\w.*[\]]*$/.test(before) || /^\s*\)[\s\w.*[\]]*$/.test(before);
-  const compositeLiteral = (e: { kind?: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string }) => {
+  // A closure's result type on its own line (`f := func() T {`, `do(func() T {`), not a func element
+  // type (`[]func() T{...}` is a literal).
+  const closureResult = (before: string) => /(?:^|[^\]\w.])func\b[^{]*\)[\s\w.*[\]]*$/.test(before);
+  // Still in the caller's signature: from its first line to the reference, no `{` is left open
+  // (strings, runes and comments skipped; `interface{}` in a parameter closes again).
+  const inSignature = (e: { sfile: string; sstart?: number; skind?: string }, line: number, col: number) => {
+    if (e.skind !== 'function' && e.skind !== 'method') return false;
+    if (e.sstart == null || e.sstart > line) return false;
+    let depth = 0;
+    for (let l = e.sstart; l <= line; l++) {
+      const t = l === line ? lineOf(e.sfile, l).slice(0, col) : lineOf(e.sfile, l);
+      for (let k = 0; k < t.length; k++) {
+        const c = t[k];
+        if (c === '/' && t[k + 1] === '/') break;
+        if (c === '"' || c === '\'' || c === '`') { const q = c; k++; while (k < t.length && t[k] !== q) { if (t[k] === '\\' && q !== '`') k++; k++; } continue; }
+        if (c === '{') depth++;
+        else if (c === '}') depth--;
+      }
+    }
+    return depth <= 0;
+  };
+  const siteRefs = new Map<string, { start: number; end: number; symbol: string; s: number; t: number }[]>();
+  const refsOn = (file: string, line: number) => {
+    const key = `${file}:${line}`;
+    let list = siteRefs.get(key);
+    if (!list) {
+      const text = lineOf(file, line);
+      const bytes = docEncoding.get(file) === 'utf8' && !/^[\x00-\x7f]*$/.test(text) ? Buffer.from(text, 'utf8') : null;
+      const at = (n: number) => (bytes ? bytes.subarray(0, n).toString('utf8').length : n);
+      list = (refsAt.get(key) ?? []).map((r) => ({ ...r, s: at(r.start), t: at(r.end) }));
+      siteRefs.set(key, list);
+    }
+    return list;
+  };
+  const typeSymbol = (r: { symbol: string }, name: string) => scipKind(r.symbol) === 'type'
+    || (r.symbol.includes('#local ') && (defs.get(r.symbol) ?? []).some((d) => new RegExp(`\\btype\\s+${reLit(name)}\\b`).test(lineOf(d.file, d.line))));
+  const compositeLiteral = (e: { kind: string; sfile: string; line?: number | null; col?: number | null; ref?: string | null; tname: string; tkind?: string; sstart?: number; skind?: string }) => {
     if (opts.lang !== 'go' || !on('skip-composite-literal') || e.line == null) return false;
     // An `instantiates` edge to a type: a `calls` edge is a call even where a literal sits on the line.
     if (e.kind !== 'instantiates' || e.tkind === 'function' || e.tkind === 'method') return false;
     const parts = segs(e.ref ?? e.tname);
     const name = parts[parts.length - 1];
     const text = lineOf(e.sfile, e.line);
-    const ascii = /^[\x00-\x7f]*$/.test(text);
-    const utf8 = docEncoding.get(e.sfile) === 'utf8';
-    const bytes = utf8 && !ascii ? Buffer.from(text, 'utf8') : null;
-    const at = (n: number) => (bytes ? bytes.subarray(0, n).toString('utf8').length : n);
-    let refs = (refsAt.get(`${e.sfile}:${e.line}`) ?? []).map((r) => ({ ...r, s: at(r.start), t: at(r.end) }))
-      .filter((r) => text.slice(r.s, r.t) === name);
-    if (e.col != null && refs.length > 1 && (subjectEncoding === docEncoding.get(e.sfile) || ascii)) {
+    let refs = refsOn(e.sfile, e.line).filter((r) => text.slice(r.s, r.t) === name);
+    if (e.col != null && refs.length > 1 && (subjectEncoding === docEncoding.get(e.sfile) || /^[\x00-\x7f]*$/.test(text))) {
       refs = [refs.sort((x, y) => Math.abs(x.start - e.col) - Math.abs(y.start - e.col))[0]];
     }
-    return refs.some((r) => scipKind(r.symbol) === 'type' && literalAfter(text, r.t)
-      && !resultType(text.slice(0, r.s).replace(/[\w]+\.\s*$/, '')));
+    return refs.some((r) => typeSymbol(r, name) && literalAfter(text, r.t)
+      && !inSignature(e, e.line, r.s) && !closureResult(text.slice(0, r.s).replace(/[\w]+\.\s*$/, '')));
   };
 
   return {

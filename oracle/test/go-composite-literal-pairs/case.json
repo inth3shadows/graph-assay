@@ -42,7 +42,7 @@
    "oracleSilent": 0
   },
   "skippedEdges": {
-   "skip-composite-literal": 10
+   "skip-composite-literal": 16
   }
  }
 }
