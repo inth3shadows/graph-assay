@@ -30,7 +30,7 @@ RUN python3 -m venv /opt/subjects/cgr/venv && \
     /opt/subjects/cgr/venv/bin/pip install --no-cache-dir --only-binary=:all: --require-hashes -r /opt/requirements.lock
 
 RUN git init -q /opt/codegraph && \
-    git -C /opt/codegraph fetch -q --depth 1 https://github.com/colbymchenry/codegraph.git f72c9d2efb14454ff4f9fd7b8460abd82f19a287 && \
+    git -C /opt/codegraph fetch -q --depth 1 https://github.com/colbymchenry/codegraph.git 147fe290bf944d8ce380d85bdeb55e90142723c0 && \
     git -C /opt/codegraph checkout -q --detach FETCH_HEAD && \
     cd /opt/codegraph && npm ci --no-audit --no-fund && npm run build
 

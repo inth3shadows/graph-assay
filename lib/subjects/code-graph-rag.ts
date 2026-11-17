@@ -1,7 +1,7 @@
 // The code-graph-rag subject (`cgr`, https://github.com/vitali87/code-graph-rag, MIT): index a
 // directory offline in a sandboxed HOME, and map its JSON export to a snapshot v1. Install:
-// `uv venv <subjects>/cgr/venv && uv pip install 'code-graph-rag[treesitter-full]==0.5.0'`
-// (without treesitter-full, TS and Go files become bare File nodes). Pins: TECHNICAL.md, Docker reproduction.
+// tools/setup.sh (PyPI 0.7.1 with treesitter-full, hash-locked by docker/requirements.lock; without
+// treesitter-full, TS and Go files become bare File nodes). Pins: TECHNICAL.md, Docker reproduction.
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
