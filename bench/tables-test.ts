@@ -201,6 +201,7 @@ try {
     assert.deepEqual(Object.keys(json.diagnostic), ['go']);
     assert.deepEqual(json.noiseGate.go.unmeasured, ['disagree']);
     assert.match(json.noiseGate.go.reason, /^unmeasured: disagree carries 50\.0% of the weight/); // R4: the reason is in the JSON too
+    assert.ok(!('reason' in json.noiseGate.python)); // T6: only a diagnostic gate has one
     assert.equal(json.noiseGate.python.strata.agree.weight, 1 / 4);
     assert.equal(json.noiseGate.python.strata.agree.sites, 2); // requests and click
     assert.match(md, /\| go \| 25\.0%: 50\/50 \| 50\.0%: 1\/2 \| 25\.0%: 30\/30 \| .* \| yes \(unmeasured: disagree\) \|/);
@@ -233,19 +234,27 @@ try {
     fabricate(work, { sites: true, missFailed: 'mux-code-graph-rag' }); // a failure recorded in out-missing.json only
     assert.deepEqual(tables(work, ['--noise', noise]).json.noiseOneSubject, ['mux (code-graph-rag failed)']);
   });
-  check('a language where both subjects failed on every repo is not gated, and stays in the averages at 0 (R2)', () => {
+  check('a language where every tabled subject failed on every repo is not gated, and stays in the averages at 0 (R2)', () => {
     fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'] });
     const { json, md } = tables(work, ['--noise', noise]);
-    assert.deepEqual(json.noiseLeftOut, ['mux (both subjects failed)']);
-    assert.deepEqual(json.noiseNotGated, [{ language: 'go', reason: 'both subjects failed on every repo' }]);
+    assert.deepEqual(json.noiseUncounted, ['mux (both subjects failed)']);
+    assert.deepEqual(json.noiseNotGated, [{ language: 'go', reason: 'every tabled subject failed on every repo' }]);
     assert.ok(!('go' in json.diagnostic) && !('go' in json.noiseGate));
     for (const s of ['codegraph', 'code-graph-rag']) assert.equal(json.subjects[s].agg['recall strict'].macro, (0.8 * (repos.length - 1)) / repos.length); // SPEC §8
-    assert.match(md, /Not gated, since every score there is 0 for both subjects: go \(both subjects failed on every repo\)/);
+    assert.match(md, /Not gated by the oracle-noise rule \(SPEC §9\), kept in the averages: go \(every tabled subject failed on every repo: recall 0, precision undefined\)/);
+  });
+  check('a language stays gated when a tabled subject ran though both sampled subjects failed (T1)', () => {
+    fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'], sfxs: ['', '-code-graph-rag', '-codebase-memory-mcp'] });
+    const { status, json, md } = tables(work, ['--noise', noise, '--subjects', 'codegraph,code-graph-rag,codebase-memory-mcp']);
+    assert.equal(status, 0);
+    assert.deepEqual(json.noiseNotGated, []);
+    assert.equal(json.diagnostic.go?.reason, 'codegraph and code-graph-rag failed on every repo, and another tabled subject ran');
+    assert.match(md, /\| mux \| go \(diagnostic\)/);
   });
   check('a repo where both subjects failed adds no sites; the language is gated on its other repos (R3)', () => {
     fabricate(work, { sites: true, failed: ['click', 'click-code-graph-rag'] });
     const { json } = tables(work, ['--noise', noise]);
-    assert.deepEqual(json.noiseLeftOut, ['click (both subjects failed)']);
+    assert.deepEqual(json.noiseUncounted, ['click (both subjects failed)']);
     assert.equal(json.noiseGate.python.strata.agree.sites, 1); // requests alone
     assert.ok(!('python' in json.diagnostic));
   });

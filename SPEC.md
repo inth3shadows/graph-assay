@@ -300,10 +300,13 @@ folders, is indexed through an extra project that extends that config and lists 
     the tabled run's sites where the oracle answers. The strata are counted as the sample drew them:
     over both canonical subjects' per-site results, whatever subjects a table shows, over the averaged
     repositories. Where one of them failed on a repository, that repository's strata come from the
-    other's results alone, an approximation: a site the failed subject would have disagreed on counts
-    as agree. Where both failed, the repository adds no sites, and a language where both failed on
-    every repository is not gated (every score there is 0 for both subjects, and §8 keeps them in the
-    averages). A table without per-site results, or missing a codegraph or a code-graph-rag run, is
+    other's results alone. That is an approximation: sites shift between strata, mostly toward agree
+    (a site the failed subject would have missed or got wrong can count as agree). Where both failed,
+    the repository adds no sites. A language with no counted repository is not gated only when every
+    subject the table shows failed on all its repositories: their recall there is 0 and their
+    precision undefined (§8), whatever the oracle says, so they stay in the averages; the oracle still
+    sets how many sites those repositories add to a micro average. Otherwise such a language is
+    diagnostic. A table without per-site results, or missing a codegraph or a code-graph-rag run, is
     refused.
   - "Oracle right where it answers" is the weighted mean of the strata's labelled rates. Its 95% lower
     bound is a stratified normal interval on Agresti-Coull rates ((k+2)/(n+4) per stratum), centred
