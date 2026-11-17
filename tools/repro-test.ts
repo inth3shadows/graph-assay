@@ -19,27 +19,42 @@ const check=(name,fn)=>{fn();n++;console.log(`ok    ${name}`);};
 // Docker reads them: continuation lines joined, comments dropped, keywords in any case. Any other shape
 // fails with a reason, so changing the ENTRYPOINT means changing this check too.
 function entrypointScript(dockerfile){
-  const ins=dockerfile.replace(/\\\r?\n/g,' ').split('\n').map((x)=>x.trim()).filter((x)=>x&&!x.startsWith('#'));
-  const stage=ins.slice(ins.map((x)=>/^FROM\s/i.test(x)).lastIndexOf(true)+1);
-  const eps=stage.filter((x)=>/^ENTRYPOINT\s/i.test(x));
+  // Docker drops comment lines (and blank ones) before joining a line that ends in `\\` to the next.
+  const ins=[];let cur='';
+  for(const raw of dockerfile.split(/\r?\n/)){const t=raw.trim();if(!t||t.startsWith('#'))continue;
+    if(/\\$/.test(t)){cur+=t.slice(0,-1)+' ';continue;}ins.push((cur+t).trim());cur='';}
+  if(cur.trim())ins.push(cur.trim());
+  // Keywords in any case; arguments as written.
+  const I={kw:(x)=>(/^(\S+)/.exec(x)?.[1]??'').toUpperCase(),arg:(x)=>x.replace(/^\S+\s*/,'')};
+  const stage=ins.slice(ins.map((x)=>I.kw(x)==='FROM').lastIndexOf(true)+1);
+  const eps=stage.filter((x)=>I.kw(x)==='ENTRYPOINT');
   if(eps.length!==1)return{error:`the final stage needs exactly one ENTRYPOINT, found ${eps.length}`};
   const [w,c,e]=stage.slice(-3);
-  if(!/^WORKDIR\s+\/opt\/graph-assay$/i.test(w??'')||!/^COPY\s+\.\s+\.$/i.test(c??'')||e!==eps[0])
+  if(!w||I.kw(w)!=='WORKDIR'||I.arg(w)!=='/opt/graph-assay'||!c||I.kw(c)!=='COPY'||!/^\.\s+\.$/.test(I.arg(c))||e!==eps[0])
     return{error:'the final stage must end with WORKDIR /opt/graph-assay, COPY . . and the ENTRYPOINT, in that order'};
-  const m=/^ENTRYPOINT\s+\["node", "([^"]+)"\]$/i.exec(e);
-  if(!m||m[1].startsWith('/')||m[1].startsWith('-')||m[1].split('/').includes('..'))return{error:`ENTRYPOINT must be ["node", "<relative script>"]: ${e.replace(/^ENTRYPOINT\s+/i,'')}`};
+  const m=/^\["node", "([^"]+)"\]$/.exec(I.arg(e));
+  if(!m||m[1].startsWith('/')||m[1].startsWith('-')||m[1].split('/').includes('..'))return{error:`ENTRYPOINT must be ["node", "<relative script>"]: ${I.arg(e)}`};
   return{script:m[1]};
 }
 // #41: the context as Docker builds it (moby/patternmatcher): `**` matches any path, dot-paths too; `*` and
-// `?` stay within a segment; a rule that matches a parent directory applies to everything under it; the last
-// matching rule wins. Checked against a real context export (479 of 479 files) when it was written.
+// `?` stay within a segment; `[...]` is a character class and `\\` escapes; a rule that matches a parent
+// directory applies to everything under it; the last matching rule wins. Docker skips an excluded
+// directory unless an exception rule could match something under it. Checked against a real context
+// export (all 479 files) when it was written.
 function dockerMatcher(rules){
   const re=(g)=>{let r='';for(let i=0;i<g.length;i++){const ch=g[i];
-    if(ch==='*'&&g[i+1]==='*'){if(g[i+2]==='/'){r+='(?:.*/)?';i+=2;}else{r+='.*';i++;}}
-    else if(ch==='*')r+='[^/]*';else if(ch==='?')r+='[^/]';else r+=ch.replace(/[.+^${}()|[\]\\]/g,'\\$&');}
+    if(ch==='*'&&g[i+1]==='*'){i++;if(g[i+1]==='/')i++;r+=i+1>=g.length?'.*':'(?:.*/)?';}
+    else if(ch==='*')r+='[^/]*';else if(ch==='?')r+='[^/]';
+    else if(ch==='\\'&&i+1<g.length){i++;r+=g[i].replace(/[.*+?^${}()|[\]\\/]/g,'\\$&');}
+    else r+='.+()|{}$'.includes(ch)?`\\${ch}`:ch;}
     return new RegExp(`^${r}$`);};
-  const parsed=rules.map((raw)=>{const allow=raw.startsWith('!');return{allow,re:re(path.posix.normalize((allow?raw.slice(1):raw).replace(/^\//,'')).replace(/\/$/,''))};});
-  return(rel)=>{const parts=rel.split('/');let inc=true;for(const p of parsed)if(parts.some((_,i)=>p.re.test(parts.slice(0,i+1).join('/'))))inc=p.allow;return inc;};
+  const parsed=rules.map((raw)=>{const allow=raw.startsWith('!');const g=path.posix.normalize((allow?raw.slice(1):raw).replace(/^\//,'')).replace(/\/$/,'');
+    return{allow,re:re(g),g};});
+  const allowed=(rel)=>{const parts=rel.split('/');let inc=true;for(const p of parsed)if(parts.some((_,i)=>p.re.test(parts.slice(0,i+1).join('/'))))inc=p.allow;return inc;};
+  // Docker's walk enters an excluded directory only when an exception pattern's text starts with it
+  // (moby pkg/archive: strings.HasPrefix(pattern+"/", dir+"/")); a ** in the pattern does not widen that.
+  allowed.mayEnter=(dir)=>parsed.some((p)=>p.allow&&`${p.g}/`.startsWith(`${dir}/`));
+  return allowed;
 }
 const write=(f,s)=>{fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,s);};
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
@@ -48,9 +63,7 @@ try{
  const rules=fs.readFileSync(path.join(qa,'.dockerignore'),'utf8').split('\n').map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
  const allowed=dockerMatcher(rules);
  const context=path.join(tmp,'context');fs.mkdirSync(context);
- // Docker walks into an excluded directory when a later rule may re-include something under it; .git and
- // node_modules never are.
- const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(e.isDirectory()){if(['.git','node_modules'].includes(e.name)&&!allowed(f))continue;copy(f);}else if(e.isFile()&&allowed(f)){const target=path.join(context,f);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
+ const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(e.isDirectory()){if(allowed(f)||allowed.mayEnter(f))copy(f);}else if(e.isFile()&&allowed(f)){const target=path.join(context,f);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
  check('the context emulation follows Docker\'s matcher (#41)',()=>{
   const m=dockerMatcher(['**','!tools/','!a/*.ts','**/.env*','!keep/**']);
   assert.ok(m('tools/x.sh')&&m('tools/sub/y.sh'),'a rule on a parent directory applies to its children');
@@ -58,6 +71,13 @@ try{
   assert.ok(m('a/b.ts')&&!m('a/b/c.ts')&&!m('a/b.js'),'* stays within a segment');
   assert.ok(!m('.docvet.json')&&!m('.github/x.yml'),'root dotfiles stay excluded');
   assert.ok(m('keep/.x/y'),'a later ! rule re-includes under an excluded dot-directory');
+  const k=dockerMatcher(['**','!a/**.map','!b/[a-c]*.ts','!lit\\[x\\].txt']);
+  // Checked against a real build: of a/x.map, a/.map, a/d/.map and a/d/y.map, Docker sends only a/.map.
+  assert.ok(k('a/.map')&&!k('a/x.map'),'** before more pattern is (.*/)?, as moby compiles it (so a/**.map needs a segment named .map)');
+  assert.ok(k.mayEnter('a')&&!k.mayEnter('a/d'),'the walk never enters a/d for a/**.map');
+  assert.ok(k('b/a1.ts')&&!k('b/z1.ts'),'[...] is a character class');
+  assert.ok(k('lit[x].txt'),'a backslash escapes');
+  assert.ok(m.mayEnter('tools')&&m.mayEnter('keep')&&!m.mayEnter('z'),'an excluded directory is entered only when an exception rule leads into it');
  });
  check('the ENTRYPOINT check accepts only a final stage ending WORKDIR, COPY . ., ["node", "<script>"]',()=>{
   const W='WORKDIR /opt/graph-assay\nCOPY . .\n';
@@ -72,6 +92,13 @@ try{
   for(const tail of ['COPY . .\nWORKDIR /opt/graph-assay\n','WORKDIR /opt/graph-assay\nCOPY . .\nWORKDIR /elsewhere\n','WORKDIR /srv\nCOPY . .\n','COPY . .\n'])
    assert.match(entrypointScript(`FROM a\n${tail}ENTRYPOINT ["node", "tools/repro.ts"]\n`).error,/must end with WORKDIR/,tail);
   assert.match(entrypointScript(`FROM a\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\nUSER nobody\n`).error,/must end with WORKDIR/);
+  // Arguments are matched as written: only keywords are case-insensitive.
+  assert.match(entrypointScript(`FROM a\nWORKDIR /OPT/GRAPH-ASSAY\nCOPY . .\nENTRYPOINT ["node", "tools/repro.ts"]\n`).error,/must end with WORKDIR/);
+  assert.match(entrypointScript(`FROM a\n${W}ENTRYPOINT ["NODE", "tools/repro.ts"]\n`).error,/must be \["node"/);
+  // A comment line never continues, and one inside a continuation is dropped.
+  assert.deepEqual(entrypointScript(`FROM a\n# note \\\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\n`),{script:'tools/repro.ts'});
+  assert.match(entrypointScript(`FROM a AS b\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\n# x \\\nFROM c\nRUN true\n`).error,/found 0/);
+  assert.deepEqual(entrypointScript(`FROM a\nRUN a && \\\n# note\n  b\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\n`),{script:'tools/repro.ts'});
   // Instructions are read as Docker reads them: a continuation line starting `from` is not a stage, keywords in any case.
   assert.deepEqual(entrypointScript(`FROM a\nRUN echo \\\n  from b\nworkdir /opt/graph-assay\ncopy . .\nentrypoint ["node", "tools/repro.ts"]\n`),{script:'tools/repro.ts'});
  });
@@ -81,7 +108,7 @@ try{
     'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/strata.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/package.json',
     // #41: what the image needs beyond scripts: the Dockerfile's COPY docker/package*.json, and the fixtures replay and T3 read.
     'docker/package.json','docker/package-lock.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
-  assert(fs.readdirSync(path.join(context,'fixtures','oracle-candidates')).some((d)=>fs.existsSync(path.join(context,'fixtures','oracle-candidates',d,'expect.json'))),'Docker context has no fixture under fixtures/oracle-candidates/');
+  assert(fs.existsSync(path.join(context,'fixtures','oracle-candidates'))&&fs.readdirSync(path.join(context,'fixtures','oracle-candidates')).some((d)=>fs.existsSync(path.join(context,'fixtures','oracle-candidates',d,'expect.json'))),'Docker context has no fixture under fixtures/oracle-candidates/');
   // The image's entry point names a script the context holds (#39 review L1).
   {const ep=entrypointScript(fs.readFileSync(path.join(qa,'Dockerfile'),'utf8'));assert(!ep.error,ep.error);
    // A file, not a directory (round 3 F2).

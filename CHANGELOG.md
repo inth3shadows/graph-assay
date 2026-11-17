@@ -184,8 +184,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 - Provenance gaps (#41): `scorers()` now hashes `bench/`, `differential/builds.ts` and the labels
-  scorers with `labels/package.json`, and the repro manifest hashes `differential/builds.ts`; a test
-  walks every scoring entry point's imports so a new scorer file cannot go unhashed. The edgediff
+  scorers with `labels/package.json`, plus the oracle's shell steps (`oracle/*.sh`), and the repro
+  manifest hashes `differential/builds.ts`; a test walks every scoring entry point's imports (and each
+  file's nearest `package.json`) so a new scorer code file cannot go unhashed. Data inputs (corpus,
+  labels, fixtures) stay with the repro manifest, which hashes them by directory. The edgediff
   workflow's path filter covers every file the build differ loads, pinned the same way. The
   Docker-context check reads `.dockerignore` as Docker does (it left out 166 of the 479 files a real
   build sends and kept 10 Docker drops; it now matches all 479) and requires `docker/package*.json` and a fixture under

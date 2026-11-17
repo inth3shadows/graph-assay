@@ -18,20 +18,34 @@ const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const sh = (cmd: string, args: string[], cwd?: string): string | null => { const r = spawnSync(cmd, args, { cwd, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
 const sha = (f: string) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
-/** Every repo file the entries load through relative static or dynamic imports, plus the package.json
- * that makes each one's directory load as ES modules. */
-export function importClosure(entries: string[]) {
+/** Every repo file the entries load through relative imports (`import ... from`, `export ... from`,
+ * a bare `import '...'`, `import('...')` and `require('...')` with a literal path), plus, for a .ts or .js file, the
+ * package.json that decides how it loads: the nearest one above it, as Node finds it. A relative specifier that resolves
+ * nowhere is an error, never skipped; one that resolves only from the repo root is taken as such (a
+ * `node -e` script run there, as tools/repro.ts does). */
+export function importClosure(entries: string[], root = qa) {
   const seen = new Set<string>();
   const todo = [...entries];
+  const marker = (rel: string) => {
+    for (let d = path.posix.dirname(rel); ; d = path.posix.dirname(d)) {
+      const pkg = d === '.' ? 'package.json' : `${d}/package.json`;
+      if (fs.existsSync(path.join(root, pkg))) return pkg;
+      if (d === '.') return null;
+    }
+  };
   while (todo.length) {
     const rel = todo.pop();
     if (seen.has(rel)) continue;
     seen.add(rel);
-    const pkg = path.posix.join(path.posix.dirname(rel), 'package.json');
-    if (fs.existsSync(path.join(qa, pkg))) seen.add(pkg);
-    for (const m of fs.readFileSync(path.join(qa, rel), 'utf8').matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g)) {
-      const dep = path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1]));
-      if (fs.existsSync(path.join(qa, dep))) todo.push(dep);
+    // .mts/.mjs (and .cts/.cjs) fix their own module type; .ts and .js take the nearest package.json's.
+    const pkg = /\.(ts|js)$/.test(rel) && !rel.endsWith('.d.ts') ? marker(rel) : null;
+    if (pkg) seen.add(pkg);
+    // A template literal counts only without `${`: a computed path cannot be followed, and must be listed by hand.
+    for (const m of fs.readFileSync(path.join(root, rel), 'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(?:['"](\.{1,2}\/[^'"]+)['"]|`(\.{1,2}\/[^`$]+)`)/g)) {
+      const spec = m[1] ?? m[2];
+      const dep = [path.posix.join(path.posix.dirname(rel), spec), spec].map((x) => path.posix.normalize(x)).find((x) => fs.existsSync(path.join(root, x)));
+      if (!dep) throw new Error(`${rel}: import '${spec}' resolves to no file`);
+      todo.push(dep);
     }
   }
   return [...seen].sort();
@@ -42,10 +56,11 @@ export const SCORING_ENTRIES = ['oracle/oracle.ts', 'bench/tables.ts', 'labels/n
 
 /** sha256 of every tracked scorer file, plus the repo's HEAD and whether it was dirty. The list covers
  * every file a scoring entry point loads (lib/manifest-test.ts walks their imports to pin it): the
- * tables and T3 (`bench/`), the noise table and gate (`labels/`), and the corpus reader the tables and
- * the build differ share (`differential/builds.ts`). */
+ * tables and T3, the noise table and gate (`labels/`), and the corpus reader the tables and the build
+ * differ share (`differential/builds.ts`); and the scripts run by path, which no import reaches: the
+ * oracle's shell steps (`oracle/run.sh` and the indexer wrappers it calls). */
 export function scorers() {
-  const files = (sh('git', ['ls-files', 'lib', ':(glob)oracle/*.ts', ':(glob)oracle/test/*.ts', 'oracle/package.json', 'bench', 'metamorphic', 'benchmarks', 'fixtures/replay.mts',
+  const files = (sh('git', ['ls-files', 'lib', ':(glob)oracle/*.ts', ':(glob)oracle/*.sh', ':(glob)oracle/test/*.ts', 'oracle/package.json', 'bench/tables.ts', 'bench/robustness.ts', 'bench/package.json', 'metamorphic', 'benchmarks', 'fixtures/replay.mts',
     'differential/builds.ts', 'differential/modes.ts', 'differential/package.json', 'labels/noise.ts', 'labels/score.ts', 'labels/strata.ts', 'labels/questions.ts', 'labels/protocol.ts',
     'labels/labellers.ts', 'labels/package.json', 'schema', 'SPEC.md'], qa) ?? '')
     .split('\n').filter(Boolean).sort();

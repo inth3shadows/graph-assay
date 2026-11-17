@@ -5,6 +5,7 @@
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { SCORING_ENTRIES, importClosure, scorers } from './manifest.ts';
 
@@ -29,5 +30,22 @@ check('the edgediff workflow runs on a change to any file the build differ loads
   const paths = new Set([...block[1].matchAll(/^ {6}- (\S+)$/gm)].map((m) => m[1]));
   const missing = importClosure(['differential/builds.ts']).filter((f) => !paths.has(f));
   assert.deepEqual(missing, [], `edgediff.yml's path filter leaves out: ${missing.join(', ')}`);
+});
+check('the walk reads every import form, takes the nearest package.json, and refuses a dangling import', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-closure-'));
+  try {
+    const w = (f: string, s: string) => { fs.mkdirSync(path.dirname(path.join(tmp, f)), { recursive: true }); fs.writeFileSync(path.join(tmp, f), s); };
+    w('package.json', '{}'); w('a/package.json', '{}');
+    w('a/entry.ts', "import {\n  x,\n} from './b.ts';\nimport './side.ts';\nexport { y } from '../c/d.ts';\nconst z = await import('../e/f.mts');\nconst t = await import(`./tpl.ts`);\nimport eq = require('./req.ts');\n");
+    w('a/b.ts', ''); w('a/side.ts', ''); w('c/d.ts', ''); w('e/f.mts', ''); w('a/tpl.ts', ''); w('a/req.ts', '');
+    const c = importClosure(['a/entry.ts'], tmp);
+    assert.deepEqual(c, ['a/b.ts', 'a/entry.ts', 'a/package.json', 'a/req.ts', 'a/side.ts', 'a/tpl.ts', 'c/d.ts', 'e/f.mts', 'package.json']);
+    w('a/bad.ts', "import { q } from './missing.ts';\n");
+    assert.throws(() => importClosure(['a/bad.ts'], tmp), /a\/bad\.ts: import '\.\/missing\.ts' resolves to no file/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('scorers() hashes the oracle\'s shell steps, which no import reaches', () => {
+  const hashed = scorers().files;
+  for (const f of fs.readdirSync(path.join(qa, 'oracle')).filter((x) => x.endsWith('.sh'))) assert.ok(`oracle/${f}` in hashed, `oracle/${f}`);
 });
 console.log(`${n}/${n} manifest checks`);
