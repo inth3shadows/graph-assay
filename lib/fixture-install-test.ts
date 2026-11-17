@@ -75,6 +75,10 @@ try {
     }
   };
   visit('');
+  // #41: fixtures/ holds fixture sources (skipped above) and the scripts at its top level, which copy
+  // fixtures and so must go through copySeed too (fixtures/replay.mts).
+  for (const e of fs.readdirSync(path.join(qa, 'fixtures'), { withFileTypes: true })) if (e.isFile() && /\.(mts|ts|mjs)$/.test(e.name) && !/-test\./.test(e.name)) scripts.push(`fixtures/${e.name}`);
+  n++; assert.ok(scripts.includes('fixtures/replay.mts'), 'the cpSync scan reads fixtures/replay.mts');
   for (const rel of scripts) {
     if (!/\bcpSync\s*\(/.test(fs.readFileSync(path.join(qa, rel), 'utf8'))) continue;
     n++; assert.ok(rel in exempt, `${rel} copies with fs.cpSync: use copySeed (lib/fixture-install.ts) so a fixture's install is placed`);

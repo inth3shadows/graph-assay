@@ -9,43 +9,79 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { SPEC_VERSION } from '../lib/spec.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
+import { SCORING_ENTRIES, importClosure } from '../lib/manifest.ts';
 const qa=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'cgqa-repro-test-'));let n=0;
 const check=(name,fn)=>{fn();n++;console.log(`ok    ${name}`);};
-// The image's entry point (#39 review L1; strict since round 3). The final build stage must COPY the context
-// into WORKDIR (`COPY . .`) and hold exactly one ENTRYPOINT of the form ["node", "<relative script>"]. Any
-// other shape fails with a reason, so changing the ENTRYPOINT means changing this check too.
+// The image's entry point (#39 review L1; strict since round 3; #41: pinned to the final three instructions).
+// The final build stage must end with exactly `WORKDIR /opt/graph-assay`, `COPY . .` and one ENTRYPOINT of
+// the form ["node", "<relative script>"], so the context lands where the script runs. Instructions are read as
+// Docker reads them: continuation lines joined, comments dropped, keywords in any case. Any other shape
+// fails with a reason, so changing the ENTRYPOINT means changing this check too.
 function entrypointScript(dockerfile){
-  const stage=dockerfile.split(/^FROM\s/im).pop();
-  if(!/^COPY\s+\.\s+\.\s*$/m.test(stage))return{error:'the final stage must COPY . . (the context lands in WORKDIR)'};
-  const eps=[...stage.matchAll(/^ENTRYPOINT\s+(.*)$/gim)].map((m)=>m[1].trim());
+  const ins=dockerfile.replace(/\\\r?\n/g,' ').split('\n').map((x)=>x.trim()).filter((x)=>x&&!x.startsWith('#'));
+  const stage=ins.slice(ins.map((x)=>/^FROM\s/i.test(x)).lastIndexOf(true)+1);
+  const eps=stage.filter((x)=>/^ENTRYPOINT\s/i.test(x));
   if(eps.length!==1)return{error:`the final stage needs exactly one ENTRYPOINT, found ${eps.length}`};
-  const m=/^\["node", "([^"/-][^"]*)"\]$/.exec(eps[0]);
-  return m?{script:m[1]}:{error:`ENTRYPOINT must be ["node", "<relative script>"]: ${eps[0]}`};
+  const [w,c,e]=stage.slice(-3);
+  if(!/^WORKDIR\s+\/opt\/graph-assay$/i.test(w??'')||!/^COPY\s+\.\s+\.$/i.test(c??'')||e!==eps[0])
+    return{error:'the final stage must end with WORKDIR /opt/graph-assay, COPY . . and the ENTRYPOINT, in that order'};
+  const m=/^ENTRYPOINT\s+\["node", "([^"]+)"\]$/i.exec(e);
+  if(!m||m[1].startsWith('/')||m[1].startsWith('-')||m[1].split('/').includes('..'))return{error:`ENTRYPOINT must be ["node", "<relative script>"]: ${e.replace(/^ENTRYPOINT\s+/i,'')}`};
+  return{script:m[1]};
+}
+// #41: the context as Docker builds it (moby/patternmatcher): `**` matches any path, dot-paths too; `*` and
+// `?` stay within a segment; a rule that matches a parent directory applies to everything under it; the last
+// matching rule wins. Checked against a real context export (479 of 479 files) when it was written.
+function dockerMatcher(rules){
+  const re=(g)=>{let r='';for(let i=0;i<g.length;i++){const ch=g[i];
+    if(ch==='*'&&g[i+1]==='*'){if(g[i+2]==='/'){r+='(?:.*/)?';i+=2;}else{r+='.*';i++;}}
+    else if(ch==='*')r+='[^/]*';else if(ch==='?')r+='[^/]';else r+=ch.replace(/[.+^${}()|[\]\\]/g,'\\$&');}
+    return new RegExp(`^${r}$`);};
+  const parsed=rules.map((raw)=>{const allow=raw.startsWith('!');return{allow,re:re(path.posix.normalize((allow?raw.slice(1):raw).replace(/^\//,'')).replace(/\/$/,''))};});
+  return(rel)=>{const parts=rel.split('/');let inc=true;for(const p of parsed)if(parts.some((_,i)=>p.re.test(parts.slice(0,i+1).join('/'))))inc=p.allow;return inc;};
 }
 const write=(f,s)=>{fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,s);};
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
 const baseEnv={...process.env,XDG_CONFIG_HOME:tmp,XDG_CACHE_HOME:tmp,NODE_NO_WARNINGS:'1',CGQA_TEST_SPEC:SPEC_VERSION};
 try{
- // These are the simple anchored/glob allowlist rules used by this repository's Docker context.
  const rules=fs.readFileSync(path.join(qa,'.dockerignore'),'utf8').split('\n').map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
- const allowed=rel=>{let include=true;for(const raw of rules){const allow=raw.startsWith('!');const glob=(allow?raw.slice(1):raw).replace(/\/$/,'');if(path.matchesGlob(rel,glob))include=allow;}return include;};
+ const allowed=dockerMatcher(rules);
  const context=path.join(tmp,'context');fs.mkdirSync(context);
- const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(!allowed(f))continue;const target=path.join(context,f);if(e.isDirectory()){fs.mkdirSync(target,{recursive:true});copy(f);}else if(e.isFile()){fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
- check('the ENTRYPOINT check accepts only the final stage\'s exact ["node", "<script>"]',()=>{
+ // Docker walks into an excluded directory when a later rule may re-include something under it; .git and
+ // node_modules never are.
+ const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(e.isDirectory()){if(['.git','node_modules'].includes(e.name)&&!allowed(f))continue;copy(f);}else if(e.isFile()&&allowed(f)){const target=path.join(context,f);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
+ check('the context emulation follows Docker\'s matcher (#41)',()=>{
+  const m=dockerMatcher(['**','!tools/','!a/*.ts','**/.env*','!keep/**']);
+  assert.ok(m('tools/x.sh')&&m('tools/sub/y.sh'),'a rule on a parent directory applies to its children');
+  assert.ok(!m('.env')&&!m('a/.env.local'),'** matches dot-paths');
+  assert.ok(m('a/b.ts')&&!m('a/b/c.ts')&&!m('a/b.js'),'* stays within a segment');
+  assert.ok(!m('.docvet.json')&&!m('.github/x.yml'),'root dotfiles stay excluded');
+  assert.ok(m('keep/.x/y'),'a later ! rule re-includes under an excluded dot-directory');
+ });
+ check('the ENTRYPOINT check accepts only a final stage ending WORKDIR, COPY . ., ["node", "<script>"]',()=>{
   const W='WORKDIR /opt/graph-assay\nCOPY . .\n';
   assert.deepEqual(entrypointScript(`FROM a\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\n`),{script:'tools/repro.ts'});
   // An earlier stage's ENTRYPOINT or COPY never counts (round 3 F1).
-  assert.match(entrypointScript(`FROM a AS b\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\nFROM c\nCOPY . /srv\n`).error,/must COPY/);
+  assert.match(entrypointScript(`FROM a AS b\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\nFROM c\nCOPY . /srv\n`).error,/found 0/);
   assert.match(entrypointScript(`FROM a AS b\nENTRYPOINT ["node", "early.ts"]\nFROM c\n${W}`).error,/found 0/);
   assert.match(entrypointScript(`FROM a\n${W}ENTRYPOINT ["node", "a.ts"]\nENTRYPOINT ["node", "b.ts"]\n`).error,/found 2/);
-  for(const ep of ['node tools/repro.ts','["node", "/opt/graph-assay/tools/repro.ts"]','["node", "--import", "x.ts", "tools/repro.ts"]','["python3", "x.py"]','["node"]','["node", 1]'])
+  for(const ep of ['node tools/repro.ts','["node", "/opt/graph-assay/tools/repro.ts"]','["node", "--import", "x.ts", "tools/repro.ts"]','["python3", "x.py"]','["node"]','["node", 1]','["node", "../x.ts"]','["node", "tools/../../x.ts"]'])
    assert.match(entrypointScript(`FROM a\n${W}ENTRYPOINT ${ep}\n`).error,/must be \["node"/,ep);
+  // #41: the order of the last three instructions decides where the context lands relative to the script.
+  for(const tail of ['COPY . .\nWORKDIR /opt/graph-assay\n','WORKDIR /opt/graph-assay\nCOPY . .\nWORKDIR /elsewhere\n','WORKDIR /srv\nCOPY . .\n','COPY . .\n'])
+   assert.match(entrypointScript(`FROM a\n${tail}ENTRYPOINT ["node", "tools/repro.ts"]\n`).error,/must end with WORKDIR/,tail);
+  assert.match(entrypointScript(`FROM a\n${W}ENTRYPOINT ["node", "tools/repro.ts"]\nUSER nobody\n`).error,/must end with WORKDIR/);
+  // Instructions are read as Docker reads them: a continuation line starting `from` is not a stage, keywords in any case.
+  assert.deepEqual(entrypointScript(`FROM a\nRUN echo \\\n  from b\nworkdir /opt/graph-assay\ncopy . .\nentrypoint ["node", "tools/repro.ts"]\n`),{script:'tools/repro.ts'});
  });
  check('Docker runtime context includes T3 imports and executes the actual tables CLI',()=>{
   // Every script tools/repro.ts runs in the image, and the package.json markers that make its .ts load as ES modules (#35 review G2).
   for(const f of ['bench/robustness.ts','bench/tables.ts','metamorphic/run.ts','metamorphic/relations.ts','fixtures/replay.mts','benchmarks/pycg.ts','differential/builds.ts','differential/modes.ts','oracle/oracle.ts','oracle/run.sh',
-    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/package.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+    'labels/noise.ts','labels/questions.ts','labels/score.ts','labels/strata.ts','labels/protocol.ts','labels/labellers.ts','lib/package.json','oracle/package.json','bench/package.json','metamorphic/package.json','benchmarks/package.json','differential/package.json','labels/package.json','tools/package.json',
+    // #41: what the image needs beyond scripts: the Dockerfile's COPY docker/package*.json, and the fixtures replay and T3 read.
+    'docker/package.json','docker/package-lock.json'])assert(fs.existsSync(path.join(context,f)),`Docker context missing ${f}`);
+  assert(fs.readdirSync(path.join(context,'fixtures','oracle-candidates')).some((d)=>fs.existsSync(path.join(context,'fixtures','oracle-candidates',d,'expect.json'))),'Docker context has no fixture under fixtures/oracle-candidates/');
   // The image's entry point names a script the context holds (#39 review L1).
   {const ep=entrypointScript(fs.readFileSync(path.join(qa,'Dockerfile'),'utf8'));assert(!ep.error,ep.error);
    // A file, not a directory (round 3 F2).
@@ -68,7 +104,9 @@ try{
   // Its package.json decides how it loads, as lib/manifest.ts's scorer hash already records (#35 review G1).
   assert.equal(m.files['differential/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'differential/package.json'))).digest('hex'),'differential/package.json missing from scorer provenance');
   // tools/package.json decides how the entry point loads (#39 review L2).
-  assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json (the entry point\'s module marker) missing from the repro manifest');assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
+  assert.equal(m.files['tools/package.json'],createHash('sha256').update(fs.readFileSync(path.join(qa,'tools/package.json'))).digest('hex'),'tools/package.json (the entry point\'s module marker) missing from the repro manifest');
+  // Every file a scoring script or the entry point loads, with its package.json (#41: differential/builds.ts was missing).
+  {const missing=importClosure([...SCORING_ENTRIES,'tools/repro.ts']).filter(f=>!(f in m.files));assert.deepEqual(missing,[],`repro manifest leaves out: ${missing.join(', ')}`);}assert.equal(m.status,'failed');assert.match(m.error,/namespace-check/);
  });
  check('--split heldout needs --publish; the usage names every corpus repo; the split is recorded',()=>{
   const go=(argv)=>spawnSync(process.execPath,[path.join(qa,'tools/repro.ts'),...argv],{cwd:qa,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});

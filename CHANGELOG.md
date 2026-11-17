@@ -183,6 +183,15 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- Provenance gaps (#41): `scorers()` now hashes `bench/`, `differential/builds.ts` and the labels
+  scorers with `labels/package.json`, and the repro manifest hashes `differential/builds.ts`; a test
+  walks every scoring entry point's imports so a new scorer file cannot go unhashed. The edgediff
+  workflow's path filter covers every file the build differ loads, pinned the same way. The
+  Docker-context check reads `.dockerignore` as Docker does (it left out 166 of the 479 files a real
+  build sends and kept 10 Docker drops; it now matches all 479) and requires `docker/package*.json` and a fixture under
+  `fixtures/oracle-candidates/`. The ENTRYPOINT check requires the final stage to end with
+  `WORKDIR /opt/graph-assay`, `COPY . .` and the ENTRYPOINT, and rejects a `..` script path. The cpSync
+  scan reads `fixtures/replay.mts`.
 - The docker sandbox mounts the indexed copy read-only, `.git` included (#51). Only the sandbox HOME
   and the tool's own output dir (codegraph `.codegraph`, code-graph-rag `.graph-assay`, code-review-graph's
   `.code-review-graph` marker) are writable,
