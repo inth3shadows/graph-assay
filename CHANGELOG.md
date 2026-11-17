@@ -183,14 +183,17 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
-- Provenance gaps (#41): `scorers()` now hashes `bench/`, `differential/builds.ts` and the labels
-  scorers with `labels/package.json`, plus the oracle's shell steps (`oracle/*.sh`), and the repro
-  manifest hashes `differential/builds.ts`; a test walks every scoring entry point's imports (and each
-  file's nearest `package.json`) so a new scorer code file cannot go unhashed. Data inputs (corpus,
+- Provenance gaps (#41): `scorers()` now hashes the tables and T3 (`bench/tables.ts`,
+  `bench/robustness.ts`, `bench/package.json`), `differential/builds.ts`, the labels scorers with
+  `labels/package.json`, and the oracle's shell steps (`oracle/*.sh`); the repro manifest hashes
+  `differential/builds.ts`. A test walks every scoring entry point's literal imports (and each file's
+  nearest `package.json`), so a new scorer file reached that way cannot go unhashed; a file loaded by
+  path or by a computed import must still be listed by hand. Data inputs (corpus,
   labels, fixtures) stay with the repro manifest, which hashes them by directory. The edgediff
   workflow's path filter covers every file the build differ loads, pinned the same way. The
-  Docker-context check reads `.dockerignore` as Docker does (it left out 166 of the 479 files a real
-  build sends and kept 10 Docker drops; it now matches all 479) and requires `docker/package*.json` and a fixture under
+  Docker-context check reads `.dockerignore` as Docker does for the pattern forms the file uses, and
+  refuses any other form (it left out 166 of the 479 files a real build sends and kept 10 Docker drops;
+  it now matches all 479) and requires `docker/package*.json` and a fixture under
   `fixtures/oracle-candidates/`. The ENTRYPOINT check requires the final stage to end with
   `WORKDIR /opt/graph-assay`, `COPY . .` and the ENTRYPOINT, and rejects a `..` script path. The cpSync
   scan reads `fixtures/replay.mts`.

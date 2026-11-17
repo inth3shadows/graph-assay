@@ -41,6 +41,18 @@ function entrypointScript(dockerfile){
 // directory applies to everything under it; the last matching rule wins. Docker skips an excluded
 // directory unless an exception rule could match something under it. Checked against a real context
 // export (all 479 files) when it was written.
+// The pattern forms dockerMatcher is checked against Docker on: path characters, `*`, `?`, `**` as a whole
+// segment, a leading `!` or `/`, a trailing `/`. Anything else (character classes, escapes, regexp
+// characters moby passes through, `**` inside a segment, `..`, leading spaces) is refused, so a new
+// .dockerignore rule outside the subset fails here instead of being emulated wrongly.
+function unsupportedRule(raw){
+  if(/^\s|\s$/.test(raw))return'leading or trailing whitespace';
+  const g=raw.replace(/^!/,'').replace(/^\//,'').replace(/\/$/,'');
+  if(!/^[A-Za-z0-9_.\-/*?]+$/.test(g))return'a character outside [A-Za-z0-9_.-/*?]';
+  if(g.split('/').some((seg)=>seg.includes('**')&&seg!=='**'))return'** inside a path segment';
+  if(g.split('/').includes('..'))return'a .. segment';
+  return null;
+}
 function dockerMatcher(rules){
   const re=(g)=>{let r='';for(let i=0;i<g.length;i++){const ch=g[i];
     if(ch==='*'&&g[i+1]==='*'){i++;if(g[i+1]==='/')i++;r+=i+1>=g.length?'.*':'(?:.*/)?';}
@@ -60,7 +72,9 @@ const write=(f,s)=>{fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileS
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
 const baseEnv={...process.env,XDG_CONFIG_HOME:tmp,XDG_CACHE_HOME:tmp,NODE_NO_WARNINGS:'1',CGQA_TEST_SPEC:SPEC_VERSION};
 try{
- const rules=fs.readFileSync(path.join(qa,'.dockerignore'),'utf8').split('\n').map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
+ const rules=fs.readFileSync(path.join(qa,'.dockerignore'),'utf8').split('\n').filter(s=>s.trim()&&!s.startsWith('#'));
+ {const bad=rules.map((r)=>[r,unsupportedRule(r)]).filter(([,why])=>why);
+  assert.deepEqual(bad,[],`.dockerignore uses pattern forms repro-test does not emulate (verify them against a real docker build, then extend dockerMatcher): ${bad.map(([r,why])=>`'${r}' (${why})`).join(', ')}`);}
  const allowed=dockerMatcher(rules);
  const context=path.join(tmp,'context');fs.mkdirSync(context);
  const copy=(rel='')=>{for(const e of fs.readdirSync(path.join(qa,rel),{withFileTypes:true})){const f=path.posix.join(rel,e.name);if(e.isDirectory()){if(allowed(f)||allowed.mayEnter(f))copy(f);}else if(e.isFile()&&allowed(f)){const target=path.join(context,f);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(qa,f),target);}}};copy();
@@ -75,6 +89,10 @@ try{
   // Checked against a real build: of a/x.map, a/.map, a/d/.map and a/d/y.map, Docker sends only a/.map.
   assert.ok(k('a/.map')&&!k('a/x.map'),'** before more pattern is (.*/)?, as moby compiles it (so a/**.map needs a segment named .map)');
   assert.ok(k.mayEnter('a')&&!k.mayEnter('a/d'),'the walk never enters a/d for a/**.map');
+  // The repo's .dockerignore stays inside the verified subset; forms outside it are refused by name.
+  for(const r of ['**','!lib/**','**/.env*','!oracle/*.sh','!x?.ts','/abs/','!dir/'])assert.equal(unsupportedRule(r),null,r);
+  for(const [r,why] of [['!b/[a-c]*.ts','character'],['a\\[x\\]','character'],['**.map','inside a path segment'],['a/**x','inside a path segment'],['p/a^b','character'],['!p/a|b','character'],['../x','..'],['  #x','whitespace'],['! lib/x','character']])
+   assert.match(unsupportedRule(r)??'',new RegExp(why),r);
   assert.ok(k('b/a1.ts')&&!k('b/z1.ts'),'[...] is a character class');
   assert.ok(k('lit[x].txt'),'a backslash escapes');
   assert.ok(m.mayEnter('tools')&&m.mayEnter('keep')&&!m.mayEnter('z'),'an excluded directory is entered only when an exception rule leads into it');

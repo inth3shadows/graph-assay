@@ -72,7 +72,7 @@ try {
       if (['.git', 'node_modules', '.review', 'corpus'].includes(e.name) || (e.name === 'fixtures' && dir !== '')) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
       // fixtures/ holds fixture sources, never scanned, and at its top level the scripts that copy them (#41: replay.mts).
-      if (e.isDirectory()) { if (dir !== 'fixtures') visit(rel); } else if ((e.name.endsWith('.mjs') || /^fixtures\/[^/]+\.mts$/.test(rel) || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?|fixtures\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
+      if (e.isDirectory()) { if (dir !== 'fixtures') visit(rel); } else if ((e.name.endsWith('.mjs') || /^fixtures\/[^/]+\.mts$/.test(rel) || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?|fixtures\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|mts|ts)$/.test(e.name) && !/^test\.(mjs|mts|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
     }
   };
   visit('');

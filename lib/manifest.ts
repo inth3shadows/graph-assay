@@ -18,11 +18,13 @@ const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const sh = (cmd: string, args: string[], cwd?: string): string | null => { const r = spawnSync(cmd, args, { cwd, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
 const sha = (f: string) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
-/** Every repo file the entries load through relative imports (`import ... from`, `export ... from`,
- * a bare `import '...'`, `import('...')` and `require('...')` with a literal path), plus, for a .ts or .js file, the
- * package.json that decides how it loads: the nearest one above it, as Node finds it. A relative specifier that resolves
- * nowhere is an error, never skipped; one that resolves only from the repo root is taken as such (a
- * `node -e` script run there, as tools/repro.ts does). */
+/** Scripts holding a `node -e` program that runs from the repo root: their imports may resolve from there. */
+const ROOT_RELATIVE = new Set(['tools/repro.ts']);
+/** Every repo file the entries load through relative imports (`import ... from`, `export ... from`, a
+ * bare `import '...'`, `import('...')` and `require('...')` with a literal path; comments are not read),
+ * plus, for a .ts or .js file, the package.json that decides how it loads: the nearest one above it, as
+ * Node finds it. A specifier that resolves to no file is an error, never skipped; only ROOT_RELATIVE
+ * scripts may resolve one from the repo root. */
 export function importClosure(entries: string[], root = qa) {
   const seen = new Set<string>();
   const todo = [...entries];
@@ -41,9 +43,11 @@ export function importClosure(entries: string[], root = qa) {
     const pkg = /\.(ts|js)$/.test(rel) && !rel.endsWith('.d.ts') ? marker(rel) : null;
     if (pkg) seen.add(pkg);
     // A template literal counts only without `${`: a computed path cannot be followed, and must be listed by hand.
-    for (const m of fs.readFileSync(path.join(root, rel), 'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(?:['"](\.{1,2}\/[^'"]+)['"]|`(\.{1,2}\/[^`$]+)`)/g)) {
-      const spec = m[1] ?? m[2];
-      const dep = [path.posix.join(path.posix.dirname(rel), spec), spec].map((x) => path.posix.normalize(x)).find((x) => fs.existsSync(path.join(root, x)));
+    const src = fs.readFileSync(path.join(root, rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[\s;{}()])\/\/[^\n]*/gm, '$1');
+    for (const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(?:['"](\.{1,2}\/[^'"]+)['"]|`(\.{1,2}\/[^`$]+)`)/g)) {
+      const spec = (m[1] ?? m[2]).replace(/[?#].*$/, '');
+      const tries = [path.posix.join(path.posix.dirname(rel), spec), ...(ROOT_RELATIVE.has(rel) ? [spec] : [])].map((x) => path.posix.normalize(x));
+      const dep = tries.find((x) => fs.statSync(path.join(root, x), { throwIfNoEntry: false })?.isFile());
       if (!dep) throw new Error(`${rel}: import '${spec}' resolves to no file`);
       todo.push(dep);
     }

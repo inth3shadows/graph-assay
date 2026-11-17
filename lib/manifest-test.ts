@@ -3,6 +3,7 @@
 // hand, so this test walks the local imports of every scoring entry point and requires each file, and
 // the package.json that makes its directory's .ts load as ES modules, to be in the fingerprint.
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -42,10 +43,22 @@ check('the walk reads every import form, takes the nearest package.json, and ref
     assert.deepEqual(c, ['a/b.ts', 'a/entry.ts', 'a/package.json', 'a/req.ts', 'a/side.ts', 'a/tpl.ts', 'c/d.ts', 'e/f.mts', 'package.json']);
     w('a/bad.ts', "import { q } from './missing.ts';\n");
     assert.throws(() => importClosure(['a/bad.ts'], tmp), /a\/bad\.ts: import '\.\/missing\.ts' resolves to no file/);
+    // Comments are not read; a computed template is not followed; a query is not part of the path; a .d.ts takes no marker.
+    w('a/quiet.ts', "// see import './gone.ts'\n/* from './gone.ts' */\nconst m = await import(`./x/${'n'}.ts`);\nimport './b.ts?v=1';\nimport type { T } from '../types/t.d.ts';\n");
+    w('types/t.d.ts', ''); w('types/package.json', '{}');
+    assert.deepEqual(importClosure(['a/quiet.ts'], tmp), ['a/b.ts', 'a/package.json', 'a/quiet.ts', 'types/t.d.ts']);
+    // A directory is not a file; a wrongly relative import is not rescued from the repo root.
+    w('a/dir.ts', "import './sub';\n"); fs.mkdirSync(path.join(tmp, 'a/sub'));
+    assert.throws(() => importClosure(['a/dir.ts'], tmp), /a\/dir\.ts: import '\.\/sub' resolves to no file/);
+    w('util.ts', ''); w('a/rel.ts', "import './util.ts';\n");
+    assert.throws(() => importClosure(['a/rel.ts'], tmp), /resolves to no file/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('scorers() hashes the oracle\'s shell steps, which no import reaches', () => {
   const hashed = scorers().files;
-  for (const f of fs.readdirSync(path.join(qa, 'oracle')).filter((x) => x.endsWith('.sh'))) assert.ok(`oracle/${f}` in hashed, `oracle/${f}`);
+  // The tracked ones, as scorers() hashes only tracked files (an untracked scratch script is not provenance).
+  const tracked = spawnSync('git', ['ls-files', ':(glob)oracle/*.sh'], { cwd: qa, encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
+  assert.ok(tracked.includes('oracle/run.sh'), 'git ls-files lists oracle/run.sh');
+  for (const f of tracked) assert.ok(f in hashed, f);
 });
 console.log(`${n}/${n} manifest checks`);
