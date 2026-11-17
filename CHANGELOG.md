@@ -81,8 +81,9 @@ All notable changes to this project are recorded here. The format follows
   pooling the sample, whose quotas over-represent disagreements by design; the bound is a stratified
   Agresti-Coull interval, and a stratum carrying at least 5% of the weight with fewer than 20
   labelled answers makes the language diagnostic. The strata are counted over both canonical
-  subjects (where one failed on a repo, over the other alone); tables without per-site results or
-  without either subject's run are refused. TypeScript becomes diagnostic
+  subjects (where one failed on a repo, over the other alone, an approximation; a language where both
+  failed on every repo is not gated, since every score there is 0); tables without per-site results
+  or missing a codegraph or a code-graph-rag run are refused. TypeScript becomes diagnostic
   on both splits: 2 labelled disagreements and 9 labelled oracle-only sites stand for about a quarter
   of the sites each; JavaScript stays scored by one site (TECHNICAL.md). The strata rule moves to `labels/strata.ts`, shared by the sampler and the
   tables, which report each language's weights, weighted rate and bound. Issue #2.

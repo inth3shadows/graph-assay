@@ -200,6 +200,7 @@ try {
     assert.equal(status, 0, stderr);
     assert.deepEqual(Object.keys(json.diagnostic), ['go']);
     assert.deepEqual(json.noiseGate.go.unmeasured, ['disagree']);
+    assert.match(json.noiseGate.go.reason, /^unmeasured: disagree carries 50\.0% of the weight/); // R4: the reason is in the JSON too
     assert.equal(json.noiseGate.python.strata.agree.weight, 1 / 4);
     assert.equal(json.noiseGate.python.strata.agree.sites, 2); // requests and click
     assert.match(md, /\| go \| 25\.0%: 50\/50 \| 50\.0%: 1\/2 \| 25\.0%: 30\/30 \| .* \| yes \(unmeasured: disagree\) \|/);
@@ -232,11 +233,21 @@ try {
     fabricate(work, { sites: true, missFailed: 'mux-code-graph-rag' }); // a failure recorded in out-missing.json only
     assert.deepEqual(tables(work, ['--noise', noise]).json.noiseOneSubject, ['mux (code-graph-rag failed)']);
   });
-  check('a language where both subjects failed on every repo is diagnostic, and says so (Q1)', () => {
+  check('a language where both subjects failed on every repo is not gated, and stays in the averages at 0 (R2)', () => {
     fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'] });
     const { json, md } = tables(work, ['--noise', noise]);
-    assert.deepEqual(json.noiseLeftOut, ['mux (both subjects failed)']); assert.ok('go' in json.diagnostic);
-    assert.match(md, /go \(both subjects failed on every repo: no sites to weigh\)/);
+    assert.deepEqual(json.noiseLeftOut, ['mux (both subjects failed)']);
+    assert.deepEqual(json.noiseNotGated, [{ language: 'go', reason: 'both subjects failed on every repo' }]);
+    assert.ok(!('go' in json.diagnostic) && !('go' in json.noiseGate));
+    for (const s of ['codegraph', 'code-graph-rag']) assert.equal(json.subjects[s].agg['recall strict'].macro, (0.8 * (repos.length - 1)) / repos.length); // SPEC §8
+    assert.match(md, /Not gated, since every score there is 0 for both subjects: go \(both subjects failed on every repo\)/);
+  });
+  check('a repo where both subjects failed adds no sites; the language is gated on its other repos (R3)', () => {
+    fabricate(work, { sites: true, failed: ['click', 'click-code-graph-rag'] });
+    const { json } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseLeftOut, ['click (both subjects failed)']);
+    assert.equal(json.noiseGate.python.strata.agree.sites, 1); // requests alone
+    assert.ok(!('python' in json.diagnostic));
   });
   check('a gated language whose run has no site where SCIP answers is diagnostic, and says so', () => {
     fabricate(work, { sites: true, noScip: 'mux' });

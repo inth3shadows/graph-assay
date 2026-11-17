@@ -83,6 +83,9 @@ check('snapshot: items have relative repos and stubs, no home paths', snap.lengt
     { fwd: { sites: [{ site: 'b:1', name: 'f', key: 'ok|y' }, { site: 'b:2', name: 'f', key: 'ok|y' }, { site: 'b:3', name: 'f', key: 'ok|y' }] }, miss: { sites: [] } },
   ]);
   check('strata: SCIP-answered sites exclude a local SCIP never defines and a site with no symbol', ans.disagree.sites === 3 && ans.disagree.scipSites === 1);
+  // One subject's results alone (the other failed): `agree` needs that subject's edge to agree.
+  const one = stratumCounts([{ fwd: { sites: [{ site: 'c:1', name: 'f', key: 'ok|x', scip: 's#' }, { site: 'c:2', name: 'f', key: 'wrong-target|x', scip: 's#' }] }, miss: { sites: [] } }]);
+  check('strata: counted over one subject, an agreeing site is agree (R6)', one.agree?.scipSites === 1 && one.disagree?.scipSites === 1);
 }
 // noise.ts: a later sample's meta.json retires a language from an earlier sample when pooling.
 {
