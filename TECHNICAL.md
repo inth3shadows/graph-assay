@@ -23,7 +23,7 @@ Design decisions:
   that knows codegraph's SQLite schema: it indexes in a sandboxed HOME and exports a snapshot v1
   (nodes, files, edges with site line/column and the reference as written, unresolved references,
   capabilities). A second tool needs one more adapter, not changes to the scorers:
-  `lib/subjects/code-graph-rag.ts` is that adapter for code-graph-rag 0.5.0 (`cgr start
+  `lib/subjects/code-graph-rag.ts` is that adapter for code-graph-rag 0.7.1 (0.5.0's export has the same shape; `cgr start
   --update-graph -o`, isolated (`lib/sandbox.ts`; it refuses to run without isolation), sandboxed HOME; its `exact` / `heuristic` /
   `overload` resolution becomes `resolvedBy`, and anything but `exact` becomes provenance; Module
   nodes become file nodes; nodes without a path in the repo are dropped).
@@ -56,7 +56,7 @@ Design decisions:
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
   faithfully (counts, site lines, endpoints) and reports how the subject handles the awkward cases;
-  for codegraph f72c9d2e, columns are UTF-16 code units in TS and Python, and two calls of one
+  for codegraph f72c9d2e and 147fe290, columns are UTF-16 code units in TS and Python, and two calls of one
   callee on a line are two edges.
 - **Join by call site, not by symbol.** A codegraph edge carries the call's line and column. SCIP
   carries every reference occurrence with its range. Joining on file, line and called name, at the
@@ -307,8 +307,8 @@ supplies the adapter's existing `unshare` isolation.
 | scip-python / scip-typescript | `0.6.8` / `0.5.2` | Versions and transitive tree from the machine's existing oracle npm lock; `docker/package-lock.json` retains registry integrity hashes, with exact root versions in `docker/package.json`. Installed with `npm ci --ignore-scripts`. |
 | scip-go | `0.2.8`; archive SHA256 `22d6d55b85341c650e92fc278a62cc4c57dc5800c386e199c2b999f8605dd32a` | Existing benchmark version; checksum from the [public release asset API](https://api.github.com/repos/scip-code/scip-go/releases/tags/v0.2.8), verified before extraction. |
 | SCIP decoder | `0.10.0`; archive SHA256 `eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0` | Existing machine's `scip --version`; checksum from the [public release asset API](https://api.github.com/repos/scip-code/scip/releases/tags/v0.10.0). Required by `lib/scip.ts` for `scip print --json`. |
-| codegraph | upstream commit `f72c9d2efb14454ff4f9fd7b8460abd82f19a287` | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph/commit/f72c9d2efb14454ff4f9fd7b8460abd82f19a287), CI's known build pair. `npm ci` uses that commit's lock, then `npm run build`; WASM extraction (`CODEGRAPH_KERNEL=0`). |
-| code-graph-rag | `0.5.0`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.5.0/), matching SPEC's subject spike. `docker/requirements.lock` freezes the existing benchmark venv's transitive versions and PyPI wheel SHA256s (pip report, CPython 3.12/amd64). `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
+| codegraph | upstream commit `147fe290bf944d8ce380d85bdeb55e90142723c0` | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph/commit/147fe290bf944d8ce380d85bdeb55e90142723c0), upstream `main` as of 2026-11-17 (committed 2026-11-16). Until then the pin was `f72c9d2e`, which stays edgediff's known build pair. `npm ci` uses that commit's lock, then `npm run build`; WASM extraction (`CODEGRAPH_KERNEL=0`). |
+| code-graph-rag | `0.7.1`, `treesitter-full` | [PyPI release](https://pypi.org/project/code-graph-rag/0.7.1/), the latest release on 2026-11-17 (until then `0.5.0`, SPEC's subject spike). `docker/requirements.lock` holds the transitive versions and PyPI wheel SHA256s that `pip install --dry-run --only-binary=:all: --report` resolved in the Python image above (CPython 3.12/amd64) on 2026-11-17. `--require-hashes --only-binary=:all:` rejects drift and source builds. Provider SDKs are upstream dependencies; the runner invokes no model. |
 | codebase-memory-mcp | `0.12.1`; archive SHA256 `8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7` | [Release v0.12.1](https://github.com/DeusData/codebase-memory-mcp/releases/tag/v0.12.1) linux-amd64 asset; checksum from the release's `checksums.txt`. `tools/setup.sh` checks it before extraction (`--no-cbm` skips; other platforms are not pinned). Not in the Docker reproduction yet. |
 | code-review-graph | `2.4.0`, core (no extras) | [PyPI release](https://pypi.org/project/code-review-graph/2.4.0/). `docker/crg-requirements.lock` pins every dependency with all of its PyPI wheel hashes (`uv pip compile --generate-hashes`, resolved for CPython 3.12 x86_64); `tools/setup.sh` installs it with `--require-hashes --only-binary=:all:` (`--no-crg` skips; needs Python 3.11+ on Linux or macOS). Each lock installs into a fresh `venv-<first 12 hex of the lock's sha256>`, `venv` links to it only after pip succeeds, and venvs of earlier locks are then removed. `setup.sh` checks every part's platform before installing anything. No embeddings or enrichment. Not in the Docker reproduction yet. |
 | Corpus | SHAs in `corpus/v1.txt` | Preregistered inputs, unchanged. Ky's and got's upstreams have no lock: `docker/ky-package-lock.json` freezes the dev benchmark's installed tree (npm's hidden lock plus the pinned repo's root package metadata); `docker/got-package-lock.json` was resolved from got's `package.json` at the pinned commit with `npm install --package-lock-only --ignore-scripts --before=2026-10-30T08:45:40Z` (that commit's date), so the held-out entry was never indexed to make it. Installed with `npm ci --ignore-scripts`; no corpus build scripts run. Every other entry needs no setup; `tools/repro.ts` refuses an `npm` entry without a lock before fetching anything. |
@@ -522,11 +522,13 @@ host vs image: T1 and oracle noise identical, codegraph identical except one cli
 scip-python 0.6.8 resolves a standard-library call on the host and not in the image (the Python
 environment is an input), and code-graph-rag within its own run-to-run variation.
 
-**Determinism:** code-graph-rag 0.5.0's guessed edges vary between runs of one build in one
-environment (three fresh indexes: ky 72,050 / 72,043 / 72,042 edges, requests 156 / 156 / 155
-guessed). Guessed edges are not scored, but one can move a site in or out of guess-only; the effect
-is about 0.1 point, under the tables' precision, so a single run is reported and the variation is
-noted. codegraph's repeat runs were identical in the P1b execution-mode differential (`graph-assay modes`).
+**Determinism:** code-graph-rag's guessed edges vary between runs of one build in one
+environment. 0.5.0, three fresh indexes: ky 72,050 / 72,043 / 72,042 edges, requests 156 / 156 / 155
+guessed. 0.7.1 (2026-11-17, host, three fresh indexes of the dev work copies): ky 71,506 / 71,498 /
+71,505 exported relationships (3,637 / 3,629 / 3,636 guessed call edges), requests 3,498 every time
+(170 guessed). Guessed edges are not scored, but one can move a site in or out of guess-only; on
+0.5.0 the effect was about 0.1 point, under the tables' precision, so a single run is reported and
+the variation is noted. codegraph's repeat runs were identical in the P1b execution-mode differential (`graph-assay modes`).
 
 ### Canary mechanics
 

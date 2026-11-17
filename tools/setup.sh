@@ -10,7 +10,7 @@
 # python3. --no-sandbox skips building the sandbox image (needs docker; Linux only).
 set -euo pipefail
 qa=$(cd "$(dirname "$0")/.." && pwd)
-CG_PIN=f72c9d2efb14454ff4f9fd7b8460abd82f19a287 CGR_VERSION=0.5.0
+CG_PIN=147fe290bf944d8ce380d85bdeb55e90142723c0 CGR_VERSION=0.7.1
 # codebase-memory-mcp release binary (linux-amd64 only); sha256 from the release's checksums.txt
 CBM_VERSION=0.12.1 CBM_SHA256=8453015145f072c1b9b019cbdd02cea8cc6f18cc5e116036dd20992631c638c7
 cg=$CG_PIN do_cg=1 do_cgr=1 do_cbm=1 do_crg=1 do_scip=1 do_sandbox=1 dry=0 unlocked=0

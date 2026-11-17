@@ -76,6 +76,16 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- The reproduction measures current builds: codegraph `147fe290` (upstream `main` on 2026-11-17, was
+  `f72c9d2e`) and code-graph-rag 0.7.1 (was 0.5.0), in `Dockerfile` and `tools/setup.sh`.
+  `docker/requirements.lock` is re-resolved for 0.7.1 in the image's Python (wheels only, PyPI
+  SHA256s). The code-graph-rag adapter's logic needed no change: 0.7.1 takes the same `cgr start`
+  flags, its export has the same shape, and the adapter test's source maps to the same snapshot; its
+  install comment names 0.7.1 now, so its `adapterSha256` changes. Each tool's verdicts on its own
+  fixture set are unchanged (`fixtures/cgr-candidates/README.md` gains a 0.7.1 column); on codegraph's
+  set, code-graph-rag 0.7.1 moves `n4-py-builtin` from GUESSED to FIXED. 0.7.1 is
+  still not deterministic on ky; the tables' note carries its numbers (TECHNICAL, Determinism). Edgediff's
+  self-test pair stays `60b0d7a9 -> f72c9d2e`.
 - **SPEC v5.0** (major: it moves published numbers). The diagnostic-language gate (§9) weights the
   labelled sample's strata by their share of the tabled run's sites where SCIP answers instead of
   pooling the sample, whose quotas over-represent disagreements by design; the bound is a stratified
