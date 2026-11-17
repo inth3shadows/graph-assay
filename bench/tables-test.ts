@@ -20,22 +20,28 @@ const repos = readRepos(undefined, 'dev').map((r) => r.name);
 
 const PAIRS = (o?) => ({ oracle: 10, subject: 9, matched: 8, guessOnly: 0, subjectOnly: { oracleDisagrees: 1, oracleSilent: 3 }, skipped: 0,
   decorators: { total: 0, found: 0 }, unmappedEdges: { caller: 2, target: 1 }, skippedEdges: { 'skip-framework-self-site': 4 }, callerRanges: { enclosing: 5, braces: 0 }, unitsAtFileLevel: 1, ...o });
-function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'] } = {}) {
+function fabricate(work, { failed = null, missingDir = null, noPairs = null, spec = SPEC_VERSION, noScored = null, noLines = null, sfxs = ['', '-code-graph-rag'], sites = false, bareSites = null, noMissSites = null, noScip = null, missFailed = null } = {}) {
   fs.rmSync(work, { recursive: true, force: true });
   for (const r of repos) {
     for (const sfx of sfxs) {
       const dir = path.join(work, `w-pub-${r}${sfx}`);
       if (`${r}${sfx}` === missingDir) continue;
-      if (`${r}${sfx}` === failed) {
+      if ([].concat(failed).includes(`${r}${sfx}`)) {
         write(path.join(dir, 'out.json'), { buckets: {}, skipped: {}, subjectFailed: 'index exited 1', spec });
         write(path.join(dir, 'out-missing.json'), { buckets: { 'missing|file-not-indexed|py|method': 10 }, subjectFailed: 'index exited 1', decorators: { total: 0, causes: {} },
           pairs: PAIRS({ subject: 0, matched: 0, subjectOnly: { oracleDisagrees: 0, oracleSilent: 0 } }), spec });
       } else {
         const lines = `${r}${sfx}` !== noLines;
-        write(path.join(dir, 'out.json'), { buckets: `${r}${sfx}` === noScored ? {} : { 'ok|calls': 9, 'wrong-target|calls|-|method>method': 1 }, skipped: {}, spec, siteLines: lines });
+        // With `sites`: per-site records (ORACLE_ALLSITES): one agree site, two disagree sites (one each
+        // subject's), one scip-only site.
+        const fwdSites = [{ site: 'a.x:1', name: 'f', key: 'ok|calls', scip: 's#' }, { site: 'a.x:2', name: 'f', key: sfx ? 'ok|calls' : 'wrong-target|calls', scip: 's#' },
+          { site: 'a.x:4', name: 'f', key: sfx ? 'wrong-target|calls' : 'ok|calls', scip: 's#' }];
+        const missSites = sfx ? [] : [{ site: 'a.x:3', name: 'f', key: 'missing|no-ref|x', scip: 's#' }];
+        if (r === noScip) for (const x of [...fwdSites, ...missSites]) delete x.scip;
+        write(path.join(dir, 'out.json'), { buckets: `${r}${sfx}` === noScored ? {} : { 'ok|calls': 9, 'wrong-target|calls|-|method>method': 1 }, skipped: {}, spec, siteLines: lines, ...(sites && `${r}${sfx}` !== bareSites ? { sites: fwdSites } : {}) });
         write(path.join(dir, 'out-missing.json'), { buckets: { 'missing|found|py|method': 8, 'missing|no-ref|py|method': 2 }, decorators: { total: 0, causes: {} },
           skipped: { 'corpus-exclude': 1 }, waterfall: { filesInCorpus: 7, excluded: 2, supportedLanguage: 5, indexedBySubject: 4, indexedByOracle: 5 },
-          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines });
+          ...(`${r}${sfx}` === noPairs ? {} : { pairs: PAIRS() }), spec, siteLines: lines, ...(`${r}${sfx}` === missFailed ? { subjectFailed: 'timeout' } : {}), ...(sites && ![bareSites, noMissSites].includes(`${r}${sfx}`) ? { sites: missSites } : {}) });
       }
     }
   }
@@ -177,6 +183,109 @@ try {
   check('confidence bounds print to one decimal place (SPEC §9)', () => {
     fabricate(work);
     assert.match(tables(work).md, /\| codegraph \| 90\.0%( \[\d+\.\d-\d+\.\d\])? \|/);
+  });
+  // SPEC §9 #2: the noise gate weights the labelled strata by the run's sites where SCIP answers.
+  const noise = path.join(tmp, 'noise.json');
+  const st = (k, n) => ({ scip: [k, n], consensus: n });
+  const good = { agree: st(50, 50), disagree: st(40, 40), 'scip-only': st(30, 30), ALL: { items: 120, ...st(120, 120) } };
+  write(noise, { labellers: ['opus', 'sol'], protocol: null, sided: {}, table: { python: good, typescript: good, javascript: good, go: { ...good, disagree: st(1, 2) } } });
+  check('the noise gate refuses outputs without per-site records (N2)', () => {
+    fabricate(work);
+    const { status, stderr } = tables(work, ['--noise', noise]);
+    assert.equal(status, 2); assert.match(stderr, /needs per-site records/);
+  });
+  check('the noise gate weights strata by the run\'s sites and marks an unmeasured language (N10)', () => {
+    fabricate(work, { sites: true });
+    const { status, json, md, stderr } = tables(work, ['--noise', noise]);
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(Object.keys(json.diagnostic), ['go']);
+    assert.deepEqual(json.noiseGate.go.unmeasured, ['disagree']);
+    assert.match(json.noiseGate.go.reason, /^unmeasured: disagree carries 50\.0% of the weight/); // R4: the reason is in the JSON too
+    assert.ok(!('reason' in json.noiseGate.python)); // T6: only a diagnostic gate has one
+    assert.equal(json.noiseGate.python.strata.agree.weight, 1 / 4);
+    assert.equal(json.noiseGate.python.strata.agree.sites, 2); // requests and click
+    assert.match(md, /\| go \| 25\.0%: 50\/50 \| 50\.0%: 1\/2 \| 25\.0%: 30\/30 \| .* \| yes \(unmeasured: disagree\) \|/);
+    assert.match(md, /go \(unmeasured: disagree carries 50\.0% of the weight with 2 labelled answers\)/);
+    assert.match(md, /\| mux \| go \(diagnostic\)/);
+  });
+  check('the noise gate counts strata over both sampled subjects, whatever --subjects picks (N4)', () => {
+    fabricate(work, { sites: true });
+    const both = tables(work, ['--noise', noise]).json.noiseGate;
+    assert.equal(both.python.strata.disagree.sites, 4); // a.x:2 and a.x:4 in requests and click
+    assert.deepEqual(tables(work, ['--noise', noise, '--subjects', 'codegraph']).json.noiseGate, both);
+  });
+  // Round 3 (Q1): a failure never decides whether a language is gated. Where one subject failed on a
+  // repo, the repo's strata come from the other; only where both failed is there nothing to weigh.
+  check('a repo where one subject failed is counted over the other; the failed repo stays in the averages (Q1)', () => {
+    fabricate(work, { sites: true, failed: 'click' }); // python keeps requests (both) and click (code-graph-rag only)
+    const { status, json, md } = tables(work, ['--noise', noise]);
+    assert.equal(status, 0);
+    assert.deepEqual(json.noiseOneSubject, ['click (codegraph failed)']);
+    assert.ok(!('python' in json.diagnostic) && json.noisePopulationRepos.includes('click'));
+    // SPEC §8: click stays in codegraph's recall average at 0 (mux is out: go is unmeasured in this fixture).
+    assert.equal(json.subjects.codegraph.agg['recall strict'].macro, (0.8 * (repos.length - 2)) / (repos.length - 1));
+    assert.match(md, /from one subject where the other failed: click \(codegraph failed\)/);
+  });
+  check('a failure on a language\'s only repo still gates it, on the surviving subject (Q1)', () => {
+    fabricate(work, { sites: true, failed: 'mux' }); // mux is dev's only Go repo; go is unmeasured either way
+    const { json } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseOneSubject, ['mux (codegraph failed)']);
+    assert.deepEqual(json.noiseGate.go.unmeasured, ['disagree']); assert.ok('go' in json.diagnostic);
+    fabricate(work, { sites: true, missFailed: 'mux-code-graph-rag' }); // a failure recorded in out-missing.json only
+    assert.deepEqual(tables(work, ['--noise', noise]).json.noiseOneSubject, ['mux (code-graph-rag failed)']);
+  });
+  check('a language where every tabled subject failed on every repo is not gated, and stays in the averages at 0 (R2)', () => {
+    fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'] });
+    const { json, md } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseUncounted, ['mux (both subjects failed)']);
+    assert.deepEqual(json.noiseNotGated, [{ language: 'go', reason: 'every tabled subject failed on every repo' }]);
+    assert.ok(!('go' in json.diagnostic) && !('go' in json.noiseGate));
+    for (const s of ['codegraph', 'code-graph-rag']) assert.equal(json.subjects[s].agg['recall strict'].macro, (0.8 * (repos.length - 1)) / repos.length); // SPEC §8
+    assert.match(md, /Not gated by the oracle-noise rule \(SPEC §9\), kept in the averages: go \(every tabled subject failed on every repo: recall 0, precision undefined\)/);
+  });
+  check('a language stays gated when a tabled subject ran though both sampled subjects failed (T1)', () => {
+    fabricate(work, { sites: true, failed: ['mux', 'mux-code-graph-rag'], sfxs: ['', '-code-graph-rag', '-codebase-memory-mcp'] });
+    const { status, json, md } = tables(work, ['--noise', noise, '--subjects', 'codegraph,code-graph-rag,codebase-memory-mcp']);
+    assert.equal(status, 0);
+    assert.deepEqual(json.noiseNotGated, []);
+    assert.equal(json.diagnostic.go?.reason, 'codegraph and code-graph-rag failed on every repo, and another tabled subject ran');
+    assert.match(md, /\| mux \| go \(diagnostic\)/);
+  });
+  check('a repo where both subjects failed adds no sites; the language is gated on its other repos (R3)', () => {
+    fabricate(work, { sites: true, failed: ['click', 'click-code-graph-rag'] });
+    const { json } = tables(work, ['--noise', noise]);
+    assert.deepEqual(json.noiseUncounted, ['click (both subjects failed)']);
+    assert.equal(json.noiseGate.python.strata.agree.sites, 1); // requests alone
+    assert.ok(!('python' in json.diagnostic));
+  });
+  check('a gated language whose run has no site where SCIP answers is diagnostic, and says so', () => {
+    fabricate(work, { sites: true, noScip: 'mux' });
+    const { status, json, md } = tables(work, ['--noise', noise]);
+    assert.equal(status, 0);
+    assert.equal(json.noiseGate.go.estimate, null); assert.ok('go' in json.diagnostic);
+    assert.match(md, /go \(no run sites where SCIP answers\)/);
+  });
+  check('an unmeasured heavy stratum is the reason given, even with no estimate (P2)', () => {
+    const bare = path.join(tmp, 'noise-bare.json');
+    write(bare, { labellers: ['opus', 'sol'], protocol: null, sided: {}, table: { python: good, typescript: good, javascript: good, go: { ...good, disagree: { scip: [0, 0], consensus: 3 } } } });
+    fabricate(work, { sites: true });
+    const { json, md } = tables(work, ['--noise', bare]);
+    assert.equal(json.noiseGate.go.estimate, null);
+    assert.match(md, /go \(unmeasured: disagree carries 50\.0% of the weight with 0 labelled answers\)/);
+  });
+  check('the noise gate refuses a missing canonical subject run, whatever --subjects picks (Q2)', () => {
+    fabricate(work, { sites: true, missingDir: `${repos[0]}-code-graph-rag` });
+    const { status, stderr } = tables(work, ['--noise', noise, '--subjects', 'codegraph']);
+    assert.equal(status, 2); assert.match(stderr, new RegExp(`${repos[0]} has no code-graph-rag run`));
+  });
+  check('the per-site refusal covers either file of every counted subject, not a failed one (P5)', () => {
+    fabricate(work, { sites: true, noMissSites: 'click' });
+    const one = tables(work, ['--noise', noise]);
+    assert.equal(one.status, 2); assert.match(one.stderr, /w-pub-click lacks them/);
+    fabricate(work, { sites: true, failed: 'mux' }); // the failed run has no site records: ignored
+    assert.equal(tables(work, ['--noise', noise]).status, 0);
+    fabricate(work, { sites: true, failed: 'mux', bareSites: 'mux-code-graph-rag' }); // the survivor has none: refused
+    assert.equal(tables(work, ['--noise', noise]).status, 2);
   });
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

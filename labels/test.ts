@@ -7,7 +7,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { correct, parseAnswer, question, unstub } from './questions.ts';
-import { diagnosticLanguages, wilson } from './score.ts';
+import { noiseGate, wilson } from './score.ts';
+import { stratumCounts } from './strata.ts';
 
 let failed = 0; let n = 0;
 const check = (name, ok) => { n++; if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}`); };
@@ -43,8 +44,49 @@ check('unstub: precomputed stubs, no checkout read', unstub(pyStub, 'a.py:3') ==
 const dataDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
 const snap = fs.existsSync(dataDir) ? fs.readdirSync(dataDir).map((d) => fs.readFileSync(path.join(dataDir, d, 'items.jsonl'), 'utf8')) : [];
 check('snapshot: items have relative repos and stubs, no home paths', snap.length > 0 && snap.every((t) => !t.includes('/home/') && t.split('\n').filter(Boolean).every((l) => { const i = JSON.parse(l); return !path.isAbsolute(i.repo) && i.stubs; })));
-const diag = diagnosticLanguages({ javascript: { ALL: { scip: [28, 47] } }, typescript: { ALL: { scip: [35, 36] } }, go: { ALL: { scip: [0, 0] } } });
-check('diagnostic: 28/47 (lower bound 45%) is diagnostic, 35/36 is not, no answers is', diag.has('javascript') && !diag.has('typescript') && diag.has('go') && Math.abs(diag.get('javascript').lower - 0.453) < 0.01);
+// SPEC §9 #2: the gate weights each stratum by its share of the tabled run's sites where SCIP answers,
+// not by the sample's quotas.
+{
+  const st = (k, n, consensus = n) => ({ scip: [k, n], consensus });
+  const sites = (o) => Object.fromEntries(Object.entries<number>(o).map(([k, v]) => [k, { sites: v, scipSites: v }]));
+  // Pooled 78/97 (Wilson lower bound 71%); weighted by 9,000 agree and 500 disagree sites it is 98%.
+  const py = noiseGate({ agree: st(50, 50), disagree: st(28, 47) }, sites({ agree: 9000, disagree: 500, 'subject-only': 70 }));
+  check('noise gate: strata weighted by the run\'s sites, not the quotas (pooled 78/97 would fail)', !py.diagnostic && Math.abs(py.strata.agree.weight - 9000 / 9500) < 1e-9 && py.lower > 0.85 && py.lower < py.estimate);
+  // 785 of 3,319 sites are disagreements, and 2 are labelled: unmeasured.
+  const ts = noiseGate({ agree: st(25, 25), disagree: st(1, 2), 'scip-only': st(9, 9) }, sites({ agree: 1644, disagree: 785, 'scip-only': 890 }));
+  check('noise gate: a stratum with >= 5% of the weight and < 20 labelled answers is unmeasured', ts.diagnostic && ts.unmeasured.join() === 'disagree,scip-only');
+  // N1: the weight is the run's SCIP-answering sites, not the sample's answered fraction: a stratum the
+  // sample saw SCIP answer nowhere still carries its run sites, and is unmeasured when heavy.
+  const heavy = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 1) }, sites({ agree: 300, disagree: 900 }));
+  check('noise gate: a heavy stratum with no labelled answers is unmeasured, never weightless, and leaves no estimate (N1, P3)', heavy.diagnostic && heavy.unmeasured.join() === 'disagree' && heavy.estimate === null && heavy.lower === 0 && heavy.dropped.length === 0 && heavy.strata.disagree.weight === 0.75);
+  // SCIP answers at 16 of 855 run disagreements (4.9% of the weight): too light to gate; dropped.
+  const js = noiseGate({ agree: st(25, 25), disagree: st(0, 0, 35) }, { agree: { sites: 311, scipSites: 311 }, disagree: { sites: 855, scipSites: 16 }, 'scip-only': { sites: 2, scipSites: 2 } });
+  check('noise gate: an unlabelled stratum under 5% of the weight is dropped', !js.diagnostic && js.dropped.join() === 'disagree,scip-only' && js.estimate === 1);
+  check('noise gate: a low rate is diagnostic (28/47 alone)', noiseGate({ agree: st(28, 47) }, sites({ agree: 100 })).diagnostic);
+  const none = noiseGate(undefined, sites({ agree: 10 }));
+  check('noise gate: a tabled language with no labelled sample is diagnostic', none.diagnostic && !none.labelled && none.estimate === null);
+  // N3: the bound is centred on the Agresti-Coull rate, so 87/100 (Wilson lower bound 79.0%) stays diagnostic.
+  const ac = noiseGate({ agree: st(87, 100) }, sites({ agree: 50 }));
+  check('noise gate: the bound is centred on the Agresti-Coull rate (87/100 is diagnostic) (N3)', ac.diagnostic && Math.abs(ac.lower - (89 / 104 - 1.96 * Math.sqrt((89 / 104) * (15 / 104) / 104))) < 1e-12);
+}
+// labels/strata.ts: one unit per site and name; both subjects' keys decide its stratum.
+{
+  const out = (fwd, miss) => ({ fwd: { sites: fwd.map(([site, key]) => ({ site, name: 'f', key })) }, miss: { sites: miss.map(([site, key]) => ({ site, name: 'f', key })) } });
+  const counts = stratumCounts([
+    out([['a:1', 'ok|x'], ['a:2', 'ok|x'], ['a:3', 'ok|x'], ['a:5', 'no-scip-ref|x'], ['a:6', 'ok|x']], [['a:4', 'missing|no-ref|x']]),
+    out([['a:1', 'ok|y'], ['a:2', 'wrong-target|y'], ['a:4', 'ok|y'], ['a:5', 'ok|y']], []),
+  ]);
+  check('strata: agree, disagree, scip-only, subject-only; a site one subject has no edge at is in none', JSON.stringify(Object.entries(counts).map(([k, c]) => [k, c.sites]).sort()) === JSON.stringify([['agree', 1], ['disagree', 1], ['scip-only', 1], ['subject-only', 1]]));
+  // SCIP answers where a record carries its symbol, unless the oracle found a local SCIP never defines.
+  const ans = stratumCounts([
+    { fwd: { sites: [{ site: 'b:1', name: 'f', key: 'wrong-target|x', scip: 's#' }, { site: 'b:2', name: 'f', key: 'scip-local-undefined|x', scip: 'local 3' }, { site: 'b:3', name: 'f', key: 'external|x' }] }, miss: { sites: [] } },
+    { fwd: { sites: [{ site: 'b:1', name: 'f', key: 'ok|y' }, { site: 'b:2', name: 'f', key: 'ok|y' }, { site: 'b:3', name: 'f', key: 'ok|y' }] }, miss: { sites: [] } },
+  ]);
+  check('strata: SCIP-answered sites exclude a local SCIP never defines and a site with no symbol', ans.disagree.sites === 3 && ans.disagree.scipSites === 1);
+  // One subject's results alone (the other failed): `agree` needs that subject's edge to agree.
+  const one = stratumCounts([{ fwd: { sites: [{ site: 'c:1', name: 'f', key: 'ok|x', scip: 's#' }, { site: 'c:2', name: 'f', key: 'wrong-target|x', scip: 's#' }] }, miss: { sites: [] } }]);
+  check('strata: counted over one subject, an agreeing site is agree (R6)', one.agree?.scipSites === 1 && one.disagree?.scipSites === 1);
+}
 // noise.ts: a later sample's meta.json retires a language from an earlier sample when pooling.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-noise-'));

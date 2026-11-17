@@ -93,7 +93,7 @@ try{
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
  shim('bash',`const fs=require('node:fs'),path=require('node:path');const args=process.argv.slice(2);if(args[0]!=='oracle/run.sh')process.exit(9);
  const subject=process.env.CGQA_SUBJECT;const work=path.join(process.env.ORACLE_WORK,'w-'+args[1]+(subject==='codegraph'?'':'-code-graph-rag'));fs.mkdirSync(work,{recursive:true});
- for(const [name,buckets]of[['out.json',{'ok|calls':1}],['out-missing.json',{'missing|found|go':1}]])fs.writeFileSync(path.join(work,name),JSON.stringify({total:1,buckets,groups:{},adapterSha256:'a'.repeat(64),spec:process.env.CGQA_TEST_SPEC}));`);
+ for(const [name,buckets]of[['out.json',{'ok|calls':1}],['out-missing.json',{'missing|found|go':1}]])fs.writeFileSync(path.join(work,name),JSON.stringify({total:1,buckets,groups:{},sites:[],adapterSha256:'a'.repeat(64),spec:process.env.CGQA_TEST_SPEC}));`);
  shim('node',`const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');const a=process.argv.slice(2),script=a[0];
  if(script==='-e'){console.log(JSON.stringify({codegraph:'test',cgr:'test',tools:{}}));process.exit(0);}
  if(script==='bench/tables.ts'){const r=cp.spawnSync(process.execPath,[path.resolve(script),...a.slice(1)],{stdio:'inherit',env:process.env});process.exit(r.status??1);}
