@@ -69,12 +69,14 @@ try {
   const scripts = [];
   const visit = (dir) => {
     for (const e of fs.readdirSync(path.join(qa, dir), { withFileTypes: true })) {
-      if (['.git', 'node_modules', '.review', 'fixtures', 'corpus'].includes(e.name)) continue;
+      if (['.git', 'node_modules', '.review', 'corpus'].includes(e.name) || (e.name === 'fixtures' && dir !== '')) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
-      if (e.isDirectory()) visit(rel); else if ((e.name.endsWith('.mjs') || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|ts)$/.test(e.name) && !/^test\.(mjs|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
+      // fixtures/ holds fixture sources, never scanned, and at its top level the scripts that copy them (#41: replay.mts).
+      if (e.isDirectory()) { if (dir !== 'fixtures') visit(rel); } else if ((e.name.endsWith('.mjs') || /^fixtures\/[^/]+\.mts$/.test(rel) || (e.name.endsWith('.ts') && (rel.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?|fixtures\/)[^/]+\.ts$/.test(rel)))) && !/-test\.(mjs|mts|ts)$/.test(e.name) && !/^test\.(mjs|mts|ts)$/.test(e.name)) scripts.push(rel); // the TypeScript scripts (tsconfig.json's include); elsewhere a .ts is an indexed source
     }
   };
   visit('');
+  n++; assert.ok(scripts.includes('fixtures/replay.mts'), 'the cpSync scan reads fixtures/replay.mts');
   for (const rel of scripts) {
     if (!/\bcpSync\s*\(/.test(fs.readFileSync(path.join(qa, rel), 'utf8'))) continue;
     n++; assert.ok(rel in exempt, `${rel} copies with fs.cpSync: use copySeed (lib/fixture-install.ts) so a fixture's install is placed`);

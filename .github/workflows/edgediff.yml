@@ -25,12 +25,21 @@ on:
         default: f72c9d2efb14454ff4f9fd7b8460abd82f19a287
   pull_request:
     paths:
+      # Every file differential/builds.ts loads (lib/manifest-test.ts pins this list to its imports).
       - .github/workflows/edgediff.yml
       - differential/builds.ts
       - differential/modes.ts
       - differential/package.json
       - corpus/v1.txt
+      - lib/config.ts
+      - lib/fixture-install.ts
+      - lib/main.ts
+      - lib/package.json
+      - lib/provenance.ts
+      - lib/sandbox.ts
+      - lib/snapshot.ts
       - lib/subjects/codegraph.ts
+      - lib/types.ts
       - tools/build-codegraph.sh
 permissions:
   contents: read

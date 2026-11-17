@@ -330,9 +330,12 @@ image has no harness `.git` directory. Scoring rules and historical results rema
 unchanged. Time, memory and generated dates are observations, not reproducible
 constants; the host kernel also remains visible in the platform record.
 
-T3 provenance also includes `differential/modes.ts`, the repeat comparator, and `differential/package.json`, which makes it load as an ES module; the manifest also hashes `tools/package.json`, the marker for the entry point `tools/repro.ts`. `tools/repro-test.ts`
-checks runtime imports against the Docker allowlist and runs the real canonical orchestrator/table
-code with offline subject shims, including expected differences and failed-index manifests.
+T3 provenance also includes `differential/modes.ts`, the repeat comparator, and `differential/package.json`, which makes it load as an ES module; the manifest also hashes `differential/builds.ts` (the corpus reader the tables use) and `tools/package.json`, the marker for the entry point `tools/repro.ts`. `lib/manifest.ts` `scorers()` hashes the scorer code, the tables, the labels scorers and the oracle's shell steps included; `lib/manifest-test.ts` walks the imports of every scoring entry point (`SCORING_ENTRIES`) and requires each file and its nearest `package.json` in that list (a dangling import fails), and `tools/repro-test.ts` requires them in the repro manifest. `lib/manifest-test.ts` also pins edgediff's path filter to the build differ's imports. `tools/repro-test.ts`
+checks runtime imports against the Docker allowlist, read with Docker's own matching (a rule on a parent
+directory covers its children; `**` covers dot-paths), checks that the image's last three instructions
+are `WORKDIR /opt/graph-assay`, `COPY . .` and the ENTRYPOINT, and runs the real canonical
+orchestrator/table code with offline subject shims, including expected differences and failed-index
+manifests.
 
 Oracle noise is recomputed from the committed labels snapshot (`labels/data/`,
 every sample pooled) with `labels/noise.ts`; no labeller or credentials belong in

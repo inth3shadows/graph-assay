@@ -76,7 +76,7 @@ for (const dir of ['lib', 'oracle', 'bench', 'benchmarks', 'fixtures', 'schema',
   };
   walk(dir);
 }
-for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.ts', 'differential/modes.ts', 'differential/package.json', 'tools/package.json']) manifest.files[f] = hash(path.join(qa, f));
+for (const f of ['Dockerfile', 'SPEC.md', 'tools/repro.ts', 'differential/builds.ts', 'differential/modes.ts', 'differential/package.json', 'tools/package.json']) manifest.files[f] = hash(path.join(qa, f));
 const save = () => fs.writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 save();
 try {
