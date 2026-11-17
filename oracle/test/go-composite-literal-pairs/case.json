@@ -10,7 +10,8 @@
    "controls -> NewT",
    "controls -> Norm",
    "controls -> Size",
-   "collisions -> Options"
+   "collisions -> Options",
+   "closures -> do"
   ],
   "subject": [
    "!literals -> T",
@@ -20,7 +21,15 @@
    "!mk -> T",
    "!mk2 -> T",
    "!unicode -> T",
-   "!long -> T"
+   "!long -> T",
+   "!rawjson -> T",
+   "!blockComment -> T",
+   "!closures -> T",
+   "!typeExprs -> T",
+   "!convs -> T",
+   "!lexed -> T",
+   "!afterIndex -> T",
+   "!longSig -> T"
   ],
   "disagrees": [
    "!literals -> T",
@@ -30,19 +39,27 @@
    "!mk -> T",
    "!mk2 -> T",
    "!unicode -> T",
-   "!long -> T"
+   "!long -> T",
+   "!rawjson -> T",
+   "!blockComment -> T",
+   "!closures -> T",
+   "!typeExprs -> T",
+   "!convs -> T",
+   "!lexed -> T",
+   "!afterIndex -> T",
+   "!longSig -> T"
   ]
  },
  "pairCounts": {
-  "oracle": 5,
-  "subject": 5,
-  "matched": 5,
+  "oracle": 6,
+  "subject": 6,
+  "matched": 6,
   "subjectOnly": {
    "oracleDisagrees": 0,
    "oracleSilent": 0
   },
   "skippedEdges": {
-   "skip-composite-literal": 10
+   "skip-composite-literal": 27
   }
  }
 }

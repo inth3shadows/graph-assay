@@ -67,7 +67,10 @@ check('a rule switched off through Options changes only its own verdict',
 // recognises nested type arguments (G3) and slice literals.
 {
   const { ctx } = run('go-composite-literal');
+  const src = fs.readFileSync(path.join(here, 'test', 'go-composite-literal', 'main.go'), 'utf8').split('\n');
   const at = (line: number, tname: string, extra = {}) => ctx.compositeLiteral({ kind: 'instantiates', sfile: 'main.go', line, tname, tkind: 'struct', ...extra });
+  // The column of the n-th `tname` on a line, as an edge would carry it.
+  const nth = (line: number, tname: string, n: number) => { let c = -1; for (let i = 0; i <= n; i++) c = src[line - 1].indexOf(tname, c + 1); return { col: c }; };
   check('skip-composite-literal: a method call named like a literal type on its line is kept (G1)', !at(42, 'Options', { tkind: 'method', ref: 's.Options' }) && at(42, 'Options'));
   check('skip-composite-literal: a function\'s result type is not a literal (G2)', !at(47, 'T') && !at(45, 'T', { col: 10 }) && at(45, 'T', { col: 21 }));
   // Round 2: a `calls` edge resolved to a same-named type (code-graph-rag leaves `ref` null) is a call,
@@ -76,6 +79,37 @@ check('a rule switched off through Options changes only its own verdict',
   check('skip-composite-literal: a multi-line signature\'s `) T {` is a result type (round 2)', !at(64, 'T') && at(65, 'T'));
   check('skip-composite-literal: nested type arguments and slice literals are literals (G3)', at(52, 'G') && at(53, 'T'));
   check('skip-composite-literal: a non-ASCII line is read in scip-go\'s byte columns (G4)', at(59, 'T'));
+  // #57 follow-ups: a result type is read from the caller's own signature, whatever its layout (I1);
+  // a literal after a leading `)` is a literal (I2); a func element type, a map key and a function-local
+  // type are parts of a literal's type (H4, H5, H6); a closure's result type is not a literal.
+  check('skip-composite-literal: a result type in a signature over several lines is not a literal (I1)',
+    !at(69, 'T') && !at(75, 'T') && !at(81, 'T') && !at(85, 'T'));
+  check('skip-composite-literal: a literal after a leading `)` is a literal (I2)', at(91, 'T'));
+  check('skip-composite-literal: a func element type and a map key are inside a literal\'s type (H4, H5)', at(95, 'T') && at(96, 'T'));
+  check('skip-composite-literal: a closure\'s result type is not a literal', !at(97, 'T'));
+  check('skip-composite-literal: a function-local struct type is a type (H6)', at(106, 'key'));
+  // Follow-ups round 1: signatures are read from the file's own source, lexed whole, never from the
+  // subject's caller (J1, J4); a func literal's signature over several lines or with an `interface{}`
+  // parameter, at package level too, is a signature (J2, J3); a local type in a grouped type block is a
+  // type (J5); a literal's type runs through `struct{}` and a func type's lists (J6), and a conversion
+  // `T(...)` is not a literal.
+  check('skip-composite-literal: a multi-line raw string or block comment holding a brace does not hide the body (J1)', at(115, 'T') && at(121, 'T'));
+  check('skip-composite-literal: a func literal\'s multi-line signature is a signature, at package level too (J2)',
+    !at(127, 'T') && at(128, 'T') && !at(140, 'T') && at(141, 'T'));
+  check('skip-composite-literal: a one-line func literal taking `interface{}` has a result type (J3)', !at(130, 'T') && at(131, 'T'));
+  check('skip-composite-literal: a function-local type declared in a grouped type block is a type (J5)', at(149, 'key2'));
+  check('skip-composite-literal: a literal\'s type runs through `struct{}` and a func type\'s lists (J6)',
+    at(154, 'T') && at(155, 'T') && at(156, 'T', nth(156, 'T', 0)) && at(156, 'T', nth(156, 'T', 1)));
+  check('skip-composite-literal: a conversion is not a literal, the literal inside it is', !at(157, 'T', nth(157, 'T', 0)) && at(157, 'T', nth(157, 'T', 1)));
+  check('skip-composite-literal: a conversion or type assertion before a block\'s `{` is not a literal', !at(162, 'T') && at(163, 'T') && !at(166, 'T'));
+  check('skip-composite-literal: a func type without a body ends at `=`, so the next literal is one', !at(171, 'T') && at(172, 'T'));
+  check('skip-composite-literal: a brace inside a func type\'s list does not close it', at(175, 'T'));
+  check('skip-composite-literal: a `func` in a comment opens no signature', at(176, 'T'));
+  // Verify round: a line break ends a type, so a declaration after `x[0]` has a signature (K1), and a
+  // parameter list of any length does (K2).
+  check('skip-composite-literal: a function declared after a line ending in `]` has a result type (K1)', !at(182, 'T') && at(183, 'T'));
+  check('skip-composite-literal: a signature longer than 4,000 characters is a signature (K2)',
+    !at(454, 'T', { sfile: 'long.go' }) && at(455, 'T', { sfile: 'long.go' }));
 }
 // G6: a guessed literal edge is counted as guessed on the pair track, as on the call-site track, not as
 // skip-composite-literal.
@@ -86,11 +120,10 @@ check('a rule switched off through Options changes only its own verdict',
   lit.provenance = 'heuristic';
   const tmpSnap = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-guess-')), 'snapshot.json');
   fs.writeFileSync(tmpSnap, JSON.stringify(snap));
-  const ctx = createContext({ repo: dir, scipFile: path.join(dir, 'index.scip.json'), lang: 'go', missing: true, redact: false, allSites: false,
-    show: 0, disabled: new Set(), exclude: '', snapshot: tmpSnap });
-  const pairs = (missing(ctx).extra as { pairs: { skippedEdges: Record<string, number> } }).pairs;
-  check('skip-composite-literal: a guessed literal edge counts as guessed on the pair track (G6)', pairs.skippedEdges['skip-composite-literal'] === 9);
-  fs.rmSync(path.dirname(tmpSnap), { recursive: true, force: true });
+  const skippedOf = (snapshot: string) => (missing(createContext({ repo: dir, scipFile: path.join(dir, 'index.scip.json'), lang: 'go', missing: true, redact: false,
+    allSites: false, show: 0, disabled: new Set(), exclude: '', snapshot })).extra as { pairs: { skippedEdges: Record<string, number> } }).pairs.skippedEdges['skip-composite-literal'];
+  try { check('skip-composite-literal: a guessed literal edge counts as guessed on the pair track (G6)', skippedOf(tmpSnap) === skippedOf(path.join(dir, 'snapshot.json')) - 1); }
+  finally { fs.rmSync(path.dirname(tmpSnap), { recursive: true, force: true }); }
 }
 
 // F5 (#30 review): an unknown language is refused in-process too, not read as TS/JS.

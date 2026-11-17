@@ -109,5 +109,5 @@ export function braces(fileText: (file: string) => string, goLike: boolean) {
     const close = skipBlock(t, open);
     return close < 0 ? null : [lineAt(file, open), lineAt(file, close - 1)];
   };
-  return { braceRange, lineStarts };
+  return { braceRange, lineStarts, skipLex, skipBlock };
 }
