@@ -54,10 +54,14 @@ Design decisions:
   unnested.
   `lib/subjects/index.ts`
   is the registry scorers take `--subject` from. `SPEC.md` says
-  what the scorers compare. `bin/graph-assay conformance <build>` checks that the adapter exports the store
-  faithfully (counts, site lines, endpoints) and reports how the subject handles the awkward cases;
-  for codegraph f72c9d2e and 147fe290, columns are UTF-16 code units in TS and Python, and two calls of one
-  callee on a line are two edges.
+  what the scorers compare. `bin/graph-assay conformance [--subject <name>] <build>` checks that an adapter exports the
+  subject's output faithfully (a valid snapshot, counts against the subject's own output where
+  conformance reads it, site lines, every corpus file) and reports how the subject handles the awkward
+  cases. For codegraph f72c9d2e and 147fe290, columns are UTF-16 code units in TS and Python, and two
+  calls of one callee on a line are two edges. For code-graph-rag 0.7.1 the counts match its export and
+  columns are UTF-8 bytes; its adapter declares `columnEncoding: 'unknown'`, so the oracle uses its
+  columns only on ASCII lines. codebase-memory-mcp and code-review-graph run the generic checks and
+  report no columns (no count check: conformance does not read their stores).
 - **Join by call site, not by symbol.** A codegraph edge carries the call's line and column. SCIP
   carries every reference occurrence with its range. Joining on file, line and called name, at the
   nearest column, ties each edge to the compiler's answer for that exact call. A symbol-level join
@@ -83,9 +87,9 @@ A tool under test is one module in `lib/subjects/`, registered in `lib/subjects/
 | `version(build)` | The tool's version string, recorded in every manifest |
 
 Then replay the fixtures with `--subject <name>`, run the oracle with `CGQA_SUBJECT=<name>`, and check
-that the adapter's hash appears in results (`lib/provenance.ts`). The adapter conformance check
-(`lib/conformance.ts`) is written against the codegraph adapter only; a new subject needs its own
-counts-and-sites comparison there.
+that the adapter's hash appears in results (`lib/provenance.ts`). Run `bin/graph-assay conformance --subject <name> <build>`:
+the generic checks run for any subject. A count check against the subject's own output is a `STORE`
+entry in `lib/conformance.ts`; codegraph and code-graph-rag have one.
 
 ## File Descriptions
 
@@ -389,7 +393,8 @@ Indexing large repos is memory-hungry. Run one index at a time; `oracle/run.sh` 
   and `test-d/`, are compiled with the root config's options. A repo without a root tsconfig still
   needs its nested tsconfigs passed in, and project dirs given on the command line are indexed as given.
 - **f-string and template-literal calls often land in `no-scip-ref`,** because the columns don't line up.
-- **Adapter conformance covers codegraph only.** `lib/conformance.ts` imports the codegraph adapter directly.
+- **Adapter conformance counts codegraph and code-graph-rag only.** codebase-memory-mcp and code-review-graph get the
+  generic checks, with no count against their own stores.
 - **`scip-java` builds the project.** That runs the project's own build plugins, so it only runs inside
   the pinned container.
 

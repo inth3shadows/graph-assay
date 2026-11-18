@@ -20,7 +20,7 @@ const COMMANDS = {
   snapshot: ['node', p('lib/subjects/codegraph.ts'), 'snapshot <dir> <out.json> [codegraph.js] | index <dir> <codegraph.js>'],
   expect: ['node', p('lib/expect.ts'), '[dir ...]: validate every expect.json'],
   config: ['node', p('lib/config.ts'), '[key]: resolved paths'],
-  conformance: ['node', p('lib/conformance.ts'), '<codegraph.js>: is the adapter faithful, and how does the subject handle awkward cases'],
+  conformance: ['node', p('lib/conformance.ts'), '[--subject <name>] <build | default>: is the adapter faithful, and how does the subject handle awkward cases'],
   modes: ['node', p('differential/modes.ts'), '<codegraph.js> <dir ...> [--modes ..] [--json out]: execution modes (kernel, workers, sync, repeat) diffed against base'],
   builds: ['node', p('differential/builds.ts'), '<old codegraph.js> <new codegraph.js> <dir ...> [--md out] [--json out] | --fetch <dest>: two builds, canonical graph diff'],
   triage: ['node', p('bench/triage.ts'), '[--work <oracle work dir>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],

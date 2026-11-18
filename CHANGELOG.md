@@ -7,6 +7,13 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Adapter conformance for every subject (#11): `bin/graph-assay conformance --subject <name> <build>`
+  runs the generic checks (valid snapshot, site lines when claimed, every corpus file listed) for any
+  adapter, and counts against the subject's own output for codegraph (its SQLite store) and
+  code-graph-rag (its JSON export). Reports now list the corpus definitions each subject extracted.
+  code-graph-rag 0.7.1 is conformant; its columns are UTF-8 bytes (its adapter declares `unknown`, so the
+  oracle uses them only on ASCII lines; declaring `utf8` would change scores). `lib/conformance.ts` is a
+  scorer file, so `manifest.scorers.sha256` changes.
 - `tools/repro.ts --split heldout --publish`: the reproduction image can run the held-out split, which it
   refuses without `--publish` (SPEC §9), and refuses `--publish` on dev; the manifest records the split and
   the flag. `docker/got-package-lock.json` freezes got's install; an `npm` corpus entry without a lock fails
