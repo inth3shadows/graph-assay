@@ -8,6 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scoreFixture } from './fixture.ts';
+import { issueLabel } from './expect.ts';
 import { gate } from './scores.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,6 +46,15 @@ try {
       const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), build, name]);
       assert.equal(r.status, 2, `${name}: ${r.stdout}${r.stderr}`);
     }
+  });
+
+  check('replay prints - for the issue of a fixture whose expect.json did not parse (#36)', () => {
+    const build = path.join(tmp, 'build.js'); fs.writeFileSync(build, '');
+    const root = path.join(tmp, 'unparsed'); fs.mkdirSync(path.join(root, 'bad'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'bad', 'expect.json'), '{'); fs.writeFileSync(path.join(root, 'bad', 'a.py'), '');
+    const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), '--root', root, build, 'bad']);
+    assert.match(r.stdout, /^ERROR +- +bad /m, r.stdout + r.stderr);
+    assert.equal(issueLabel(null), 'unfiled'); assert.equal(issueLabel(0), 'unfiled'); assert.equal(issueLabel(12), '#12');
   });
 
   check('an empty graph never reads as FIXED', () => {

@@ -31,7 +31,7 @@ import { copyFixture, markerLeaks, scoreFixture } from '../lib/fixture.ts';
 import { adapterHash } from '../lib/provenance.ts';
 import { SPEC_VERSION } from '../lib/spec.ts';
 import { buildFor, subject } from '../lib/subjects/index.ts';
-import { validateExpect } from '../lib/expect.ts';
+import { issueLabel, validateExpect } from '../lib/expect.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -70,14 +70,15 @@ const run = (dir) => {
     : r.status === 0 ? 'index exited 0 but produced no graph' : r.output.trim().split('\n').slice(-3).join(' | ') || `index failed (status ${r.status}${r.signal ? `, ${r.signal}` : ''})`);
   return subj.snapshot(dir, { build, kernel });
 };
+const unread = new Set<string>(); // fixtures whose expect.json did not parse
 try {
   for (const name of names) {
     const row: Record<string, any> = { name, issue: null, verdict: 'ERROR', detail: '' };
-    results.push(row);
+    results.push(row); unread.add(name);
     try {
       const source = path.join(root, name);
       const expect = JSON.parse(fs.readFileSync(path.join(source, 'expect.json'), 'utf8'));
-      row.issue = expect.issue;
+      row.issue = expect.issue; unread.delete(name);
       const bad = validateExpect(expect);
       if (bad.length) throw new Error(`expect.json: ${bad.join('; ')}`);
       const dir = path.join(work, name);
@@ -99,9 +100,12 @@ try {
   }
 } finally { fs.rmSync(work, { recursive: true, force: true }); }
 
-// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.ts does.
+// A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.ts does; one whose
+// expect.json did not parse prints `-` (its issue is unknown).
+const label = (r) => (unread.has(r.name) ? '-' : issueLabel(r.issue));
 const nameWidth = Math.max(22, ...results.map((r) => r.name.length));
-for (const r of results) console.log(`${r.verdict.padEnd(8)} ${(r.issue ? `#${r.issue}` : 'unfiled').padEnd(7)} ${r.name.padEnd(nameWidth)} ${r.detail}`);
+const issueWidth = Math.max(7, ...results.map((r) => label(r).length));
+for (const r of results) console.log(`${r.verdict.padEnd(8)} ${label(r).padEnd(issueWidth)} ${r.name.padEnd(nameWidth)} ${r.detail}`);
 if (canary) for (const r of results) console.log(`CANARY ${r.canary?.status ?? 'ERROR'} ${r.name}${r.canary?.error ? `: ${r.canary.error}` : ''}`);
 const tally = results.reduce((t, r) => ({ ...t, [r.verdict]: (t[r.verdict] ?? 0) + 1 }), {});
 console.log(Object.entries<any>(tally).map(([k, v]) => `${k} ${v}`).join(', '));

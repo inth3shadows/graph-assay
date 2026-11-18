@@ -8,6 +8,9 @@ import { isMain } from './main.ts';
 import type { JoinedEdge } from './snapshot.ts';
 import type { ExpectEdge, Snapshot } from './types.ts';
 
+/** A fixture's issue as replay and triage print it: `#N`, or `unfiled` when `issue` is null or 0. */
+export const issueLabel = (issue: number | null | undefined): string => (issue ? `#${issue}` : 'unfiled');
+
 const EDGE_KEYS = new Set(['from', 'fromFile', 'kind', 'to', 'toLine']);
 
 function checkEdge(e: any, where: string, p: string[]): void {
