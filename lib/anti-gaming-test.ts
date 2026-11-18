@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { adapterHash, ADAPTER_SHARED, recordedAdapterHash } from './provenance.ts';
 import { copyFixture, markerLeaks, scoreFixture } from './fixture.ts';
+import { chainMatch } from './expect.ts';
 import { validateSnapshot } from './snapshot.ts';
 import { gate } from './scores.ts';
 
@@ -108,6 +109,50 @@ try {
     // a node with no qualified name is matched on its name, as an edge source is
     const noQname = { id: 'n', name: 'Cls::method', kind: 'method', file: 'a.php', start: 1, end: 1 };
     assert.equal(score([noQname], wrongOnly('Cls::method')), 'FIXED');
+  });
+  check('one caller rule: a file caller needs a definition or an edge; fromFile, containers and signatures hold (#34)', () => {
+    const top = { id: 't', name: 'show', qname: 'App::UserController::show', kind: 'method', file: 'User.php', start: 3, end: 3 };
+    const wrongOnly = (from, extra = {}) => ({ issue: 1, wrong: [{ from, kind: 'references', to: 'User.php:App::UserController::show', ...extra }], right: [] });
+    const score = (nodes, expect) => scoreFixture({ ...snap, nodes: [top, ...nodes], edges: [] }, expect).verdict;
+    const file = (f) => ({ id: `file:${f}`, name: path.basename(f), qname: f, kind: 'file', file: f, start: 1, end: 9 });
+    const fn = (name, f, qname = name) => ({ id: `${f}:${qname}`, name, qname, kind: 'function', file: f, start: 2, end: 3 });
+    // 1. a root-level file that produced only its file node is not the caller (its name is its path)
+    assert.equal(score([file('use.py')], wrongOnly('use.py')), 'CHANGED');
+    assert.equal(score([file('use.py'), fn('main', 'use.py')], wrongOnly('use.py')), 'FIXED');
+    // 2. fromFile pins the caller for a plain name too
+    assert.equal(score([fn('run', 'other.js')], wrongOnly('run', { fromFile: 'a.js' })), 'CHANGED');
+    assert.equal(score([fn('run', 'a.js')], wrongOnly('run', { fromFile: 'a.js' })), 'FIXED');
+    // 3. a different container is not the caller; a package prefix the fixture leaves out is
+    const pRun = fn('run', 'App.java', 'p::App::run');
+    assert.equal(score([pRun], wrongOnly('b::App::run')), 'CHANGED');
+    assert.equal(score([pRun], wrongOnly('App::run')), 'FIXED');
+    assert.equal(score([pRun, fn('p', 'App.java')], wrongOnly('App::run')), 'CHANGED'); // `p` is a definition there
+    // and a package the subject leaves out (code-graph-rag writes `App::run(File,...)` for j1-java-overload)
+    const bare = fn('run', 'App.java', 'App::run(File,String)');
+    assert.equal(score([bare], wrongOnly('p::App::run')), 'FIXED');
+    assert.equal(score([bare, fn('p', 'App.java')], wrongOnly('p::App::run')), 'CHANGED');
+    // an unrelated same-named method elsewhere is not the caller (code-review-graph's `Cast::init`, issue-2966)
+    assert.equal(score([fn('init', 'lib/other.js', 'Cast::init'), fn('Cast', 'lib/other.js'), fn('Model.init', 'lib/model.js')], wrongOnly('init')), 'CHANGED');
+    // a signature the subject writes is ignored when the fixture names none
+    assert.equal(score([fn('run', 'App.java', 'App::run(File,int)')], wrongOnly('App::run')), 'FIXED');
+    // a dropped container's signature does not hide that it is a definition (review H1)
+    assert.equal(score([fn('run', 'f.java', 'run(x)'), fn('a', 'f.java', 'run(x)::a')], wrongOnly('a')), 'CHANGED');
+    // signatures are stripped on both sides, as for edges (H2)
+    assert.equal(score([fn('run', 'App.java', 'App::run(File, String)')], wrongOnly('App::run(File,String)')), 'FIXED');
+    assert.equal(score([fn('run', 'App.java', 'App::run')], wrongOnly('App::run(File)')), 'FIXED');
+    // a path segment drops only when it is the node's own file (H3)
+    const root = { id: 'r', name: '/', qname: 'app/page.tsx::route:/', kind: 'route', file: 'app/page.tsx', start: 1, end: 1 };
+    assert.equal(score([root], wrongOnly('route:/')), 'FIXED');
+    assert.equal(score([{ ...root, file: 'app/other.tsx' }], wrongOnly('route:/')), 'CHANGED');
+    // a script of top-level calls (no definition) counts once an edge starts there (H5)
+    const main = file('main.py'); const callEdge = { kind: 'calls', src: main.id, dst: top.id, line: 1, col: 0, provenance: null };
+    assert.equal(scoreFixture({ ...snap, nodes: [top, main], edges: [callEdge] }, { issue: 1, wrong: [{ from: 'main.py', kind: 'calls', to: 'User.php:Other::x' }], right: [] }).verdict, 'FIXED');
+    // the edge rule (chainMatch without `file`) is unchanged: signatures stripped, a path may drop
+    assert.equal(chainMatch('routes/api.php::route:/x', 'route:/x'), true);
+    assert.equal(chainMatch('run(x)::a', 'a', new Set(['run'])), false);
+    // 4. a nested file caller counts once its file holds a definition
+    assert.equal(score([file('lib/hooks.js')], wrongOnly('lib/hooks.js')), 'CHANGED');
+    assert.equal(score([file('lib/hooks.js'), fn('onRequest', 'lib/hooks.js')], wrongOnly('lib/hooks.js')), 'FIXED');
   });
   const seed = path.join(tmp, 'seed'); write(path.join(seed, 'main.js'), 'export function f() {}\nf();\n');
   write(path.join(seed, 'main.py'), '#!/usr/bin/env python3\nfrom __future__ import annotations\ndef f(): pass\nf()\n');
