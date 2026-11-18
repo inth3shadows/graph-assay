@@ -193,6 +193,8 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- README's fixture counts (#63): 45 codegraph repros, 44 naming the upstream issue or PR they reproduce
+  (42 distinct). `lib/readme-counts-test.ts` keeps them matched to `fixtures/`.
 - The differs (`differential/builds.ts`, `shadow.ts`, `modes.ts`) keep a repo's `node_modules/` when they
   copy it to index (#15), through one `copyRepo` in `lib/fixture-install.ts`. codegraph resolves imports
   against installed packages (since upstream df20853 an installed but undeclared package is the package's),
