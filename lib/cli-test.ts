@@ -53,7 +53,8 @@ try {
     const root = path.join(tmp, 'unparsed'); fs.mkdirSync(path.join(root, 'bad'), { recursive: true });
     fs.writeFileSync(path.join(root, 'bad', 'expect.json'), '{'); fs.writeFileSync(path.join(root, 'bad', 'a.py'), '');
     const edge = { from: 'f', kind: 'calls', to: 'a.py:g' };
-    for (const [name, body] of [['noissue', { wrong: [edge], right: [] }], ['filed', { issue: 7, wrong: [edge], right: [] }]]) {
+    const bodies: [string, object][] = [['noissue', { wrong: [edge], right: [] }], ['filed', { issue: 7, wrong: [edge], right: [] }]];
+    for (const [name, body] of bodies) {
       fs.mkdirSync(path.join(root, name)); fs.writeFileSync(path.join(root, name, 'expect.json'), JSON.stringify(body)); fs.writeFileSync(path.join(root, name, 'a.py'), '');
     }
     const out = path.join(tmp, 'unparsed.json');
