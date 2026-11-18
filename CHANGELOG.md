@@ -193,12 +193,14 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
-- `differential/builds.ts` and `differential/shadow.ts` keep a repo's `node_modules/` when they copy it
-  to index (#15). codegraph resolves imports against installed packages (since upstream df20853 an
-  installed but undeclared package is the package's), so a diff of a local dir with an install missed
-  any change that depends on one. Links into the repo are pointed at the copy, so the container sandbox
-  sees them. Corpus repos from `--fetch` (and the edgediff workflow) are not installed, so nothing
-  changes there. `differential/modes.ts` still skips `node_modules/` (its hash identifies T3).
+- The differs (`differential/builds.ts`, `shadow.ts`, `modes.ts`) keep a repo's `node_modules/` when they
+  copy it to index (#15), through one `copyRepo` in `lib/fixture-install.ts`. codegraph resolves imports
+  against installed packages (since upstream df20853 an installed but undeclared package is the package's),
+  so a diff of a local dir with an install missed any change that depends on one. Links are copied as
+  written, so an install's relative links lead into the copy, which is all the container sandbox mounts.
+  Corpus repos from `--fetch` (and the edgediff workflow) are not installed, so nothing changes there.
+  `builds.ts` reports a failed copy as `FAILED` and cleans up with `sandbox.remove`; `shadow.ts` reports a
+  failed copy as `FAILED` and removes its temp dirs.
 - Provenance gaps (#41): `scorers()` now hashes the tables and T3 (`bench/tables.ts`,
   `bench/robustness.ts`, `bench/package.json`), `differential/builds.ts`, the labels scorers with
   `labels/package.json`, and the oracle's shell steps (`oracle/*.sh`); the repro manifest hashes

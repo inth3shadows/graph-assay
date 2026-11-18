@@ -27,11 +27,26 @@ export function placeFixtureInstall(dir: string): void {
  * `filter` keeps a path when true, as fs.cpSync's filter.
  */
 export function copySeed(src: string, dst: string, filter: (p: string) => boolean = () => true): void {
+  copyTree(src, dst, filter, false);
+}
+
+/**
+ * A repo copied for a differ (differential/) to index: everything but `.codegraph/`, as copySeed copies it.
+ * `node_modules/` stays, since codegraph resolves imports against installed packages (#15). Links are copied
+ * as written (fs.cpSync otherwise makes a relative link absolute into `src`), so an install's relative
+ * `.bin` and workspace links lead into the copy, which is all the container sandbox mounts; a link out of
+ * the repo dangles there on every backend. An absolute link still names its old target.
+ */
+export function copyRepo(src: string, dst: string): void {
+  copyTree(src, dst, (p) => path.basename(p) !== '.codegraph', true);
+}
+
+function copyTree(src: string, dst: string, filter: (p: string) => boolean, verbatimSymlinks: boolean): void {
   // cpSync copies a linked root as the link, and placing the install in that "copy" would rename inside
   // the source. Refuse it, as copyFixture refuses any link: pass the tree's real path.
   if (fs.lstatSync(src).isSymbolicLink()) throw new Error(`${src} is a symlink; pass the directory it names (${fs.readlinkSync(src)})`);
   const fixture = isFixture(src);
   const stray = path.join(src, 'node_modules');
-  fs.cpSync(src, dst, { recursive: true, filter: (p) => filter(p) && !(fixture && p === stray) });
+  fs.cpSync(src, dst, { recursive: true, verbatimSymlinks, filter: (p) => filter(p) && !(fixture && p === stray) });
   if (fixture) placeFixtureInstall(dst);
 }

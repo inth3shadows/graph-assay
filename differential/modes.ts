@@ -15,14 +15,12 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copySeed } from '../lib/fixture-install.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
 import * as sandbox from '../lib/sandbox.ts';
 import { isMain } from '../lib/main.ts';
-
-const SKIP = new Set(['.codegraph', 'node_modules']);
 
 // Each mode: how to build the index in a fresh copy `work` of the source `src`.
 const init = (env = {}, kernel = '0') => (work, _src, build) => codegraph.index(work, build, { kernel, env });
@@ -57,7 +55,7 @@ function withHome(fn) {
   try { return fn(home); } finally { sandbox.remove(home); }
 }
 const join = (a, b) => ({ ...b, ms: a.ms + b.ms, output: `${a.output}\n${b.output}` });
-const copy = (src, dst) => copySeed(src, dst, (p) => !SKIP.has(path.basename(p)));
+const copy = copyRepo;
 
 const count = (keys) => { const m = new Map(); for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1); return m; };
 

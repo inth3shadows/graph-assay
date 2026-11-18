@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copySeed } from '../lib/fixture-install.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
@@ -20,29 +20,6 @@ import { canonical, diffCanonical } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-
-/** Copy a repo to index: everything but `.codegraph/`. `node_modules/` stays, since codegraph resolves imports
- * against installed packages (#15); a fixture's `node_modules.fixture/` is put in place by copySeed.
- * fs.cpSync rewrites a relative link as an absolute one into `src`; each such link is pointed back into the
- * copy, relative, so the copy stands alone (the container sandbox mounts only the copy). A link that leads
- * out of `src` is left as cpSync wrote it. */
-export function copyRepo(src: string, dst: string) {
-  copySeed(src, dst, (p) => path.basename(p) !== '.codegraph');
-  const roots = [...new Set([path.resolve(src), fs.realpathSync(src)])];
-  const walk = (dir: string) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) { walk(p); continue; }
-      if (!e.isSymbolicLink()) continue;
-      const to = fs.readlinkSync(p);
-      const root = roots.find((r) => to === r || to.startsWith(r + path.sep));
-      if (!root) continue;
-      fs.unlinkSync(p);
-      fs.symlinkSync(path.relative(dir, path.join(dst, to.slice(root.length))) || '.', p);
-    }
-  };
-  walk(dst);
-}
 
 export const CORPUS = path.join(here, '..', 'corpus', 'v1.txt');
 /** The corpus file's repos: {name, url, sha, language, license, split, category, setup, exclude}, optionally
@@ -77,7 +54,7 @@ export function fetchRepos(dest, repos) {
 function graph(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-builds-'));
   try {
-    copyRepo(src, work);
+    try { copyRepo(src, work); } catch (e) { return { error: `copy failed: ${e.message}` }; }
     const r = codegraph.index(work, build);
     if (!r.ok) return { error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-2).join(' | ')}`, ms: r.ms };
     const s = codegraph.snapshot(work);

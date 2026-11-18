@@ -12,7 +12,7 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copyRepo } from './builds.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';

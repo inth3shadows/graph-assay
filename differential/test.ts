@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { canonical, diffCanonical } from './modes.ts';
 import { lineDiff } from './shadow.ts';
-import { copyRepo } from './builds.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -81,14 +81,28 @@ for (const [a, b] of texts) {
     const ok = has('a.ts') && has('node_modules/pkg/index.d.ts') && !has('.codegraph');
     if (!ok) failed++;
     console.log(`${ok ? 'ok  ' : 'FAIL'}  copyRepo keeps node_modules, drops .codegraph`);
-    // a link into the repo points into the copy, relative; others stay as cpSync left them
+    // links are copied as written, so one into the repo leads into the copy
     n++;
-    const inside = (f) => fs.realpathSync(path.join(dst, f)).startsWith(fs.realpathSync(dst) + path.sep);
+    const inside = (root, f) => fs.realpathSync(path.join(root, f)).startsWith(fs.realpathSync(root) + path.sep);
     const ok2 = link('node_modules/.bin/pkg') === '../pkg/index.d.ts' && link('node_modules/w') === '../packages/w'
-      && inside('node_modules/.bin/pkg') && inside('node_modules/w')
-      && link('node_modules/out') === path.join(tmp, 'outside') && link('abs') === '/etc/hostname';
+      && inside(dst, 'node_modules/.bin/pkg') && inside(dst, 'node_modules/w')
+      && link('node_modules/out') === '../../outside' && link('abs') === '/etc/hostname';
     if (!ok2) failed++;
-    console.log(`${ok2 ? 'ok  ' : 'FAIL'}  copyRepo points links into the repo at the copy`);
+    console.log(`${ok2 ? 'ok  ' : 'FAIL'}  copyRepo copies links as written`);
+    // a fixture's install, links and all, is put in place; a read-only dir holding a link copies
+    n++;
+    const fx = path.join(tmp, 'fx'); const fxd = path.join(tmp, 'fxd');
+    fs.mkdirSync(path.join(fx, 'node_modules.fixture/.bin'), { recursive: true }); fs.mkdirSync(path.join(fx, 'node_modules.fixture/ro'));
+    fs.writeFileSync(path.join(fx, 'expect.json'), '{}'); fs.writeFileSync(path.join(fx, 'node_modules.fixture/ro/i.js'), '');
+    fs.symlinkSync('../ro/i.js', path.join(fx, 'node_modules.fixture/.bin/i'));
+    fs.symlinkSync('i.js', path.join(fx, 'node_modules.fixture/ro/l'));
+    fs.chmodSync(path.join(fx, 'node_modules.fixture/ro'), 0o555);
+    let ok3 = false;
+    try { copyRepo(fx, fxd); ok3 = inside(fxd, 'node_modules/.bin/i') && inside(fxd, 'node_modules/ro/l') && !fs.existsSync(path.join(fxd, 'node_modules.fixture')); }
+    catch (e) { console.log(`      ${e.message}`); }
+    for (const d of [fx, fxd]) if (fs.existsSync(path.join(d, d === fx ? 'node_modules.fixture/ro' : 'node_modules/ro'))) fs.chmodSync(path.join(d, d === fx ? 'node_modules.fixture/ro' : 'node_modules/ro'), 0o755);
+    if (!ok3) failed++;
+    console.log(`${ok3 ? 'ok  ' : 'FAIL'}  copyRepo places a fixture's install with its links, read-only dirs included`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 console.log(`${n - failed}/${n} comparison checks`);
