@@ -11,15 +11,15 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copySeed } from '../lib/fixture-install.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
-import { canonical, diffCanonical } from './modes.ts';
+import * as sandbox from '../lib/sandbox.ts';
+import { canonical, diffCanonical, errLine } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SKIP = new Set(['.codegraph', 'node_modules']);
 
 export const CORPUS = path.join(here, '..', 'corpus', 'v1.txt');
 /** The corpus file's repos: {name, url, sha, language, license, split, category, setup, exclude}, optionally
@@ -54,13 +54,14 @@ export function fetchRepos(dest, repos) {
 function graph(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-builds-'));
   try {
-    copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
+    try { copyRepo(src, work); } catch (e) { return { error: `copy failed: ${errLine(e)}` }; }
     const r = codegraph.index(work, build);
     if (!r.ok) return { error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-2).join(' | ')}`, ms: r.ms };
-    const s = codegraph.snapshot(work);
+    let s;
+    try { s = codegraph.snapshot(work); } catch (e) { return { error: `snapshot failed: ${errLine(e)}`, ms: r.ms }; }
     return { canon: canonical(s), ms: r.ms, size: { nodes: s.nodes.length, edges: s.edges.length, unresolved: s.unresolved.length } };
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    sandbox.remove(work); // a copied install can hold read-only dirs; cleanup never replaces the result
   }
 }
 

@@ -15,14 +15,12 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copySeed } from '../lib/fixture-install.ts';
+import { copyRepo } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
 import * as sandbox from '../lib/sandbox.ts';
 import { isMain } from '../lib/main.ts';
-
-const SKIP = new Set(['.codegraph', 'node_modules']);
 
 // Each mode: how to build the index in a fresh copy `work` of the source `src`.
 const init = (env = {}, kernel = '0') => (work, _src, build) => codegraph.index(work, build, { kernel, env });
@@ -47,7 +45,7 @@ export const MODES = {
     fs.mkdirSync(work);
     const a = codegraph.index(work, build, { home });
     if (!a.ok) return a;
-    copy(src, work);
+    try { copyRepo(src, work); } catch (e) { return { ...a, ok: false, status: 'copy', output: `copy failed: ${errLine(e)}` }; }
     return join(a, codegraph.index(work, build, { home, args: ['sync'] }));
   }),
 };
@@ -57,7 +55,8 @@ function withHome(fn) {
   try { return fn(home); } finally { sandbox.remove(home); }
 }
 const join = (a, b) => ({ ...b, ms: a.ms + b.ms, output: `${a.output}\n${b.output}` });
-const copy = (src, dst) => copySeed(src, dst, (p) => !SKIP.has(path.basename(p)));
+/** A thrown error as one line: its code and first line (Node's internal asserts run to three). */
+export const errLine = (e) => `${e.code ? `${e.code}: ` : ''}${String(e.message).trim().split('\n')[0]}`;
 
 const count = (keys) => { const m = new Map(); for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1); return m; };
 
@@ -102,9 +101,9 @@ export function runDir(build, src, modes) {
   try {
     for (const mode of ['base', ...modes.filter((m) => m !== 'base')]) {
       const work = path.join(tmp, mode);
-      copy(src, work);
+      try { copyRepo(src, work); } catch (e) { runs[mode] = { ms: 0, error: `copy failed: ${errLine(e)}` }; sandbox.remove(work); continue; }
       const r = MODES[mode](work, src, build);
-      if (!r.ok) { runs[mode] = { ms: r.ms, error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-3).join(' | ')}` }; continue; }
+      if (!r.ok) { runs[mode] = { ms: r.ms, error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-3).join(' | ')}` }; sandbox.remove(work); continue; }
       let snap;
       try { snap = codegraph.snapshot(work, { kernel: mode === 'native' ? '1' : '0' }); } catch (e) {
         runs[mode] = { ms: r.ms, error: `snapshot failed: ${e.message}` }; sandbox.remove(work); continue;
