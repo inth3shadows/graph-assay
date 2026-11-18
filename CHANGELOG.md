@@ -194,10 +194,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 - Replay's caller guard (#34): one rule decides whether a fixture's caller is in the graph. It honours
-  `fromFile`, compares the whole container chain (a package either side leaves out may be dropped, a
-  definition or a path may not), and counts a file caller only when its file produced a definition, so
-  a root-level file with nothing parsed no longer reads as FIXED and a nested file caller
-  (`lib/hooks.js`) can. Replayed on codegraph f72c9d2e and 147fe290, code-graph-rag 0.7.1,
+  `fromFile` and matches the caller's name as an edge source would (`chainMatch`), with one stricter
+  rule: a path segment (a file, a route pattern) keeps its parentheses and drops only when it is the
+  node's own file. A file caller counts only when its file produced a definition or an edge, so a
+  root-level file with nothing parsed no longer reads as FIXED and a nested file caller (`lib/hooks.js`)
+  can. `chainMatch` takes the guard's `file` option; edge matching is unchanged. Replayed on codegraph f72c9d2e and 147fe290, code-graph-rag 0.7.1,
   codebase-memory-mcp and code-review-graph: one verdict moves, code-review-graph's issue-2966 FIXED ->
   CHANGED (its caller is named `Model.init`; the old tail match found `Cast::init` in another file).
   `lib/fixture.ts` is a scorer file, so `manifest.scorers.sha256` changes.

@@ -39,12 +39,19 @@ export function validateExpect(x: any): string[] {
 // one, leading segments that name no definition in the file: one subject writes the Java package
 // (`p::App::run`), another does not (`App::run`), but `a::helper` (nested in function `a`) never
 // matches a top-level `helper`.
-const chain = (q: string) => q.split('::').map((x) => x.replace(/\(.*\)$/, ''));
-export function chainMatch(a: string, b: string, defined: Set<string> = new Set()): boolean {
-  let x = chain(a); let y = chain(b);
+//
+// `file` (the replay caller guard, lib/fixture.ts scoreFixture) is stricter about paths: a segment holding a
+// `/` (a file path, a route pattern) keeps its parentheses (a route group, not a signature), and may be
+// dropped only when it is `file`, the node's own file (`route:/` is `app/page.tsx::route:/` there, but a
+// bare `route:/x` in web.php is not `routes/api.php::route:/x`).
+const sig = (x: string, paths: boolean) => paths && x.includes('/') ? x : x.replace(/\(.*\)$/, '');
+const chain = (q: string, paths = false) => q.split('::').map((x) => sig(x, paths));
+export function chainMatch(a: string, b: string, defined: Set<string> = new Set(), { file }: { file?: string } = {}): boolean {
+  const paths = file !== undefined;
+  let x = chain(a, paths); let y = chain(b, paths);
   if (x.length < y.length) [x, y] = [y, x];
   const extra = x.slice(0, x.length - y.length);
-  return extra.every((s) => !defined.has(s)) && x.slice(extra.length).every((v, i) => v === y[i]);
+  return extra.every((s) => paths && s.includes('/') ? s === file : !defined.has(s)) && x.slice(extra.length).every((v, i) => v === y[i]);
 }
 
 /** Names of every definition (not file nodes) per file, for chainMatch. */

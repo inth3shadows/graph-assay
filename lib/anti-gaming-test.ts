@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { adapterHash, ADAPTER_SHARED, recordedAdapterHash } from './provenance.ts';
 import { copyFixture, markerLeaks, scoreFixture } from './fixture.ts';
+import { chainMatch } from './expect.ts';
 import { validateSnapshot } from './snapshot.ts';
 import { gate } from './scores.ts';
 
@@ -134,6 +135,21 @@ try {
     assert.equal(score([fn('init', 'lib/other.js', 'Cast::init'), fn('Cast', 'lib/other.js'), fn('Model.init', 'lib/model.js')], wrongOnly('init')), 'CHANGED');
     // a signature the subject writes is ignored when the fixture names none
     assert.equal(score([fn('run', 'App.java', 'App::run(File,int)')], wrongOnly('App::run')), 'FIXED');
+    // a dropped container's signature does not hide that it is a definition (review H1)
+    assert.equal(score([fn('run', 'f.java', 'run(x)'), fn('a', 'f.java', 'run(x)::a')], wrongOnly('a')), 'CHANGED');
+    // signatures are stripped on both sides, as for edges (H2)
+    assert.equal(score([fn('run', 'App.java', 'App::run(File, String)')], wrongOnly('App::run(File,String)')), 'FIXED');
+    assert.equal(score([fn('run', 'App.java', 'App::run')], wrongOnly('App::run(File)')), 'FIXED');
+    // a path segment drops only when it is the node's own file (H3)
+    const root = { id: 'r', name: '/', qname: 'app/page.tsx::route:/', kind: 'route', file: 'app/page.tsx', start: 1, end: 1 };
+    assert.equal(score([root], wrongOnly('route:/')), 'FIXED');
+    assert.equal(score([{ ...root, file: 'app/other.tsx' }], wrongOnly('route:/')), 'CHANGED');
+    // a script of top-level calls (no definition) counts once an edge starts there (H5)
+    const main = file('main.py'); const callEdge = { kind: 'calls', src: main.id, dst: top.id, line: 1, col: 0, provenance: null };
+    assert.equal(scoreFixture({ ...snap, nodes: [top, main], edges: [callEdge] }, { issue: 1, wrong: [{ from: 'main.py', kind: 'calls', to: 'User.php:Other::x' }], right: [] }).verdict, 'FIXED');
+    // the edge rule (chainMatch without `file`) is unchanged: signatures stripped, a path may drop
+    assert.equal(chainMatch('routes/api.php::route:/x', 'route:/x'), true);
+    assert.equal(chainMatch('run(x)::a', 'a', new Set(['run'])), false);
     // 4. a nested file caller counts once its file holds a definition
     assert.equal(score([file('lib/hooks.js')], wrongOnly('lib/hooks.js')), 'CHANGED');
     assert.equal(score([file('lib/hooks.js'), fn('onRequest', 'lib/hooks.js')], wrongOnly('lib/hooks.js')), 'FIXED');

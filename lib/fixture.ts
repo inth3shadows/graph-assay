@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { joinedEdges } from './snapshot.ts';
-import { definedNames, present as hasEdge } from './expect.ts';
+import { chainMatch, definedNames, present as hasEdge } from './expect.ts';
 import { placeFixtureInstall } from './fixture-install.ts';
 
 export { FIXTURE_INSTALL, placeFixtureInstall } from './fixture-install.ts';
@@ -54,23 +54,6 @@ export function markerLeaks(snapshot, marker) {
     ...snapshot.unresolved.map((u) => u.name)].filter((value) => typeof value === 'string' && value.includes(marker));
 }
 
-/**
- * Is a node named `q` (its qualified name, else its name) the fixture caller `from` (#34)? Their `::` chains
- * must agree after dropping leading segments from the longer one, as chainMatch allows edges (one subject
- * writes the Java package `p::App::run`, another `App::run`), but a dropped segment may not name a
- * definition in the node's file (`a::helper` is not `helper`) or be a path (a bare `route:/x` is not
- * `routes/api.php::route:/x`: the node's own file decides that). A segment's signature is ignored when
- * `from`'s has none (`App::run(File,int)`); a parenthesised segment in `from` is compared as written (a
- * route group). A file node's name is its path; it counts only when its file produced a definition.
- */
-export function isCaller(q: string, from: string, defined: Set<string>): boolean {
-  const n = q.split('::'); const f = from.split('::'); const k = Math.min(n.length, f.length);
-  const extra = [...n.slice(0, n.length - k), ...f.slice(0, f.length - k)];
-  if (extra.some((s) => defined.has(s) || s.includes('/'))) return false;
-  const a = n.slice(n.length - k); const b = f.slice(f.length - k);
-  return a.every((s, i) => s === b[i] || (!b[i].includes('(') && s.replace(/\(.*\)$/, '') === b[i]));
-}
-
 const show = (e) => `${e.from} -${e.kind}-> ${e.to}${e.toLine ? `@${e.toLine}` : ''}`;
 /** Same endpoint/provenance rules for ordinary replay and its canary, with no subject-specific names. */
 export function scoreFixture(snapshot, expect) {
@@ -84,8 +67,13 @@ export function scoreFixture(snapshot, expect) {
   const guessOnly = missing.filter((x) => present(x));
   // FIXED means the wrong edge is gone from a graph that holds its caller: an empty or partial index
   // (a failed parse, a subject missing a language) must not read as a fix.
+  // One caller rule (#34): a node in `fromFile` (when set) whose name chain matches `from` as an edge source
+  // would (chainMatch), with the guard's path rule (see chainMatch's `file`). A file node's name is its path;
+  // it counts only when its file was read: a definition, or an edge from it (a script of top-level calls).
+  const read = new Set(have.map((h) => h.sfile));
   const hasCaller = (x) => snapshot.nodes.some((n) => (!x.fromFile || n.file === x.fromFile)
-    && (n.kind !== 'file' || defined(n.file).size > 0) && isCaller(n.qname ?? n.name, x.from, defined(n.file)));
+    && (n.kind !== 'file' || defined(n.file).size > 0 || read.has(n.file))
+    && chainMatch(n.qname ?? n.name, x.from, defined(n.file), { file: n.file }));
   const absent = [...new Set([...expect.wrong, ...expect.right].filter((x) => !hasCaller(x)).map((x) => x.from))];
   let verdict = wrong.length || (!expect.wrong.length && missing.length) ? 'BROKEN' : guessed.length ? 'GUESSED' : missing.length ? 'CHANGED' : 'FIXED';
   if (verdict === 'FIXED' && absent.length) verdict = 'CHANGED';
