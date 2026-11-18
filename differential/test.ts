@@ -69,11 +69,26 @@ for (const [a, b] of texts) {
     for (const f of ['a.ts', 'node_modules/pkg/index.d.ts', '.codegraph/codegraph.db']) {
       fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), '');
     }
+    // links an npm install makes (a .bin entry, a workspace package), one out of the repo, one absolute
+    fs.mkdirSync(path.join(src, 'node_modules/.bin')); fs.mkdirSync(path.join(src, 'packages/w'), { recursive: true });
+    fs.symlinkSync('../pkg/index.d.ts', path.join(src, 'node_modules/.bin/pkg'));
+    fs.symlinkSync('../packages/w', path.join(src, 'node_modules/w'));
+    fs.symlinkSync('../../outside', path.join(src, 'node_modules/out'));
+    fs.symlinkSync('/etc/hostname', path.join(src, 'abs'));
     copyRepo(src, dst);
     const has = (f) => fs.existsSync(path.join(dst, f));
+    const link = (f) => fs.readlinkSync(path.join(dst, f));
     const ok = has('a.ts') && has('node_modules/pkg/index.d.ts') && !has('.codegraph');
     if (!ok) failed++;
     console.log(`${ok ? 'ok  ' : 'FAIL'}  copyRepo keeps node_modules, drops .codegraph`);
+    // a link into the repo points into the copy, relative; others stay as cpSync left them
+    n++;
+    const inside = (f) => fs.realpathSync(path.join(dst, f)).startsWith(fs.realpathSync(dst) + path.sep);
+    const ok2 = link('node_modules/.bin/pkg') === '../pkg/index.d.ts' && link('node_modules/w') === '../packages/w'
+      && inside('node_modules/.bin/pkg') && inside('node_modules/w')
+      && link('node_modules/out') === path.join(tmp, 'outside') && link('abs') === '/etc/hostname';
+    if (!ok2) failed++;
+    console.log(`${ok2 ? 'ok  ' : 'FAIL'}  copyRepo points links into the repo at the copy`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 console.log(`${n - failed}/${n} comparison checks`);

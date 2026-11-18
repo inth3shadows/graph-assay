@@ -67,7 +67,7 @@ function open(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-shadow-'));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
   const done = () => { for (const d of [work, home]) sandbox.remove(d); };
-  copyRepo(src, work);
+  try { copyRepo(src, work); } catch (e) { done(); return { error: `copy failed: ${e.message}` }; }
   const r = codegraph.index(work, build, { home, env: QUERY_ENV });
   if (!r.ok) { done(); return { error: `index failed (status ${r.status}): ${r.output.trim().split('\n').slice(-2).join(' | ')}` }; }
   const ask = (q) => {

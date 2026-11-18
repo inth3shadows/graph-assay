@@ -15,14 +15,34 @@ import { copySeed } from '../lib/fixture-install.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
+import * as sandbox from '../lib/sandbox.ts';
 import { canonical, diffCanonical } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** Copy a repo to index: everything but `.codegraph/`. `node_modules/` stays, since codegraph resolves imports
- * against installed packages (#15); a fixture's `node_modules.fixture/` is put in place by copySeed. */
-export const copyRepo = (src: string, dst: string) => copySeed(src, dst, (p) => path.basename(p) !== '.codegraph');
+ * against installed packages (#15); a fixture's `node_modules.fixture/` is put in place by copySeed.
+ * fs.cpSync rewrites a relative link as an absolute one into `src`; each such link is pointed back into the
+ * copy, relative, so the copy stands alone (the container sandbox mounts only the copy). A link that leads
+ * out of `src` is left as cpSync wrote it. */
+export function copyRepo(src: string, dst: string) {
+  copySeed(src, dst, (p) => path.basename(p) !== '.codegraph');
+  const roots = [...new Set([path.resolve(src), fs.realpathSync(src)])];
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.isSymbolicLink()) continue;
+      const to = fs.readlinkSync(p);
+      const root = roots.find((r) => to === r || to.startsWith(r + path.sep));
+      if (!root) continue;
+      fs.unlinkSync(p);
+      fs.symlinkSync(path.relative(dir, path.join(dst, to.slice(root.length))) || '.', p);
+    }
+  };
+  walk(dst);
+}
 
 export const CORPUS = path.join(here, '..', 'corpus', 'v1.txt');
 /** The corpus file's repos: {name, url, sha, language, license, split, category, setup, exclude}, optionally
@@ -63,7 +83,7 @@ function graph(build, src) {
     const s = codegraph.snapshot(work);
     return { canon: canonical(s), ms: r.ms, size: { nodes: s.nodes.length, edges: s.edges.length, unresolved: s.unresolved.length } };
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    sandbox.remove(work); // a copied install can hold read-only dirs; cleanup never replaces the result
   }
 }
 
