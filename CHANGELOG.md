@@ -193,6 +193,14 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- Replay's caller guard (#34): one rule decides whether a fixture's caller is in the graph. It honours
+  `fromFile`, compares the whole container chain (a package either side leaves out may be dropped, a
+  definition or a path may not), and counts a file caller only when its file produced a definition, so
+  a root-level file with nothing parsed no longer reads as FIXED and a nested file caller
+  (`lib/hooks.js`) can. Replayed on codegraph f72c9d2e and 147fe290, code-graph-rag 0.7.1,
+  codebase-memory-mcp and code-review-graph: one verdict moves, code-review-graph's issue-2966 FIXED ->
+  CHANGED (its caller is named `Model.init`; the old tail match found `Cast::init` in another file).
+  `lib/fixture.ts` is a scorer file, so `manifest.scorers.sha256` changes.
 - README's fixture counts (#63): 45 codegraph repros, 44 naming the upstream issue or PR they reproduce
   (42 distinct). `lib/readme-counts-test.ts` keeps them matched to `fixtures/`.
 - The differs (`differential/builds.ts`, `shadow.ts`, `modes.ts`) keep a repo's `node_modules/` when they

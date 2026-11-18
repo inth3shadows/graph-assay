@@ -109,6 +109,35 @@ try {
     const noQname = { id: 'n', name: 'Cls::method', kind: 'method', file: 'a.php', start: 1, end: 1 };
     assert.equal(score([noQname], wrongOnly('Cls::method')), 'FIXED');
   });
+  check('one caller predicate: file callers need a definition; fromFile, containers and signatures hold (#34)', () => {
+    const top = { id: 't', name: 'show', qname: 'App::UserController::show', kind: 'method', file: 'User.php', start: 3, end: 3 };
+    const wrongOnly = (from, extra = {}) => ({ issue: 1, wrong: [{ from, kind: 'references', to: 'User.php:App::UserController::show', ...extra }], right: [] });
+    const score = (nodes, expect) => scoreFixture({ ...snap, nodes: [top, ...nodes], edges: [] }, expect).verdict;
+    const file = (f) => ({ id: `file:${f}`, name: path.basename(f), qname: f, kind: 'file', file: f, start: 1, end: 9 });
+    const fn = (name, f, qname = name) => ({ id: `${f}:${qname}`, name, qname, kind: 'function', file: f, start: 2, end: 3 });
+    // 1. a root-level file that produced only its file node is not the caller (its name is its path)
+    assert.equal(score([file('use.py')], wrongOnly('use.py')), 'CHANGED');
+    assert.equal(score([file('use.py'), fn('main', 'use.py')], wrongOnly('use.py')), 'FIXED');
+    // 2. fromFile pins the caller for a plain name too
+    assert.equal(score([fn('run', 'other.js')], wrongOnly('run', { fromFile: 'a.js' })), 'CHANGED');
+    assert.equal(score([fn('run', 'a.js')], wrongOnly('run', { fromFile: 'a.js' })), 'FIXED');
+    // 3. a different container is not the caller; a package prefix the fixture leaves out is
+    const pRun = fn('run', 'App.java', 'p::App::run');
+    assert.equal(score([pRun], wrongOnly('b::App::run')), 'CHANGED');
+    assert.equal(score([pRun], wrongOnly('App::run')), 'FIXED');
+    assert.equal(score([pRun, fn('p', 'App.java')], wrongOnly('App::run')), 'CHANGED'); // `p` is a definition there
+    // and a package the subject leaves out (code-graph-rag writes `App::run(File,...)` for j1-java-overload)
+    const bare = fn('run', 'App.java', 'App::run(File,String)');
+    assert.equal(score([bare], wrongOnly('p::App::run')), 'FIXED');
+    assert.equal(score([bare, fn('p', 'App.java')], wrongOnly('p::App::run')), 'CHANGED');
+    // an unrelated same-named method elsewhere is not the caller (code-review-graph's `Cast::init`, issue-2966)
+    assert.equal(score([fn('init', 'lib/other.js', 'Cast::init'), fn('Cast', 'lib/other.js'), fn('Model.init', 'lib/model.js')], wrongOnly('init')), 'CHANGED');
+    // a signature the subject writes is ignored when the fixture names none
+    assert.equal(score([fn('run', 'App.java', 'App::run(File,int)')], wrongOnly('App::run')), 'FIXED');
+    // 4. a nested file caller counts once its file holds a definition
+    assert.equal(score([file('lib/hooks.js')], wrongOnly('lib/hooks.js')), 'CHANGED');
+    assert.equal(score([file('lib/hooks.js'), fn('onRequest', 'lib/hooks.js')], wrongOnly('lib/hooks.js')), 'FIXED');
+  });
   const seed = path.join(tmp, 'seed'); write(path.join(seed, 'main.js'), 'export function f() {}\nf();\n');
   write(path.join(seed, 'main.py'), '#!/usr/bin/env python3\nfrom __future__ import annotations\ndef f(): pass\nf()\n');
   for (const file of ['expect.json', 'nested/expect.json', '.codegraph/stale', '.claude/control', '.env', 'AGENTS.md']) write(path.join(seed, file), 'CGQA_EVALUATION_ONLY_MARKER');
