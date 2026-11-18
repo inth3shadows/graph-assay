@@ -56,7 +56,8 @@ Design decisions:
   is the registry scorers take `--subject` from. `SPEC.md` says
   what the scorers compare. `bin/graph-assay conformance [--subject <name>] <build>` checks that an adapter exports the
   subject's output faithfully (a valid snapshot, counts against the subject's own output where
-  conformance reads it, site lines, every corpus file) and reports how the subject handles the awkward
+  conformance reads it and, for code-graph-rag, each edge's endpoints, line and column; site lines;
+  the declared column encoding; a definition in every corpus file) and reports how the subject handles the awkward
   cases. For codegraph f72c9d2e and 147fe290, columns are UTF-16 code units in TS and Python, and two
   calls of one callee on a line are two edges. For code-graph-rag 0.7.1 the counts match its export and
   columns are UTF-8 bytes; its adapter declares `columnEncoding: 'unknown'`, so the oracle uses its
