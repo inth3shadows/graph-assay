@@ -199,8 +199,9 @@ All notable changes to this project are recorded here. The format follows
   so a diff of a local dir with an install missed any change that depends on one. Links are copied as
   written, so an install's relative links lead into the copy, which is all the container sandbox mounts.
   Corpus repos from `--fetch` (and the edgediff workflow) are not installed, so nothing changes there.
-  `builds.ts` reports a failed copy as `FAILED` and cleans up with `sandbox.remove`; `shadow.ts` reports a
-  failed copy as `FAILED` and removes its temp dirs.
+  A failed copy is a `FAILED` row in all three (and a failed snapshot read in `builds.ts`), never an
+  aborted run; `builds.ts` cleans up with `sandbox.remove`, and `modes.ts` removes a failed mode's copy.
+  A repo named through a link is copied from the dir it names.
 - Provenance gaps (#41): `scorers()` now hashes the tables and T3 (`bench/tables.ts`,
   `bench/robustness.ts`, `bench/package.json`), `differential/builds.ts`, the labels scorers with
   `labels/package.json`, and the oracle's shell steps (`oracle/*.sh`); the repro manifest hashes

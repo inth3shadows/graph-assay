@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { canonical, diffCanonical } from './modes.ts';
 import { lineDiff } from './shadow.ts';
 import { copyRepo } from '../lib/fixture-install.ts';
+import * as sandbox from '../lib/sandbox.ts';
 import * as os from 'node:os';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -100,10 +101,9 @@ for (const [a, b] of texts) {
     let ok3 = false;
     try { copyRepo(fx, fxd); ok3 = inside(fxd, 'node_modules/.bin/i') && inside(fxd, 'node_modules/ro/l') && !fs.existsSync(path.join(fxd, 'node_modules.fixture')); }
     catch (e) { console.log(`      ${e.message}`); }
-    for (const d of [fx, fxd]) if (fs.existsSync(path.join(d, d === fx ? 'node_modules.fixture/ro' : 'node_modules/ro'))) fs.chmodSync(path.join(d, d === fx ? 'node_modules.fixture/ro' : 'node_modules/ro'), 0o755);
     if (!ok3) failed++;
     console.log(`${ok3 ? 'ok  ' : 'FAIL'}  copyRepo places a fixture's install with its links, read-only dirs included`);
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { sandbox.remove(tmp); } // restores the read-only dirs' modes
 }
 console.log(`${n - failed}/${n} comparison checks`);
 process.exit(failed ? 1 : 0);

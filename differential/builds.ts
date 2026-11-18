@@ -16,7 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
 import * as sandbox from '../lib/sandbox.ts';
-import { canonical, diffCanonical } from './modes.ts';
+import { canonical, diffCanonical, errLine } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,10 +54,11 @@ export function fetchRepos(dest, repos) {
 function graph(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-builds-'));
   try {
-    try { copyRepo(src, work); } catch (e) { return { error: `copy failed: ${e.message}` }; }
+    try { copyRepo(src, work); } catch (e) { return { error: `copy failed: ${errLine(e)}` }; }
     const r = codegraph.index(work, build);
     if (!r.ok) return { error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-2).join(' | ')}`, ms: r.ms };
-    const s = codegraph.snapshot(work);
+    let s;
+    try { s = codegraph.snapshot(work); } catch (e) { return { error: `snapshot failed: ${errLine(e)}`, ms: r.ms }; }
     return { canon: canonical(s), ms: r.ms, size: { nodes: s.nodes.length, edges: s.edges.length, unresolved: s.unresolved.length } };
   } finally {
     sandbox.remove(work); // a copied install can hold read-only dirs; cleanup never replaces the result

@@ -34,11 +34,14 @@ export function copySeed(src: string, dst: string, filter: (p: string) => boolea
  * A repo copied for a differ (differential/) to index: everything but `.codegraph/`, as copySeed copies it.
  * `node_modules/` stays, since codegraph resolves imports against installed packages (#15). Links are copied
  * as written (fs.cpSync otherwise makes a relative link absolute into `src`), so an install's relative
- * `.bin` and workspace links lead into the copy, which is all the container sandbox mounts; a link out of
- * the repo dangles there on every backend. An absolute link still names its old target.
+ * `.bin` and workspace links lead into the copy, which is all the container sandbox mounts. A relative link
+ * out of the repo resolves from the copy's location, so it usually dangles (on the host backends it could
+ * name a path beside the temp dir); a link naming `node_modules.fixture/` dangles once the install is
+ * placed. An absolute link still names its old target.
  */
 export function copyRepo(src: string, dst: string): void {
-  copyTree(src, dst, (p) => path.basename(p) !== '.codegraph', true);
+  // a repo named through a link is copied from the dir it names (copyTree refuses a linked root)
+  copyTree(fs.realpathSync(src), dst, (p) => path.basename(p) !== '.codegraph', true);
 }
 
 function copyTree(src: string, dst: string, filter: (p: string) => boolean, verbatimSymlinks: boolean): void {
