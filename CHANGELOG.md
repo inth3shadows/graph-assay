@@ -130,7 +130,7 @@ All notable changes to this project are recorded here. The format follows
   subjects' wrong targets. Prompted by the first held-out run; on dev it touches no scored unit (the
   57 mismatches in requests and click are standard-library targets). Self-tests `py-star-import`,
   `py-star-import-missing`. Results under v1.0 keep that label.
-- `replay` prints `unfiled` for a fixture with no upstream issue (`issue` null or 0), as `bench/triage.mjs`
+- `replay` prints `unfiled` for a fixture with no upstream issue (`issue` null or 0), as `bench/triage.ts`
   does, and sizes the name column to the longest fixture name. `fixtures/replay.mts` is a scorer file, so
   this changed `manifest.scorers.sha256`.
 - `lib/` is TypeScript: every `lib/**/*.mjs` is now `.ts`, run by Node's type stripping with no build
@@ -194,12 +194,13 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
-- Replay and fixture follow-ups from the #31 review (#36): a fixture whose `expect.json` did not parse
-  prints `-` for its issue (was `unfiled`); the issue column sizes itself; replay and `bench/triage.ts`
+- Replay and fixture follow-ups from the #31 review (#36): a fixture whose `expect.json` is unreadable or
+  invalid prints `-` for its issue (was `unfiled`) and has no `issue` in `--json`; the issue column sizes itself; replay and `bench/triage.ts`
   share `issueLabel` (`lib/expect.ts`); `java-typed-var-wildcard` also lists the wrong `new` target
   (`instantiates -> com.x.a::Util`), so a graph with both targets and the fixed call no longer scores
   FIXED. Replayed on codegraph f72c9d2e and 147fe290, code-graph-rag 0.7.1, codebase-memory-mcp and
-  code-review-graph: its verdicts are unchanged. Scorer files changed, so `manifest.scorers.sha256` changes.
+  code-review-graph: its verdicts are unchanged. `fixtures/replay.mts` and `lib/expect.ts` are scorer files,
+  so `manifest.scorers.sha256` changes (fixture expectations themselves are not hashed there).
 - Replay's caller guard (#34): one rule decides whether a fixture's caller is in the graph. It honours
   `fromFile` and matches the caller's name as an edge source would (`chainMatch`), with one stricter
   rule: a path segment (a file, a route pattern) keeps its parentheses and drops only when it is the

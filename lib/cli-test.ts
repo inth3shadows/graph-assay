@@ -48,12 +48,21 @@ try {
     }
   });
 
-  check('replay prints - for the issue of a fixture whose expect.json did not parse (#36)', () => {
+  check('replay prints - for the issue of a fixture whose expect.json is unreadable or invalid (#36)', () => {
     const build = path.join(tmp, 'build.js'); fs.writeFileSync(build, '');
     const root = path.join(tmp, 'unparsed'); fs.mkdirSync(path.join(root, 'bad'), { recursive: true });
     fs.writeFileSync(path.join(root, 'bad', 'expect.json'), '{'); fs.writeFileSync(path.join(root, 'bad', 'a.py'), '');
-    const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), '--root', root, build, 'bad']);
+    const edge = { from: 'f', kind: 'calls', to: 'a.py:g' };
+    for (const [name, body] of [['noissue', { wrong: [edge], right: [] }], ['filed', { issue: 7, wrong: [edge], right: [] }]]) {
+      fs.mkdirSync(path.join(root, name)); fs.writeFileSync(path.join(root, name, 'expect.json'), JSON.stringify(body)); fs.writeFileSync(path.join(root, name, 'a.py'), '');
+    }
+    const out = path.join(tmp, 'unparsed.json');
+    const r = run(process.execPath, [path.join(qa, 'fixtures/replay.mts'), '--root', root, build, 'bad', 'noissue', 'filed', '--json', out]);
     assert.match(r.stdout, /^ERROR +- +bad /m, r.stdout + r.stderr);
+    assert.match(r.stdout, /^ERROR +- +noissue /m, r.stdout); // parses, but `issue` is missing: unknown
+    assert.match(r.stdout, /^ERROR +#7 +filed /m, r.stdout); // valid; the index fails on the empty build
+    const rows = Object.fromEntries(JSON.parse(fs.readFileSync(out, 'utf8')).results.map((x) => [x.name, x]));
+    assert.equal('issue' in rows.bad, false); assert.equal(rows.filed.issue, 7);
     assert.equal(issueLabel(null), 'unfiled'); assert.equal(issueLabel(0), 'unfiled'); assert.equal(issueLabel(12), '#12');
   });
 

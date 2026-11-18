@@ -70,17 +70,17 @@ const run = (dir) => {
     : r.status === 0 ? 'index exited 0 but produced no graph' : r.output.trim().split('\n').slice(-3).join(' | ') || `index failed (status ${r.status}${r.signal ? `, ${r.signal}` : ''})`);
   return subj.snapshot(dir, { build, kernel });
 };
-const unread = new Set<string>(); // fixtures whose expect.json did not parse
 try {
   for (const name of names) {
-    const row: Record<string, any> = { name, issue: null, verdict: 'ERROR', detail: '' };
-    results.push(row); unread.add(name);
+    // `issue` is set once expect.json is valid; until then it is unknown (absent from --json, `-` in print)
+    const row: Record<string, any> = { name, issue: undefined, verdict: 'ERROR', detail: '' };
+    results.push(row);
     try {
       const source = path.join(root, name);
       const expect = JSON.parse(fs.readFileSync(path.join(source, 'expect.json'), 'utf8'));
-      row.issue = expect.issue; unread.delete(name);
       const bad = validateExpect(expect);
       if (bad.length) throw new Error(`expect.json: ${bad.join('; ')}`);
+      row.issue = expect.issue;
       const dir = path.join(work, name);
       copyFixture(source, dir);
       Object.assign(row, scoreFixture(run(dir), expect));
@@ -101,8 +101,8 @@ try {
 } finally { fs.rmSync(work, { recursive: true, force: true }); }
 
 // A fixture with no upstream issue (`issue` null or 0) prints `unfiled`, as bench/triage.ts does; one whose
-// expect.json did not parse prints `-` (its issue is unknown).
-const label = (r) => (unread.has(r.name) ? '-' : issueLabel(r.issue));
+// expect.json is unreadable or invalid prints `-` (its issue is unknown).
+const label = (r) => (r.issue === undefined ? '-' : issueLabel(r.issue));
 const nameWidth = Math.max(22, ...results.map((r) => r.name.length));
 const issueWidth = Math.max(7, ...results.map((r) => label(r).length));
 for (const r of results) console.log(`${r.verdict.padEnd(8)} ${label(r).padEnd(issueWidth)} ${r.name.padEnd(nameWidth)} ${r.detail}`);
