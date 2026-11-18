@@ -26,6 +26,7 @@ import { config } from '../lib/config.ts';
 import { CORPUS, readRepos } from '../differential/builds.ts';
 import { forward, missing } from '../lib/scores.ts';
 import { isMain } from '../lib/main.ts';
+import { issueLabel } from '../lib/expect.ts';
 import { SUBJECT_NAMES, TAG, workSuffix, baseWorkDir, parseSubjects } from '../lib/subjects/names.ts';
 
 const args = process.argv.slice(2);
@@ -151,7 +152,7 @@ if (isMain(import.meta.url)) {
   for (const [subj, v] of Object.entries<any>(result.subjects)) {
     md.push(`## ${subj}`, '', `Results recorded under: ${v.specs.map((s) => s ?? 'unrecorded').join(', ')}.${v.notRun.length ? ` Not run: ${v.notRun.join(', ')}.` : ''}`, '',
       `| rank | points | track | sites | repos | shape | same calls as |${v.shapes[0]?.known ? ' filed fixtures with this shape |' : ''}`, `|---|---|---|---|---|---|---|${v.shapes[0]?.known ? '---|' : ''}`);
-    const knownCell = (s) => (s.known ? ` ${s.known.map((k) => `${k.issue ? `#${k.issue}` : 'unfiled'} ${k.fixture}${k.verdict ? ` (${k.verdict})` : ''}`).join(', ') || 'none: new'} |` : '');
+    const knownCell = (s) => (s.known ? ` ${s.known.map((k) => `${issueLabel(k.issue)} ${k.fixture}${k.verdict ? ` (${k.verdict})` : ''}`).join(', ') || 'none: new'} |` : '');
     v.shapes.slice(0, top).forEach((s, i) => md.push(`| ${i + 1} | ${s.points.toFixed(2)} | ${s.direction} | ${s.sites} | ${s.repos.map((r) => `${r.repo} ${r.sites}`).join(', ')} | \`${s.key}\` | ${s.sameCalls.map((o) => `#${o.rank}`).join(', ') || '-'} |${knownCell(s)}`));
     md.push('');
     v.shapes.slice(0, Math.min(top, 5)).forEach((s, i) => {
