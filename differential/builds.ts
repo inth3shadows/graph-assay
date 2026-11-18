@@ -19,7 +19,10 @@ import { canonical, diffCanonical } from './modes.ts';
 import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SKIP = new Set(['.codegraph', 'node_modules']);
+
+/** Copy a repo to index: everything but `.codegraph/`. `node_modules/` stays, since codegraph resolves imports
+ * against installed packages (#15); a fixture's `node_modules.fixture/` is put in place by copySeed. */
+export const copyRepo = (src: string, dst: string) => copySeed(src, dst, (p) => path.basename(p) !== '.codegraph');
 
 export const CORPUS = path.join(here, '..', 'corpus', 'v1.txt');
 /** The corpus file's repos: {name, url, sha, language, license, split, category, setup, exclude}, optionally
@@ -54,7 +57,7 @@ export function fetchRepos(dest, repos) {
 function graph(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-builds-'));
   try {
-    copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
+    copyRepo(src, work);
     const r = codegraph.index(work, build);
     if (!r.ok) return { error: `status ${r.status}${r.signal ? ` ${r.signal}` : ''}: ${r.output.trim().split('\n').slice(-2).join(' | ')}`, ms: r.ms };
     const s = codegraph.snapshot(work);

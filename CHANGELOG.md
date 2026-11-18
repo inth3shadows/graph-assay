@@ -193,6 +193,9 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- `differential/builds.ts` and `differential/shadow.ts` keep a repo's `node_modules/` when they copy it
+  to index (#15): codegraph resolves imports against installed packages, so a diff without them missed
+  every change that depends on one. `differential/modes.ts` still skips it (its hash identifies T3).
 - Provenance gaps (#41): `scorers()` now hashes the tables and T3 (`bench/tables.ts`,
   `bench/robustness.ts`, `bench/package.json`), `differential/builds.ts`, the labels scorers with
   `labels/package.json`, and the oracle's shell steps (`oracle/*.sh`); the repro manifest hashes

@@ -12,7 +12,7 @@
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs';
 import { adapterHash } from '../lib/provenance.ts';
-import { copySeed } from '../lib/fixture-install.ts';
+import { copyRepo } from './builds.ts';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as codegraph from '../lib/subjects/codegraph.ts';
@@ -21,7 +21,6 @@ import { isMain } from '../lib/main.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const qa = path.join(here, '..');
-const SKIP = new Set(['.codegraph', 'node_modules']);
 const QUERY_ENV = { CODEGRAPH_NO_DAEMON: '1', CODEGRAPH_NO_WATCH: '1', NO_COLOR: '1' };
 
 /** A repo name from the targets file (ORACLE_TARGETS, default oracle/targets.txt), or a path relative to the qa root. */
@@ -68,7 +67,7 @@ function open(build, src) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-shadow-'));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-home-'));
   const done = () => { for (const d of [work, home]) sandbox.remove(d); };
-  copySeed(src, work, (p) => !SKIP.has(path.basename(p)));
+  copyRepo(src, work);
   const r = codegraph.index(work, build, { home, env: QUERY_ENV });
   if (!r.ok) { done(); return { error: `index failed (status ${r.status}): ${r.output.trim().split('\n').slice(-2).join(' | ')}` }; }
   const ask = (q) => {

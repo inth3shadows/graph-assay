@@ -7,6 +7,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { canonical, diffCanonical } from './modes.ts';
 import { lineDiff } from './shadow.ts';
+import { copyRepo } from './builds.ts';
+import * as os from 'node:os';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const base = JSON.parse(fs.readFileSync(path.join(here, '..', 'oracle/test/ts-forward/snapshot.json'), 'utf8'));
@@ -56,6 +58,23 @@ for (const [a, b] of texts) {
   const ok = side('-') === a && side('+') === b && (a !== b || d.every((l) => l[0] === ' '));
   if (!ok) failed++;
   console.log(`${ok ? 'ok  ' : 'FAIL'}  lineDiff ${JSON.stringify(a)} -> ${JSON.stringify(b)}`);
+}
+// builds.ts / shadow.ts copy a repo with its installed packages (codegraph resolves against them, #15)
+// and without a stale index.
+{
+  n++;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-copyrepo-'));
+  try {
+    const src = path.join(tmp, 'src'); const dst = path.join(tmp, 'dst');
+    for (const f of ['a.ts', 'node_modules/pkg/index.d.ts', '.codegraph/codegraph.db']) {
+      fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), '');
+    }
+    copyRepo(src, dst);
+    const has = (f) => fs.existsSync(path.join(dst, f));
+    const ok = has('a.ts') && has('node_modules/pkg/index.d.ts') && !has('.codegraph');
+    if (!ok) failed++;
+    console.log(`${ok ? 'ok  ' : 'FAIL'}  copyRepo keeps node_modules, drops .codegraph`);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 console.log(`${n - failed}/${n} comparison checks`);
 process.exit(failed ? 1 : 0);
