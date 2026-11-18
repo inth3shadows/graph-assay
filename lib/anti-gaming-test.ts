@@ -110,7 +110,7 @@ try {
     const noQname = { id: 'n', name: 'Cls::method', kind: 'method', file: 'a.php', start: 1, end: 1 };
     assert.equal(score([noQname], wrongOnly('Cls::method')), 'FIXED');
   });
-  check('one caller predicate: file callers need a definition; fromFile, containers and signatures hold (#34)', () => {
+  check('one caller rule: a file caller needs a definition or an edge; fromFile, containers and signatures hold (#34)', () => {
     const top = { id: 't', name: 'show', qname: 'App::UserController::show', kind: 'method', file: 'User.php', start: 3, end: 3 };
     const wrongOnly = (from, extra = {}) => ({ issue: 1, wrong: [{ from, kind: 'references', to: 'User.php:App::UserController::show', ...extra }], right: [] });
     const score = (nodes, expect) => scoreFixture({ ...snap, nodes: [top, ...nodes], edges: [] }, expect).verdict;
