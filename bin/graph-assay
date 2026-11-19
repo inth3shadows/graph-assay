@@ -23,7 +23,7 @@ const COMMANDS = {
   conformance: ['node', p('lib/conformance.ts'), '[--subject <name>] <build | default>: is the adapter faithful, and how does the subject handle awkward cases'],
   modes: ['node', p('differential/modes.ts'), '<codegraph.js> <dir ...> [--modes ..] [--json out]: execution modes (kernel, workers, sync, repeat) diffed against base'],
   builds: ['node', p('differential/builds.ts'), '<old codegraph.js> <new codegraph.js> <dir ...> [--md out] [--json out] | --fetch <dest>: two builds, canonical graph diff'],
-  triage: ['node', p('bench/triage.ts'), '[--work <oracle work dir>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],
+  triage: ['node', p('bench/triage.ts'), '[--work <oracle work dir>] [--tables <tables.json>] [--t3 <dir>] [--top N] [--md out] [--json out]: subject bugs ranked by the headline points they cost, from an oracle run'],
   site: ['node', p('oracle/site.ts'), '<name | work dir> <file:line> [called name] [--subject s|all] [--no-scip]: one call site explained (records, meaning, SCIP definition, edges) and its re-run command'],
   shadow: ['node', p('differential/shadow.ts'), '<old codegraph.js> <new codegraph.js> [questions.json] [--show N] [--json out]: agent-facing answers (explore, callers, ...) diffed between builds'],
 };
