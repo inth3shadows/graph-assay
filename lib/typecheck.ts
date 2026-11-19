@@ -64,7 +64,7 @@ export function staleInstall(lock: unknown, installedVersion: (dir: string) => s
   if (!packages) return [`package-lock.json has no "packages" (lockfileVersion ${lockfileVersion ?? '?'})`];
   const stale: string[] = [];
   for (const [dir, entry] of Object.entries(packages)) {
-    const name = dir.replace(/^node_modules\//, '');
+    const name = dir.replace(/^node_modules\//, '') || '(root project)';
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) { stale.push(`${name}: lockfile entry is not an object`); continue; }
     const { version, optional, devOptional } = entry as { version?: unknown, optional?: unknown, devOptional?: unknown };
     if (!dir || version === undefined) continue; // the root project; links and workspaces
@@ -78,6 +78,8 @@ export function staleInstall(lock: unknown, installedVersion: (dir: string) => s
 /** Run tsc in `root` (no install checks). Returns the lines to print, last one the verdict.
  * `extra`: more tsc arguments (`npm run typecheck -- <flags>`). */
 export function runTsc(root: string, extra: string[] = []): { ok: boolean, lines: string[] } {
+  const flag = notACheck(extra);
+  if (flag) return { ok: false, lines: [`FAIL  typecheck: ${flag} is not a type-check flag (only strictness options and --pretty false)`] };
   root = path.resolve(root); // tsc runs with cwd = root, so a relative path would resolve twice
   // --noEmit on the command line too: an unparseable tsconfig.json makes tsc fall back to defaults and emit .js.
   const r = spawnSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', '.', '--noEmit', '--pretty', 'false', ...extra],
@@ -89,6 +91,26 @@ export function runTsc(root: string, extra: string[] = []): { ok: boolean, lines
   // The full output first, the verdict last, next to the check's own summary.
   // tsc prints nothing on a clean run unless asked (e.g. --listFilesOnly); show whatever it printed.
   return { ok, lines: [...(out ? [out] : []), `${ok ? 'ok   ' : 'FAIL '} typecheck: ${summary}`] };
+}
+
+// The only extra tsc flags a type check takes (#26): options that make it stricter or looser, each
+// optionally followed by true or false, and `--pretty false`. Anything else (help, version, init, watch,
+// build, showConfig, listFilesOnly, noCheck, noEmit false, a response file, ...) can end in a false
+// `0 errors`, a hang or written files. tsc reads option names case-insensitively, so this does too.
+const CHECK_FLAGS = new Set(['strict', 'strictnullchecks', 'strictfunctiontypes', 'strictbindcallapply', 'strictpropertyinitialization',
+  'strictbuiltiniteratorreturn', 'alwaysstrict', 'useunknownincatchvariables', 'noimplicitany', 'noimplicitthis', 'noimplicitreturns',
+  'noimplicitoverride', 'nounusedlocals', 'nounusedparameters', 'nofallthroughcasesinswitch', 'nouncheckedindexedaccess',
+  'nopropertyaccessfromindexsignature', 'exactoptionalpropertytypes', 'allowunreachablecode', 'allowunusedlabels']);
+/** The first of `extra` that is not a type-check flag, or null. */
+export function notACheck(extra: string[]): string | null {
+  for (let i = 0; i < extra.length; i++) {
+    const name = extra[i].startsWith('--') ? extra[i].slice(2).toLowerCase() : null;
+    const value = /^(true|false)$/i.test(extra[i + 1] ?? '') ? extra[i + 1].toLowerCase() : null;
+    if (name === 'pretty' && value === 'false') { i++; continue; }
+    if (name === null || !CHECK_FLAGS.has(name)) return extra[i];
+    if (value) i++;
+  }
+  return null;
 }
 
 /** The check's type check: refuse a missing or stale install, then run tsc.

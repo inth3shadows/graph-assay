@@ -208,6 +208,15 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
+  every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
+  now `>=22.18.0 <23 || >=23.6.0 <25`: 23.0 to 23.5 had type stripping behind a flag. Every step and
+  forwarded command, shell scripts included, runs with the CLI's node first on PATH. CI runs `check` on
+  Node 22.18.0, 22.23.2 and 24.22.1.
+- The type check takes only strictness options (and `--pretty false`) as extra tsc flags, matched
+  case-insensitively as tsc does; anything else (`--help`, `--init`, `--watch`, `--listFilesOnly`,
+  `--noCheck`, `--noEmit false`, a response file, ...) is refused, where it read as `0 errors`, hung or
+  wrote files. A malformed root lockfile entry is named `(root project)` (#26).
 - Replay and fixture follow-ups from the #31 review (#36): a fixture whose `expect.json` is unreadable or
   invalid prints `-` for its issue (was `unfiled`) and has no `issue` in `--json`; the issue column sizes itself; replay and `bench/triage.ts`
   share `issueLabel` (`lib/expect.ts`); `java-typed-var-wildcard` also lists the wrong `new` target

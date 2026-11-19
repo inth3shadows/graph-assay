@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { scoreFixture } from './fixture.ts';
 import { issueLabel } from './expect.ts';
 import { gate } from './scores.ts';
@@ -65,6 +65,21 @@ try {
     const rows = Object.fromEntries(JSON.parse(fs.readFileSync(out, 'utf8')).results.map((x) => [x.name, x]));
     assert.equal('issue' in rows.bad, false); assert.equal(rows.filed.issue, 7);
     assert.equal(issueLabel(null), 'unfiled'); assert.equal(issueLabel(0), 'unfiled'); assert.equal(issueLabel(12), '#12');
+  });
+
+  check('graph-assay refuses a Node without unflagged type stripping, or 25+, with a message (#28)', () => {
+    const as = (v) => {
+      const pre = path.join(tmp, `node-${v}.mjs`);
+      fs.writeFileSync(pre, `Object.defineProperty(process.versions, 'node', { value: '${v}' }); Object.defineProperty(process, 'version', { value: 'v${v}' });\n`);
+      return run(process.execPath, ['--import', pathToFileURL(pre).href, path.join(qa, 'bin/graph-assay'), 'help']);
+    };
+    for (const v of ['22.17.0', '23.5.0', '25.0.0', '20.19.0']) {
+      const r = as(v); assert.equal(r.status, 2, `${v}: ${r.stdout}${r.stderr}`); assert.match(r.stderr, new RegExp(`needs Node .*this is v${v.replace(/\./g, '\\.')}`));
+    }
+    for (const v of ['22.18.0', '23.6.0', '24.22.1']) assert.equal(as(v).status, 0, v);
+    // the CLI's range is package.json's engines
+    const range = fs.readFileSync(path.join(qa, 'bin/graph-assay'), 'utf8').match(/const NODE_RANGE = '([^']+)'/)?.[1];
+    assert.equal(range, JSON.parse(fs.readFileSync(path.join(qa, 'package.json'), 'utf8')).engines.node);
   });
 
   check('an empty graph never reads as FIXED', () => {

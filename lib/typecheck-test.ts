@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { summarize, staleInstall, runTsc, typecheck, joinOutput, extendsChain } from './typecheck.ts';
+import { summarize, staleInstall, runTsc, typecheck, joinOutput, extendsChain, notACheck } from './typecheck.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let n = 0; let failed = 0; let skipped = 0;
@@ -25,6 +25,18 @@ const project = (files: Record<string, string>, fn: (dir: string) => void) => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 };
 
+check('flags that are not a type check are refused; check flags and --pretty false pass (#26)', () => {
+  for (const f of ['--help', '-h', '--Help', '--version', '-V', '--init', '--watch', '--Watch', '-w', '--build', '--showConfig', '--showconfig',
+    '--pretty', '--pretty=true', '--pretty=false', '--listFilesOnly', '--noCheck', '--generateCpuProfile', '@args.txt']) assert.equal(notACheck([f]), f, f);
+  assert.equal(notACheck(['--noEmit', 'false']), '--noEmit'); assert.equal(notACheck(['--pretty', 'true']), '--pretty');
+  for (const ok of [[], ['--noUnusedLocals'], ['--NoUnusedLocals'], ['--pretty', 'false'], ['--strict'], ['--strict', 'false', '--noImplicitAny', 'true']]) assert.equal(notACheck(ok), null, ok.join(' '));
+  // enforced where tsc runs, so a direct caller of runTsc is guarded too
+  assert.match(runTsc('/nonexistent', ['--Watch']).lines[0], /--Watch is not a type-check flag/);
+  assert.match(typecheck('/nonexistent', ['--init']).lines[0], /--init is not a type-check flag|node_modules\/typescript is missing/);
+});
+check('a malformed root lockfile entry is named (#26)', () => {
+  assert.deepEqual(staleInstall({ packages: { '': 5 } }, () => null), ['(root project): lockfile entry is not an object']);
+});
 check('a clean run passes', () => assert.deepEqual(summarize('', { status: 0 }), { ok: true, summary: 'tsc -p . (0 errors)' }));
 check('one diagnostic per error line; continuation lines and quoted codes do not count', () => {
   const out = [
