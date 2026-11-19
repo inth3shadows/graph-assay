@@ -8,9 +8,9 @@
 //                              [--known fixtures/known-shapes.json] [--top 15] [--md out.md] [--json out.json]
 //                              [--tables <tables.json>]
 //   --tables: the tables' JSON (bench/tables.ts --json) for the same work dirs and split. Shapes are then
-//   ranked over the rows those tables average on the call-site track (#6): repos every subject ran, no
-//   diagnostic language (SPEC §9), site lines, this SPEC version. Without it every work dir is ranked,
-//   so points at stake can disagree with the headline.
+//   ranked over the rows those tables average on the call-site track (#6): repos every subject ran (SPEC §8),
+//   no diagnostic language (SPEC §9), site lines (SPEC §3). Without it every work dir is ranked, so points
+//   at stake can disagree with the headline.
 //   --known: each fixture's shapes (tools/triage/tag-fixtures.ts); a codegraph shape whose key a fixture of
 //   the same language produces lists that fixture and its upstream issue, with its replay verdict from --t1
 //   (BROKEN: still open at this build). A match is a candidate, not proof: one key can hold several bugs.
@@ -106,14 +106,16 @@ export function rankShapes(rows) {
 
 /**
  * Why the tables leave `row` out of subject `subj`'s call-site averages (`tables` is bench/tables.ts's
- * JSON), or null when they average it. A subject the tables do not cover keeps every row.
+ * JSON), or null when they average it. This restates the call-site filter in bench/tables.ts (diagnostic
+ * language, no run, no site lines; triage-test pins that line). Results under another SPEC version stay
+ * in: the tables list them, and refuse them only when canonical. A subject the tables do not cover keeps
+ * every row.
  */
 export function leftOutBy(tables, subj, row) {
   if (!tables.subjects?.[subj]) return null;
-  if (!(tables.averagedRepos ?? []).includes(row.repo)) return 'not averaged: a tabled subject has no run (SPEC §8)';
+  if (!tables.averagedRepos.includes(row.repo)) return 'not averaged: a tabled subject has no run (SPEC §8)';
   if (tables.diagnostic?.[row.language]) return `diagnostic language (SPEC §9)`;
   if ((tables.subjects[subj].noSiteLines ?? []).includes(row.repo)) return 'no site lines (SPEC §3)';
-  if ((tables.otherSpec ?? []).some((x) => x.startsWith(`${row.repo} (${subj}:`))) return 'another SPEC version (SPEC §12)';
   return null;
 }
 
@@ -143,7 +145,13 @@ if (isMain(import.meta.url)) {
   const repos = readRepos(corpus, split);
   const known = fs.existsSync(knownFile) ? readJson(knownFile) : null;
   const tables = tablesFile ? readJson(tablesFile) : null;
-  if (tables && tables.split !== split) { console.error(`--tables is for split ${tables.split}, not ${split}`); process.exit(2); }
+  if (tables) {
+    // a tables JSON for this split and corpus: anything else would misfilter every ranking silently
+    const bad = !Array.isArray(tables.averagedRepos) || typeof tables.subjects !== 'object' || !tables.subjects ? 'not a bench/tables.ts --json file'
+      : tables.split !== split ? `for split ${tables.split}, not ${split}`
+        : tables.averagedRepos.some((r) => !repos.some((x) => x.name === r)) ? `averages repos this corpus split does not hold (${tables.averagedRepos.join(', ')})` : null;
+    if (bad) { console.error(`--tables ${tablesFile}: ${bad}`); process.exit(2); }
+  }
   const result: Record<string, any> = { work, corpus: path.basename(corpus), split, tables: tablesFile, subjects: {} };
   // A subject with no work dir in the split would only list every repo as not run: left out unless named.
   const found = SUBJECT_NAMES.filter((s) => repos.some((r) => workDir(r.name, workSuffix(s))) || (t3Dir && fs.existsSync(path.join(t3Dir, `meta-${TAG[s]}.json`))));
@@ -152,19 +160,20 @@ if (isMain(import.meta.url)) {
     const sfx = workSuffix(subj); const tag = TAG[subj];
     const rows = [];
     const notRun = [];
+    const leftOut = [];
     for (const r of repos) {
       const w = workDir(r.name, sfx);
       if (!w) { notRun.push(r.name); continue; }
+      const reason = tables ? leftOutBy(tables, subj, { repo: r.name, language: r.language }) : null;
+      if (reason) { leftOut.push({ repo: r.name, reason }); continue; }
       rows.push({ repo: r.name, language: r.language, workDir: w, fwd: readJson(path.join(w, 'out.json')), miss: readJson(path.join(w, 'out-missing.json')) });
     }
-    const leftOut = tables ? rows.map((x) => ({ repo: x.repo, reason: leftOutBy(tables, subj, x) })).filter((x) => x.reason) : [];
-    if (leftOut.length) rows.splice(0, rows.length, ...rows.filter((x) => !leftOut.some((o) => o.repo === x.repo)));
     const t3 = t3Dir && fs.existsSync(path.join(t3Dir, `meta-${tag}.json`)) ? decoyFindings(readJson(path.join(t3Dir, `meta-${tag}.json`))) : null;
     const ranked = rankShapes(rows);
     // The fixtures are codegraph bugs, tagged with codegraph's shapes: matched for codegraph only.
     const replay = t1Dir && fs.existsSync(path.join(t1Dir, `replay-${tag}.json`)) ? Object.fromEntries(readJson(path.join(t1Dir, `replay-${tag}.json`)).results.map((x) => [x.name, x.verdict])) : {};
     if (subj === 'codegraph' && known) for (const s of ranked.shapes) s.known = knownFor(s, known, replay);
-    result.subjects[subj] = { ...ranked, notRun, leftOut, decoy: t3, specs: [...new Set(rows.flatMap((r) => [r.fwd.spec ?? null, r.miss.spec ?? null]))] };
+    result.subjects[subj] = { ...ranked, notRun, leftOut, tabled: tables ? Boolean(tables.subjects[subj]) : null, decoy: t3, specs: [...new Set(rows.flatMap((r) => [r.fwd.spec ?? null, r.miss.spec ?? null]))] };
   }
 
   const md = [`# Bug triage: corpus ${result.corpus}, split \`${split}\``, '',
@@ -173,7 +182,7 @@ if (isMain(import.meta.url)) {
     tables ? `Ranked over the rows ${path.basename(tablesFile)} averages on the call-site track (#6); each subject lists the repos it leaves out.` : 'Ranked over every work dir: pass `--tables <tables.json>` to rank over the rows the tables average, so points at stake match the headline (#6).',
     known ? `Filed fixtures come from ${path.basename(knownFile)} (codegraph ${String(known.build).slice(0, 8)}, ${known.generated}): a fixture listed for a shape produces that shape in the same language, which makes it a candidate match, not proof, since one shape can hold several bugs. BROKEN means the bug is still present at this run's build.` : 'No fixture shape file: filed fixtures are not matched.', ''];
   for (const [subj, v] of Object.entries<any>(result.subjects)) {
-    md.push(`## ${subj}`, '', `Results recorded under: ${v.specs.map((s) => s ?? 'unrecorded').join(', ')}.${v.notRun.length ? ` Not run: ${v.notRun.join(', ')}.` : ''}${v.leftOut.length ? ` Left out as the tables do: ${v.leftOut.map((x) => `${x.repo} (${x.reason})`).join(', ')}.` : ''}`, '',
+    md.push(`## ${subj}`, '', `Results recorded under: ${v.specs.map((s) => s ?? 'unrecorded').join(', ')}.${v.notRun.length ? ` Not run: ${v.notRun.join(', ')}.` : ''}${v.leftOut.length ? ` Left out as the tables do: ${v.leftOut.map((x) => `${x.repo} (${x.reason})`).join(', ')}.` : ''}${v.tabled === false ? ' Not in the tables given: every row is ranked.' : ''}`, '',
       `| rank | points | track | sites | repos | shape | same calls as |${v.shapes[0]?.known ? ' filed fixtures with this shape |' : ''}`, `|---|---|---|---|---|---|---|${v.shapes[0]?.known ? '---|' : ''}`);
     const knownCell = (s) => (s.known ? ` ${s.known.map((k) => `${issueLabel(k.issue)} ${k.fixture}${k.verdict ? ` (${k.verdict})` : ''}`).join(', ') || 'none: new'} |` : '');
     v.shapes.slice(0, top).forEach((s, i) => md.push(`| ${i + 1} | ${s.points.toFixed(2)} | ${s.direction} | ${s.sites} | ${s.repos.map((r) => `${r.repo} ${r.sites}`).join(', ')} | \`${s.key}\` | ${s.sameCalls.map((o) => `#${o.rank}`).join(', ') || '-'} |${knownCell(s)}`));

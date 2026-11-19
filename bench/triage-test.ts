@@ -91,14 +91,18 @@ check('every subject with a work dir is triaged, under its own work-dir suffix; 
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
 check('with the tables JSON, triage leaves out the rows the tables do not average (#6)', () => {
-  const tables = { averagedRepos: ['a', 'b', 'c'], diagnostic: { typescript: { diagnostic: true } }, otherSpec: ['c (codegraph: SPEC v4.0)'],
+  const tables = { averagedRepos: ['a', 'b', 'c'], diagnostic: { typescript: { diagnostic: true } }, otherSpec: ['c (codegraph: SPEC v4.0, SPEC v5.0)'],
     subjects: { codegraph: { noSiteLines: ['b'] }, 'code-graph-rag': { noSiteLines: [] } } };
   const why = (subj, repo, language = 'python') => leftOutBy(tables, subj, { repo, language });
   assert.equal(why('codegraph', 'a'), null);
   assert.match(why('codegraph', 'z'), /not averaged/);
   assert.match(why('codegraph', 'a', 'typescript'), /diagnostic/);
   assert.match(why('codegraph', 'b'), /site lines/); assert.equal(why('code-graph-rag', 'b'), null);
-  assert.match(why('codegraph', 'c'), /SPEC version/); assert.equal(why('code-graph-rag', 'c'), null);
+  assert.equal(why('codegraph', 'c'), null); // another SPEC version stays in, as the tables average it
   assert.equal(why('code-review-graph', 'z'), null); // a subject the tables do not cover keeps every row
+  // leftOutBy restates this call-site filter: change both together
+  const tablesSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'tables.ts'), 'utf8');
+  assert.ok(tablesSrc.includes("v.rows.filter((x) => !diagnostic.has(x.language) && !notRun.has(x.repo) && !(callSite && x.siteLines === false))"),
+    "bench/tables.ts's averaging filter changed: update leftOutBy in bench/triage.ts to match");
 });
 console.log(`${n}/${n} triage checks`);
