@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readRepos } from '../differential/builds.ts';
-import { decoyFindings, describe, knownFor, rankShapes } from './triage.ts';
+import { decoyFindings, describe, knownFor, leftOutBy, rankShapes } from './triage.ts';
 
 let n = 0;
 const check = (name, fn) => { fn(); n++; console.log(`ok    ${name}`); };
@@ -89,5 +89,16 @@ check('every subject with a work dir is triaged, under its own work-dir suffix; 
     const none = run(['--work', empty]);
     assert.equal(Object.keys(none.subjects).length, 4); assert.ok(Object.values<any>(none.subjects).every((v) => v.notRun.length === readRepos(undefined, 'dev').length));
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+check('with the tables JSON, triage leaves out the rows the tables do not average (#6)', () => {
+  const tables = { averagedRepos: ['a', 'b', 'c'], diagnostic: { typescript: { diagnostic: true } }, otherSpec: ['c (codegraph: SPEC v4.0)'],
+    subjects: { codegraph: { noSiteLines: ['b'] }, 'code-graph-rag': { noSiteLines: [] } } };
+  const why = (subj, repo, language = 'python') => leftOutBy(tables, subj, { repo, language });
+  assert.equal(why('codegraph', 'a'), null);
+  assert.match(why('codegraph', 'z'), /not averaged/);
+  assert.match(why('codegraph', 'a', 'typescript'), /diagnostic/);
+  assert.match(why('codegraph', 'b'), /site lines/); assert.equal(why('code-graph-rag', 'b'), null);
+  assert.match(why('codegraph', 'c'), /SPEC version/); assert.equal(why('code-graph-rag', 'c'), null);
+  assert.equal(why('code-review-graph', 'z'), null); // a subject the tables do not cover keeps every row
 });
 console.log(`${n}/${n} triage checks`);

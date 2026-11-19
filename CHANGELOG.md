@@ -7,6 +7,11 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- `bench/triage.ts --tables <tables.json>` (#6): triage ranks shapes over the rows the tables average on the
+  call-site track (repos every subject ran, no diagnostic language, site lines, this SPEC version), so points
+  at stake agree with the headline; each subject lists what it left out and why. On the canonical held-out
+  run it leaves out got (TypeScript is diagnostic under SPEC v5.0). Without it triage ranks every work dir,
+  and its report says so. `bench/tables.ts` is unchanged.
 - Adapter conformance for every subject (#11): `bin/graph-assay conformance --subject <name> <build>`
   runs the generic checks (valid snapshot, site lines when claimed, the declared column encoding, a
   definition in every corpus file) for any adapter, counts against the subject's own output for codegraph
