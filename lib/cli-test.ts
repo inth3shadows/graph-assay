@@ -67,11 +67,19 @@ try {
     assert.equal(issueLabel(null), 'unfiled'); assert.equal(issueLabel(0), 'unfiled'); assert.equal(issueLabel(12), '#12');
   });
 
-  check('graph-assay refuses a Node below the 22.18 floor with a message (#28)', () => {
-    const old = path.join(tmp, 'old-node.mjs');
-    fs.writeFileSync(old, "Object.defineProperty(process.versions, 'node', { value: '22.17.0' }); Object.defineProperty(process, 'version', { value: 'v22.17.0' });\n");
-    const r = run(process.execPath, ['--import', pathToFileURL(old).href, path.join(qa, 'bin/graph-assay'), 'help']);
-    assert.equal(r.status, 2, r.stdout + r.stderr); assert.match(r.stderr, /needs Node >=22\.18\.0 <25.*v22\.17\.0/);
+  check('graph-assay refuses a Node without unflagged type stripping, or 25+, with a message (#28)', () => {
+    const as = (v) => {
+      const pre = path.join(tmp, `node-${v}.mjs`);
+      fs.writeFileSync(pre, `Object.defineProperty(process.versions, 'node', { value: '${v}' }); Object.defineProperty(process, 'version', { value: 'v${v}' });\n`);
+      return run(process.execPath, ['--import', pathToFileURL(pre).href, path.join(qa, 'bin/graph-assay'), 'help']);
+    };
+    for (const v of ['22.17.0', '23.5.0', '25.0.0', '20.19.0']) {
+      const r = as(v); assert.equal(r.status, 2, `${v}: ${r.stdout}${r.stderr}`); assert.match(r.stderr, new RegExp(`needs Node .*this is v${v.replace(/\./g, '\\.')}`));
+    }
+    for (const v of ['22.18.0', '23.6.0', '24.22.1']) assert.equal(as(v).status, 0, v);
+    // the CLI's range is package.json's engines
+    const range = fs.readFileSync(path.join(qa, 'bin/graph-assay'), 'utf8').match(/const NODE_RANGE = '([^']+)'/)?.[1];
+    assert.equal(range, JSON.parse(fs.readFileSync(path.join(qa, 'package.json'), 'utf8')).engines.node);
   });
 
   check('an empty graph never reads as FIXED', () => {

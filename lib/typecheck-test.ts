@@ -26,9 +26,13 @@ const project = (files: Record<string, string>, fn: (dir: string) => void) => {
 };
 
 check('flags that are not a type check are refused; check flags and --pretty false pass (#26)', () => {
-  for (const f of ['--help', '-h', '--version', '--init', '--watch', '-w', '--build', '--showConfig', '--pretty', '--pretty=true']) assert.equal(notACheck([f]), f, f);
-  for (const ok of [[], ['--noUnusedLocals'], ['--pretty', 'false'], ['--pretty=false'], ['--strict']]) assert.equal(notACheck(ok), null, ok.join(' '));
-  assert.match(typecheck('/nonexistent', ['--init']).lines[0], /--init is not a type check/);
+  for (const f of ['--help', '-h', '--Help', '--version', '-V', '--init', '--watch', '--Watch', '-w', '--build', '--showConfig', '--showconfig',
+    '--pretty', '--pretty=true', '--pretty=false', '--listFilesOnly', '--noCheck', '--generateCpuProfile', '@args.txt']) assert.equal(notACheck([f]), f, f);
+  assert.equal(notACheck(['--noEmit', 'false']), '--noEmit'); assert.equal(notACheck(['--pretty', 'true']), '--pretty');
+  for (const ok of [[], ['--noUnusedLocals'], ['--NoUnusedLocals'], ['--pretty', 'false'], ['--strict'], ['--strict', 'false', '--noImplicitAny', 'true']]) assert.equal(notACheck(ok), null, ok.join(' '));
+  // enforced where tsc runs, so a direct caller of runTsc is guarded too
+  assert.match(runTsc('/nonexistent', ['--Watch']).lines[0], /--Watch is not a type-check flag/);
+  assert.match(typecheck('/nonexistent', ['--init']).lines[0], /--init is not a type-check flag|node_modules\/typescript is missing/);
 });
 check('a malformed root lockfile entry is named (#26)', () => {
   assert.deepEqual(staleInstall({ packages: { '': 5 } }, () => null), ['(root project): lockfile entry is not an object']);

@@ -2,7 +2,7 @@
   "name": "graph-assay",
   "private": true,
   "engines": {
-    "node": ">=22.18.0 <25"
+    "node": ">=22.18.0 <23 || >=23.6.0 <25"
   },
   "description": "Development tooling only: the runtime has no npm dependencies.",
   "scripts": {

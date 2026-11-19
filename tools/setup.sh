@@ -5,7 +5,7 @@
 #   --no-*       skip that part; --dry-run prints the steps and changes nothing
 #   --unlocked   allow code-graph-rag without the hash lock (any Python but 3.12 on x86_64): its
 #                dependencies then float, so scores may differ from the reproduction's
-# Needs node 20-24 and git; python3 (3.12 for the hash-locked code-graph-rag install); go for scip-go.
+# Needs node 22.18+ (23.6+ on the 23 line), below 25, and git; python3 (3.12 for the hash-locked code-graph-rag install); go for scip-go.
 # The venvs use /usr/bin/python3.12 where it exists (the docker sandbox's Python, lib/sandbox.ts), else
 # python3. --no-sandbox skips building the sandbox image (needs docker; Linux only).
 set -euo pipefail

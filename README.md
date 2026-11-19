@@ -55,7 +55,7 @@ snapshots, so a new tool needs a new adapter, not new scorers.
 
 ## Prerequisites
 
-- Node 22.18 to 24 (`lib/` is TypeScript run by Node's type stripping, unflagged from 22.18; the codegraph adapter uses `node:sqlite`; codegraph does not build on Node 25+) and `git`.
+- Node 22.18 to 24, not 23.0–23.5 (`lib/` is TypeScript run by Node's type stripping, unflagged from 22.18 and 23.6; the codegraph adapter uses `node:sqlite`; codegraph does not build on Node 25+) and `git`.
 - Python 3 for code-graph-rag (3.12 on x86_64 gets the hash-locked install), Go on PATH for Go repos,
   Docker for `scip-java`. `node bin/graph-assay setup` installs the rest.
 - Docker, for the pinned end-to-end reproduction (`Dockerfile`, `tools/repro.ts`).
