@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { scoreFixture } from './fixture.ts';
 import { issueLabel } from './expect.ts';
 import { gate } from './scores.ts';
@@ -65,6 +65,13 @@ try {
     const rows = Object.fromEntries(JSON.parse(fs.readFileSync(out, 'utf8')).results.map((x) => [x.name, x]));
     assert.equal('issue' in rows.bad, false); assert.equal(rows.filed.issue, 7);
     assert.equal(issueLabel(null), 'unfiled'); assert.equal(issueLabel(0), 'unfiled'); assert.equal(issueLabel(12), '#12');
+  });
+
+  check('graph-assay refuses a Node below the 22.18 floor with a message (#28)', () => {
+    const old = path.join(tmp, 'old-node.mjs');
+    fs.writeFileSync(old, "Object.defineProperty(process.versions, 'node', { value: '22.17.0' }); Object.defineProperty(process, 'version', { value: 'v22.17.0' });\n");
+    const r = run(process.execPath, ['--import', pathToFileURL(old).href, path.join(qa, 'bin/graph-assay'), 'help']);
+    assert.equal(r.status, 2, r.stdout + r.stderr); assert.match(r.stderr, /needs Node >=22\.18\.0 <25.*v22\.17\.0/);
   });
 
   check('an empty graph never reads as FIXED', () => {

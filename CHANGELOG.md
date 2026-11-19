@@ -208,6 +208,13 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- `bin/graph-assay` refuses a Node outside `>=22.18.0 <25` with a message, instead of every TypeScript
+  script failing with `ERR_UNKNOWN_FILE_EXTENSION`, and runs every node step (check's and forwarded
+  commands) on its own node, not the first `node` on PATH (#28). CI runs `check` on Node 22.18.0, 22.23.2
+  and 24.22.1.
+- The type check refuses tsc flags that are not a check (`--help`, `--version`, `--init`, `--watch`,
+  `--build`, `--showConfig`, `--pretty` other than `false`), which read as `0 errors` or hung, and names a
+  malformed root lockfile entry `(root project)` (#26).
 - Replay and fixture follow-ups from the #31 review (#36): a fixture whose `expect.json` is unreadable or
   invalid prints `-` for its issue (was `unfiled`) and has no `issue` in `--json`; the issue column sizes itself; replay and `bench/triage.ts`
   share `issueLabel` (`lib/expect.ts`); `java-typed-var-wildcard` also lists the wrong `new` target

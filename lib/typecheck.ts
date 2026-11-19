@@ -64,7 +64,7 @@ export function staleInstall(lock: unknown, installedVersion: (dir: string) => s
   if (!packages) return [`package-lock.json has no "packages" (lockfileVersion ${lockfileVersion ?? '?'})`];
   const stale: string[] = [];
   for (const [dir, entry] of Object.entries(packages)) {
-    const name = dir.replace(/^node_modules\//, '');
+    const name = dir.replace(/^node_modules\//, '') || '(root project)';
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) { stale.push(`${name}: lockfile entry is not an object`); continue; }
     const { version, optional, devOptional } = entry as { version?: unknown, optional?: unknown, devOptional?: unknown };
     if (!dir || version === undefined) continue; // the root project; links and workspaces
@@ -91,10 +91,18 @@ export function runTsc(root: string, extra: string[] = []): { ok: boolean, lines
   return { ok, lines: [...(out ? [out] : []), `${ok ? 'ok   ' : 'FAIL '} typecheck: ${summary}`] };
 }
 
+// tsc flags that make it do something other than check (print help, write a tsconfig, watch, build) or
+// print diagnostics this file cannot count: the verdict would be a false `0 errors` or a hang (#26).
+const NOT_A_CHECK = new Set(['--help', '-h', '-?', '--all', '--version', '-v', '--init', '--watch', '-w', '--build', '-b', '--showConfig', '--pretty']);
+/** The first of `extra` that is not a type-check flag, or null. `--pretty false` is what runTsc passes itself. */
+export const notACheck = (extra: string[]): string | null => extra.find((a, i) => NOT_A_CHECK.has(a.split('=')[0]) && !(a === '--pretty' && extra[i + 1] === 'false') && a !== '--pretty=false') ?? null;
+
 /** The check's type check: refuse a missing or stale install, then run tsc.
  * `extra`: more tsc arguments. */
 export function typecheck(root: string, extra: string[] = []): { ok: boolean, lines: string[] } {
   const refuse = (why: string) => ({ ok: false, lines: [`FAIL  typecheck: ${why}; ${NPM_CI}`] });
+  const flag = notACheck(extra);
+  if (flag) return { ok: false, lines: [`FAIL  typecheck: ${flag} is not a type check (tsc would not report diagnostics this can count); pass check flags only`] };
   if (!fs.existsSync(path.join(root, 'node_modules/typescript/bin/tsc'))) return refuse('node_modules/typescript is missing');
   let lock;
   try { lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')); } catch (e) {
