@@ -7,6 +7,19 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Six fixtures for colbymchenry/codegraph issues filed 2026-11-21, each the issue's own repro, all BROKEN
+  on 461a5d87 (v1.6.4): `issue-3443` (a parameter typed only by its callback type links another class's
+  method), `issue-3444` (a canvas context held in a local still takes the one-method guess), `issue-3445`
+  (Python loop variables and decorated functions typed by their name), `issue-3446` (a Python `with`
+  tuple target or loop variable holding a stdlib object links the only project method), `issue-3447` (a Go
+  local initialized by a chain starting with `new(T)` is typed `T`) and `issue-3448` (a Go local takes a
+  same-named closure parameter's type). Where the issue names the right target (`issue-3443`, `issue-3447`),
+  `right` pins it; a variant with the bug removed scores FIXED. The Go fixtures keep `Router` and `Route` in
+  separate files: with both in one file the oracle reads the wrong `Route.Path` edge as `ok`, because
+  `Router.Path` is declared on the next line. `known-shapes.json` adds the six, tagged at f72c9d2e like the
+  rest; every existing entry is unchanged.
+- `.runechoguardignore` lists the DOM types `CanvasRenderingContext2D` and `HTMLCanvasElement`, so the
+  runecho-guard pre-commit check doesn't flag them as unresolved in fixtures.
 - `bench/triage.ts --tables <tables.json>` (#6): triage ranks shapes over the rows the tables average on the
   call-site track (repos every subject ran, no diagnostic language, site lines), so points at stake agree
   with the headline; each subject lists what it left out and why. Results under another SPEC version stay

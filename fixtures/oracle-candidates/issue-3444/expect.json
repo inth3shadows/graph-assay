@@ -1,0 +1,1 @@
+{"issue": 3444, "wrong": [{"from": "chained", "kind": "calls", "to": "a.ts:Viewport::translate"}, {"from": "twoSteps", "kind": "calls", "to": "a.ts:Viewport::translate"}, {"from": "fromFactory", "kind": "calls", "to": "a.ts:Viewport::translate"}], "right": []}

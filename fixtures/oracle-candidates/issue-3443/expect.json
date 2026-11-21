@@ -1,0 +1,1 @@
+{"issue": 3443, "wrong": [{"from": "destructured", "kind": "calls", "to": "app.tsx:App::mutateElement"}, {"from": "plain", "kind": "calls", "to": "app.tsx:App::mutateElement"}], "right": [{"from": "destructured", "kind": "calls", "to": "scene.ts:Scene::mutateElement"}, {"from": "plain", "kind": "calls", "to": "scene.ts:Scene::mutateElement"}]}
