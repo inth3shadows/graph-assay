@@ -1,6 +1,6 @@
 {
  "build": "f72c9d2efb14454ff4f9fd7b8460abd82f19a287",
- "generated": "2026-11-14",
+ "generated": "2026-11-21",
  "fixtures": {
   "a": {
    "issue": 3034,
@@ -319,6 +319,54 @@
    "shapes": {
     "receiver-fallback|calls|import|constant>term": 1,
     "missing|receiver-fallback|ts|term@decl>method": 1
+   }
+  },
+  "issue-3443": {
+   "issue": 3443,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 2,
+    "missing|wrong-edge|tsx|method>method": 2
+   }
+  },
+  "issue-3444": {
+   "issue": 3444,
+   "lang": "ts",
+   "shapes": {
+    "external|calls|instance-method|method>method": 4
+   }
+  },
+  "issue-3445": {
+   "issue": 3445,
+   "lang": "python",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 4,
+    "missing|wrong-edge|py|method>method": 4,
+    "missing|unresolved-ref|py|method>method": 1
+   }
+  },
+  "issue-3446": {
+   "issue": 3446,
+   "lang": "python",
+   "shapes": {
+    "external|calls|instance-method|method>method": 4
+   }
+  },
+  "issue-3447": {
+   "issue": 3447,
+   "lang": "go",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 2,
+    "missing|wrong-edge|go|method>method": 2
+   }
+  },
+  "issue-3448": {
+   "issue": 3448,
+   "lang": "go",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>method": 1,
+    "missing|wrong-edge|go|method>method": 1,
+    "missing|unresolved-ref|go|method>method": 1
    }
   }
  }

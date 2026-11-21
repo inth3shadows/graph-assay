@@ -1,0 +1,1 @@
+{"issue": 3445, "wrong": [{"from": "loop_annotated", "kind": "calls", "to": "models.py:Widget::describe"}, {"from": "loop_returned", "kind": "calls", "to": "models.py:Widget::describe"}, {"from": "comprehension", "kind": "calls", "to": "models.py:Widget::describe"}, {"from": "run", "kind": "calls", "to": "cmd.py:CliRunner::invoke"}], "right": []}

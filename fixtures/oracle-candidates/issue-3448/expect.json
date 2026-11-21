@@ -1,0 +1,1 @@
+{"issue": 3448, "note": "Router and Route live in separate files, as in issue-3447.", "wrong": [{"from": "closureSameName", "kind": "calls", "to": "route.go:Route::Path"}], "right": []}

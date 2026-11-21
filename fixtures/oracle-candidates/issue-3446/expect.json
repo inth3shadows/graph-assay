@@ -1,0 +1,1 @@
+{"issue": 3446, "wrong": [{"from": "with_tuple", "kind": "calls", "to": "formatting.py:HelpFormatter::getvalue"}, {"from": "loop_threads", "kind": "calls", "to": "formatting.py:Capture::start"}], "right": []}
