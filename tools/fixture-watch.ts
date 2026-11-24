@@ -16,6 +16,16 @@
 //   node tools/fixture-watch.ts issues --prev prev.json --next next.json [--fixtures dir]
 //       print the upstream issue numbers (deduplicated) of every fixture the report can list: new, changed,
 //       or erroring on either commit; the report job looks up their open/closed state
+//   node tools/fixture-watch.ts pr-select --prs prs.json [--state pr-state.json] --cap N
+//       print (JSON) the open PRs [{number, head, base}] whose head moved since the last check, capped
+//   node tools/fixture-watch.ts pr-issues --prs selected.json --dir artifact [--fixtures dir]
+//       print the upstream issues every selected PR's report can list (for their open/closed state)
+//   node tools/fixture-watch.ts pr-report --prs selected.json --dir artifact --graph-assay <sha> --open open.json
+//       [--state pr-state.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
+//       --state-out pr-state.json [--summary-out full.md]
+//       one section per PR whose confirmed result changed since it was last reported (artifact/pr-N/ holds
+//       prev.json, next.json and, when reruns were needed, confirm-prev.json / confirm-next.json); a PR whose
+//       results are missing is left unchecked, so the next run tries it again
 //   node tools/fixture-watch.ts run --next next.json --sha <new sha> --graph-assay <sha>
 //       [--prev prev.json --prev-sha <sha> [--confirm-prev c.json --confirm-next c.json]] [--state stored.json]
 //       [--issue-states states.json] [--fixtures dir] [--date YYYY-MM-DD] [--summary-out full.md]
@@ -225,6 +235,65 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
   return out;
 }
 
+// ---- PR watch: open upstream PRs, before they merge (plan graph-assay-pr-watch.md) ----
+// The same diff, between a PR's merge base (prev) and its head (next). The output is a section of the tracking
+// issue's comment with a ready-to-paste review comment for the PR; nothing is posted upstream from here.
+
+export interface Pr { number: number; head: string; base: string }
+export interface PrState { prs: Record<string, { head: string; sig: string }> }
+
+/** A stable summary of a PR's confirmed result, so a PR is re-reported only when its result changes. */
+export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}:${c.to.detail}`).sort().join('\n');
+
+const DRAFTABLE = new Set<Kind>(['fixed', 'regression', 'edges']);
+
+/** A review comment for the PR, in the posting skill's shape, or null when no change can be drafted. */
+export function reviewDraft(pr: number, changes: Change[], ctx: Ctx): string | null {
+  const ds = changes.filter((c) => DRAFTABLE.has(c.kind) && c.issue && c.from);
+  if (!ds.length) return null;
+  const ref = (c: Change) => `the ${c.name} fixture (#${c.issue})`;
+  const fixes = ds.filter((c) => c.kind === 'fixed').map(ref); const breaks = ds.filter((c) => c.kind === 'regression').map(ref);
+  const edges = ds.filter((c) => c.kind === 'edges').map(ref);
+  const parts = [fixes.length ? `fixes ${fixes.join(', ')}` : '', breaks.length ? `breaks ${breaks.join(', ')}` : '',
+    edges.length ? `changes the wrong edges of ${edges.join(', ')}` : ''].filter(Boolean);
+  const on = `head \`${short(ctx.next)}\` vs base \`${short(ctx.prev)}\``;
+  const lines = [`Checked against the fixtures in [graph-assay](https://github.com/${REPO}), which I maintain: this PR ${parts.join(' and ')}.`, ''];
+  for (const c of ds) {
+    const link = `([fixture](https://github.com/${REPO}/tree/${ctx.graphAssay}/fixtures/oracle-candidates/${c.name}))`;
+    if (c.kind === 'fixed') lines.push(`**The ${c.name} fixture is fixed.** Verified on ${on}: on base it reads ${c.from.verdict} (${code(c.from.detail)}); on head none of its wrong edges remain and every right edge is there ${link}.`, '');
+    else if (c.kind === 'regression') lines.push(`**The ${c.name} fixture breaks.** Failing case (verified on ${on}): it reads FIXED on base and ${c.to.verdict} on head: ${code(c.to.detail)} ${link}.`, '');
+    else lines.push(`**The ${c.name} fixture's wrong edges change.** Verified on ${on}: it reads ${c.to.verdict} on both. Base: ${code(c.from.detail)}. Head: ${code(c.to.detail)} ${link}.`, '');
+  }
+  lines.push(`The other fixtures read the same on head and base. Rerun: \`node bin/graph-assay replay <codegraph build>/dist/bin/codegraph.js ${ds.map((c) => c.name).join(' ')}\``);
+  return lines.join('\n') + '\n';
+}
+
+/** One PR's section of the tracking-issue comment ('' when nothing changed). Upstream-written text (the PR's title) is never rendered. */
+export function prSection(pr: number, changes: Change[], ctx: Ctx): string {
+  if (!changes.length) return '';
+  const lines = [`#### ${UPSTREAM}#${pr} at \`${short(ctx.next)}\` (merge base \`${short(ctx.prev)}\`)`, '',
+    '| fixture | upstream issue | base | head | change |', '|---|---|---|---|---|',
+    ...changes.map((c) => `| ${c.name} | ${issueCell(c, ctx)} | ${c.from?.verdict ?? '-'} | ${c.to.verdict} | ${what(c)} |`)];
+  const d = reviewDraft(pr, changes, ctx);
+  if (d) lines.push('', `<details><summary>Draft review comment for ${UPSTREAM}#${pr}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>');
+  return lines.join('\n') + '\n';
+}
+
+/** The open PRs to check this run: head moved since the last check, in the given (newest-updated-first) order, capped. */
+export function prSelect(prs: Pr[], state: PrState, cap: number): Pr[] {
+  for (const p of prs) if (!(Number.isSafeInteger(p.number) && p.number > 0 && SHA.test(p.head) && SHA.test(p.base))) throw new Error(`bad pr: ${JSON.stringify(p)}`);
+  return prs.filter((p) => state.prs?.[String(p.number)]?.head !== p.head).slice(0, cap);
+}
+
+/** The PR state after a run: checked PRs updated, PRs no longer open dropped. */
+export function prState(state: PrState, open: number[], checked: Array<{ number: number; head: string; sig: string }>): PrState {
+  const keep = new Set(open.map(String));
+  const prs: PrState['prs'] = {};
+  for (const [k, v] of Object.entries(state.prs ?? {})) if (keep.has(k)) prs[k] = v;
+  for (const c of checked) if (keep.has(String(c.number))) prs[String(c.number)] = { head: c.head, sig: c.sig };
+  return { prs: Object.fromEntries(Object.entries(prs).sort(([a], [b]) => Number(a) - Number(b))) };
+}
+
 // ---- command line ----
 const read = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8'));
 function opt(args: string[], k: string): string | undefined {
@@ -257,6 +326,63 @@ function main(argv: string[]) {
     const fixtures = fixtureSet(opt(args, '--fixtures'));
     const out = listableIssues(rows(read(prev), { fixtures }), rows(read(next), { fixtures }));
     if (out.length) console.log(out.join('\n'));
+    return;
+  }
+  if (cmd === 'pr-select') {
+    const cap = Number(opt(args, '--cap') ?? '6');
+    const prsFile = opt(args, '--prs'); if (!prsFile) throw new Error('pr-select needs --prs');
+    const st = opt(args, '--state');
+    console.log(JSON.stringify(prSelect(read(prsFile), st ? read(st) : { prs: {} }, cap)));
+    return;
+  }
+  if (cmd === 'pr-issues' || cmd === 'pr-report') {
+    const need = (k: string) => { const v = opt(args, k); if (!v) throw new Error(`${cmd} needs ${k}`); return v; };
+    const selected: Pr[] = prSelect(read(need('--prs')), { prs: {} }, Infinity); // validates every entry
+    const dir = need('--dir');
+    const fixtures = fixtureSet(opt(args, '--fixtures'));
+    const load = (pr: Pr) => {
+      const d = path.join(dir, `pr-${pr.number}`);
+      const f = (n: string) => path.join(d, `${n}.json`);
+      if (!fs.existsSync(f('prev')) || !fs.existsSync(f('next'))) return null;
+      const prev = rows(read(f('prev')), { fixtures }); const next = rows(read(f('next')), { fixtures });
+      const reruns = rerunNames(prev, next);
+      if (reruns.length && !(fs.existsSync(f('confirm-prev')) && fs.existsSync(f('confirm-next')))) return null;
+      const confirm = reruns.length ? { confirmPrev: rows(read(f('confirm-prev')), { fixtures }), confirmNext: rows(read(f('confirm-next')), { fixtures }) } : {};
+      return { prev, next, changes: diff(prev, next, confirm) };
+    };
+    if (cmd === 'pr-issues') {
+      const out = new Set<number>();
+      for (const pr of selected) { const l = load(pr); if (l) for (const i of listableIssues(l.prev, l.next)) out.add(i); }
+      if (out.size) console.log([...out].join('\n'));
+      return;
+    }
+    const ga = need('--graph-assay'); if (!SHA.test(ga)) throw new Error('--graph-assay must be a full sha');
+    const open: number[] = read(need('--open'));
+    if (!Array.isArray(open) || !open.every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error('bad --open list');
+    const stFile = opt(args, '--state'); const state: PrState = stFile ? read(stFile) : { prs: {} };
+    const statesFile = opt(args, '--issue-states'); const states = statesFile ? read(statesFile) : {};
+    for (const [k, v] of Object.entries(states)) if (!/^\d+$/.test(k) || !ISSUE_STATES.has(v as string)) throw new Error(`bad issue state ${k}: ${v}`);
+    const date = opt(args, '--date') ?? new Date().toISOString().slice(0, 10);
+    const checked: Array<{ number: number; head: string; sig: string }> = [];
+    const sections: string[] = [];
+    for (const pr of selected) {
+      const l = load(pr);
+      if (!l) { console.error(`pr-report: no complete results for #${pr.number}; left for the next run`); continue; }
+      const sig = signature(l.changes);
+      checked.push({ number: pr.number, head: pr.head, sig });
+      if (sig && sig !== state.prs?.[String(pr.number)]?.sig) sections.push(prSection(pr.number, l.changes, { prev: pr.base, next: pr.head, graphAssay: ga, date, states }));
+    }
+    const head = `### PR watch: ${checked.length} open PR(s) checked, ${sections.length} with a changed result\n\nDrafts are candidates: re-check on the PR's current head, then post by hand after approval.\n`;
+    const all = sections.length ? [head, ...sections].join('\n') : '';
+    let capped = all;
+    if (all.length > LIMIT) {
+      let k = sections.length;
+      do { k--; capped = [head, ...sections.slice(0, k), `${sections.length - k} more PR section(s) left out to stay under GitHub's comment limit: the report job's summary has them.\n`].join('\n'); } while (capped.length > LIMIT && k > 0);
+    }
+    fs.writeFileSync(need('--report-out'), capped);
+    const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, all);
+    fs.writeFileSync(need('--state-out'), JSON.stringify(prState(state, open, checked), null, 1) + '\n');
+    console.log(`${checked.length} PR(s) checked, ${sections.length} reported`);
     return;
   }
   if (cmd === 'run') {
@@ -298,7 +424,7 @@ function main(argv: string[]) {
     console.log(prevFile ? `${changes.length} change(s) since ${short(prevSha)}` : `baseline: ${next.length} fixtures`);
     return;
   }
-  throw new Error('usage: fixture-watch.ts flips|issues|run ... (see the header)');
+  throw new Error('usage: fixture-watch.ts flips|issues|run|pr-select|pr-issues|pr-report ... (see the header)');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

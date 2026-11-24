@@ -1,0 +1,272 @@
+# PR watch: once a day, for each open upstream codegraph PR whose head moved since it was last checked (newest
+# first, at most CAP per run), build its merge base and its head, replay every fixture in
+# fixtures/oracle-candidates on both with this checkout, rerun the changed ones on both, and report which fixtures
+# the PR fixes or breaks (tools/fixture-watch.ts pr-*), before it merges. The report is one comment per run on
+# this repo's open issue labelled `pr-watch`, with a ready-to-paste review comment per PR. A PR is reported again
+# only when its result changes. Nothing is posted to codegraph: a person posts the review comment on the PR after
+# checking it. State (head and result per open PR) lives on the `pr-watch-state` branch.
+#
+# Three jobs, so a write token never shares a runner with code upstream controls: `select` (no upstream code)
+# picks the PRs; `replay` (one per PR, read-only token) builds and runs upstream code; `report` runs only this
+# repo's code on the replay results and alone can write.
+# Dry run (report in each replay job's summary; no state, no comment): any pull request touching the watch
+# (upstream PR 3454, which fixed issue-3447), or a dispatch with `pr` set.
+name: pr-watch
+on:
+  schedule:
+    - cron: '53 6 * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: check only this upstream PR number (a dry run that writes nothing)
+        required: false
+        default: ''
+  pull_request:
+    paths:
+      # The workflow, the build script, and every file the replay and the watch tool load
+      # (lib/manifest-test.ts pins this list to their imports).
+      - .github/workflows/pr-watch.yml
+      - tools/build-codegraph.sh
+      - fixtures/replay.mts
+      - lib/config.ts
+      - lib/expect.ts
+      - lib/fixture-install.ts
+      - lib/fixture.ts
+      - lib/main.ts
+      - lib/package.json
+      - lib/provenance.ts
+      - lib/sandbox.ts
+      - lib/snapshot.ts
+      - lib/spec.ts
+      - lib/subjects/code-graph-rag.ts
+      - lib/subjects/code-review-graph.ts
+      - lib/subjects/codebase-memory-mcp.ts
+      - lib/subjects/codegraph.ts
+      - lib/subjects/index.ts
+      - lib/types.ts
+      - tools/fixture-watch.ts
+      - tools/package.json
+permissions: {}
+concurrency:
+  group: pr-watch-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
+env:
+  UPSTREAM: colbymchenry/codegraph
+  NODE_VERSION: '22.23.2'
+  CAP: '6'
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      prs: ${{ steps.pick.outputs.prs }}
+      any: ${{ steps.pick.outputs.any }}
+      dry: ${{ steps.pick.outputs.dry }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pick the PRs to check
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ inputs.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p sel
+          if [ "$EVENT" = pull_request ]; then PR=3454; fi
+          dry=false
+          if [ -n "$PR" ]; then
+            [[ "$PR" =~ ^[0-9]+$ ]] || { echo "pr must be a number" >&2; exit 1; }
+            dry=true
+            gh api "repos/$UPSTREAM/pulls/$PR" --jq '[{number, head: .head.sha, base: .base.sha}]' > sel/prs.json
+            echo '{"prs":{}}' > sel/state.json
+          else
+            # Newest-updated first; drafts are skipped.
+            gh api --paginate "repos/$UPSTREAM/pulls?state=open&sort=updated&direction=desc&per_page=100" \
+              --jq '.[] | select(.draft | not) | {number, head: .head.sha, base: .base.sha}' | node -e '
+                const l=require("fs").readFileSync(0,"utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
+                require("fs").writeFileSync("sel/prs.json", JSON.stringify(l))'
+            rc=0; git ls-remote --exit-code "https://github.com/$REPO.git" refs/heads/pr-watch-state >/dev/null || rc=$?
+            if [ "$rc" = 0 ]; then
+              git fetch -q --depth=1 "https://github.com/$REPO.git" pr-watch-state
+              git show FETCH_HEAD:pr-state.json > sel/state.json
+            elif [ "$rc" = 2 ]; then echo '{"prs":{}}' > sel/state.json
+            else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
+          fi
+          cap=$CAP; [ "$dry" = true ] && cap=1
+          node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --cap "$cap" > sel/picked.json
+          # Each PR is compared with its merge base, not with the base branch's tip.
+          node -e '
+            const {execFileSync}=require("child_process"); const fs=require("fs");
+            const up=process.env.UPSTREAM; const l=JSON.parse(fs.readFileSync("sel/picked.json","utf8"));
+            for (const p of l) p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8"}).trim();
+            fs.writeFileSync("sel/picked.json", JSON.stringify(l))'
+          node tools/fixture-watch.ts pr-select --prs sel/picked.json --cap 1000 > sel/checked.json # validates the merge bases
+          n=$(node -p 'JSON.parse(require("fs").readFileSync("sel/checked.json","utf8")).length')
+          echo "picked $n PR(s): $(cat sel/checked.json)"
+          { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"; } >> "$GITHUB_OUTPUT"
+
+  replay:
+    needs: select
+    if: needs.select.outputs.any == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        pr: ${{ fromJSON(needs.select.outputs.prs) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Cache the head build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/graph-assay-builds/${{ matrix.pr.head }}
+          key: codegraph-build-${{ matrix.pr.head }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
+      - name: Cache the merge-base build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/graph-assay-builds/${{ matrix.pr.base }}
+          key: codegraph-build-${{ matrix.pr.base }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
+      - name: Build both, replay both, rerun the changes on both
+        env:
+          N: ${{ matrix.pr.number }}
+          HEAD_SHA: ${{ matrix.pr.head }}
+          BASE_SHA: ${{ matrix.pr.base }}
+        run: |
+          replay() { node fixtures/replay.mts "$@" || true; } # exit 1 on an ERROR row; the rows still count
+          out="out/pr-$N"; mkdir -p "$out"
+          head_dir=~/graph-assay-builds/"$HEAD_SHA"
+          # A PR's head may live in a fork: fetch it through the upstream PR ref before building.
+          if [ ! -d "$head_dir/.git" ]; then
+            git clone -q --filter=blob:none "https://github.com/$UPSTREAM.git" "$head_dir"
+            git -C "$head_dir" fetch -q origin "pull/$N/head"
+          fi
+          HEAD_JS=$(CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" tools/build-codegraph.sh "$HEAD_SHA" "$head_dir" | tail -1)
+          BASE_JS=$(CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" tools/build-codegraph.sh "$BASE_SHA" ~/graph-assay-builds/"$BASE_SHA" | tail -1)
+          replay "$BASE_JS" --json "$out/prev.json"; test -s "$out/prev.json"
+          replay "$HEAD_JS" --json "$out/next.json"; test -s "$out/next.json"
+          node tools/fixture-watch.ts flips --prev "$out/prev.json" --next "$out/next.json" --fixtures fixtures/oracle-candidates > "$out/flips.txt"
+          mapfile -t flips < "$out/flips.txt"
+          if [ "${#flips[@]}" -gt 0 ]; then
+            replay "$HEAD_JS" "${flips[@]}" --json "$out/confirm-next.json"
+            replay "$BASE_JS" "${flips[@]}" --json "$out/confirm-prev.json"
+            test -s "$out/confirm-next.json"
+            test -s "$out/confirm-prev.json"
+          fi
+      - name: Report (job summary; issue states unknown here)
+        env:
+          N: ${{ matrix.pr.number }}
+          PR_JSON: ${{ toJSON(matrix.pr) }}
+        run: |
+          printf '[%s]' "$PR_JSON" > out/this.json
+          echo '[]' > out/open.json
+          node tools/fixture-watch.ts pr-report --prs out/this.json --dir out --graph-assay "$GITHUB_SHA" --open out/open.json \
+            --fixtures fixtures/oracle-candidates --report-out out/capped.md --state-out out/unused.json --summary-out out/summary.md
+          if [ -s out/summary.md ]; then cat out/summary.md; else echo "PR #$N: no fixture changes."; fi >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: pr-${{ matrix.pr.number }}
+          path: |
+            out/pr-${{ matrix.pr.number }}/prev.json
+            out/pr-${{ matrix.pr.number }}/next.json
+            out/pr-${{ matrix.pr.number }}/confirm-prev.json
+            out/pr-${{ matrix.pr.number }}/confirm-next.json
+          if-no-files-found: error
+          retention-days: 5
+
+  report:
+    needs: [select, replay]
+    # Runs even if some PR's replay failed: that PR is left unchecked and tried again next run.
+    if: always() && needs.select.outputs.any == 'true' && needs.select.outputs.dry == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+    env:
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      PRS: ${{ needs.select.outputs.prs }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          pattern: pr-*
+          path: artifact
+      - name: Open PRs, stored state, issue states
+        run: |
+          # The PR list comes from the select job (which ran no upstream code); the replay jobs' artifacts are
+          # read only as each PR's four result files, by `pr-report`.
+          mkdir -p rep
+          printf '%s' "$PRS" > rep/prs.json
+          gh api --paginate "repos/$UPSTREAM/pulls?state=open&per_page=100" --jq '.[].number' | node -e '
+            const l=require("fs").readFileSync(0,"utf8").trim().split("\n").filter(Boolean).map(Number);
+            require("fs").writeFileSync("rep/open.json", JSON.stringify(l))'
+          rc=0; git ls-remote --exit-code "https://github.com/$REPO.git" refs/heads/pr-watch-state >/dev/null || rc=$?
+          if [ "$rc" = 0 ]; then
+            git fetch -q --depth=1 "https://github.com/$REPO.git" pr-watch-state
+            git show FETCH_HEAD:pr-state.json > rep/state.json
+          elif [ "$rc" = 2 ]; then echo '{"prs":{}}' > rep/state.json
+          else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
+          echo '{}' > rep/issue-states.json
+          for n in $(node tools/fixture-watch.ts pr-issues --prs rep/prs.json --dir artifact --fixtures fixtures/oracle-candidates); do
+            s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
+            node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' rep/issue-states.json "$n" "$s"
+          done
+      - name: Write the report
+        run: |
+          node tools/fixture-watch.ts pr-report --prs rep/prs.json --dir artifact --graph-assay "$GITHUB_SHA" --open rep/open.json \
+            --state rep/state.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
+            --report-out rep/report.md --state-out rep/new-state.json --summary-out rep/full.md
+          if [ -s rep/full.md ]; then cat rep/full.md; else echo "No PR result changed."; fi >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment on the tracking issue
+        run: |
+          [ -s rep/report.md ] || { echo "No PR result changed."; exit 0; }
+          n=$(gh issue list -R "$REPO" --label pr-watch --state open --json number --jq '.[0].number // empty')
+          if [ -z "$n" ]; then
+            gh label create pr-watch -R "$REPO" --color 1d76db --description "Fixture results on open upstream codegraph PRs (pr-watch.yml)" 2>/dev/null || true
+            url=$(gh issue create -R "$REPO" --label pr-watch --title "PR watch: fixture results on open upstream codegraph PRs" \
+              --body "Each comment here is one run of .github/workflows/pr-watch.yml that found an open upstream PR fixing or breaking a fixture. The review comments in them are drafts: re-check on the PR's current head and post by hand.")
+            n=${url##*/}
+          fi
+          gh issue comment "$n" -R "$REPO" --body-file rep/report.md
+      - name: Store the new state
+        run: |
+          # After the comment: a failed push re-reports next run, which beats a result nobody hears about.
+          d=$(mktemp -d)
+          url="https://x-access-token:${GH_TOKEN}@github.com/$REPO.git"
+          git -C "$d" init -q
+          git -C "$d" config user.name "github-actions[bot]"
+          git -C "$d" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rc=0; git ls-remote --exit-code "$url" refs/heads/pr-watch-state >/dev/null || rc=$?
+          if [ "$rc" = 0 ]; then
+            git -C "$d" fetch -q --depth=1 "$url" pr-watch-state
+            git -C "$d" checkout -q -b pr-watch-state FETCH_HEAD
+          elif [ "$rc" = 2 ]; then
+            git -C "$d" checkout -q --orphan pr-watch-state
+          else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
+          cp rep/new-state.json "$d/pr-state.json"
+          git -C "$d" add pr-state.json
+          if git -C "$d" diff --cached --quiet; then echo "state unchanged"; exit 0; fi
+          git -C "$d" commit -q -m "pr-watch $(date -u +%F)"
+          git -C "$d" push -q "$url" HEAD:refs/heads/pr-watch-state
