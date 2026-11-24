@@ -53,14 +53,15 @@ defaults:
   run:
     shell: bash # -eo pipefail: a failed `gh api | node` must fail the step, not feed it an empty list
 concurrency:
-  group: pr-watch-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  # Dry dispatches get their own group, so they never replace a queued scheduled run (#87).
+  group: pr-watch-${{ github.event_name == 'pull_request' && github.ref || (inputs.pr != '' && format('dry-{0}', inputs.pr)) || 'main' }}
   cancel-in-progress: false
 env:
   UPSTREAM: colbymchenry/codegraph
   NODE_VERSION: '22.23.2'
   CAP: '6'
   # The image both sides are built and replayed in (same Node as setup-node).
-  SANDBOX_IMAGE: node:22.23.2-bookworm
+  SANDBOX_IMAGE: node:22.23.2-bookworm@sha256:dd5847a04b0deee391fa145f1f4c6d214196668b6bcc7988ebed67249f226844
 jobs:
   select:
     runs-on: ubuntu-24.04
@@ -73,6 +74,7 @@ jobs:
       dry: ${{ steps.pick.outputs.dry }}
       state: ${{ steps.pick.outputs.state }}
       skipped: ${{ steps.pick.outputs.skipped }}
+      errored: ${{ steps.pick.outputs.errored }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -117,34 +119,37 @@ jobs:
           CAP_N="$cap" node -e '
             const {execFileSync}=require("child_process"); const fs=require("fs");
             const up=process.env.UPSTREAM; const cap=Number(process.env.CAP_N);
-            const ok=[]; const skipped=[]; let errs=0;
+            const ok=[]; const skipped=[]; const errored=[]; let errs=0;
             for (const p of JSON.parse(fs.readFileSync("sel/candidates.json","utf8"))) {
               if (ok.length >= cap) break;
               // per_page=1: only the merge base is needed, not the list of commits (a large compare can time out).
-              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}?per_page=1`,"--jq",".merge_base_commit.sha"],{encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim(); ok.push(p); errs=0; }
+              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}?per_page=1`,"--jq",".merge_base_commit.sha"],{encoding:"utf8",stdio:["ignore","pipe","pipe"],timeout: 60000}).trim(); ok.push(p); errs=0; }
               catch (e) {
                 const msg=String(e.stderr || e.message).split("\n")[0];
                 // Only a definite answer about this PR (404, 422: no such head, or no common history) counts as a
-                // failed check. Any other error (5xx, rate limit, timeout) comes from GitHub, not from the PR: that
-                // PR is left for a later run, unrecorded, and the lookups go on; several in a row mean an outage, so
-                // they stop, and an outage cannot use up the retry of every waiting PR.
+                // failed check. A rate limit (429, or a 403 saying so) is about this run, not the PR: the lookups
+                // stop, no strike. Any other error (5xx, timeout, another 403) is listed as errored, a strike on that
+                // head: after 3 the PR is set aside, and tried again 7 days after the last. Several in a row mean an
+                // outage, so the lookups stop; and at most cap errored lookups are made per run.
                 if (/HTTP (404|422)/.test(msg)) {
                   if (skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg})`); skipped.push({ number: p.number, head: p.head }); }
                   else console.error(`skip limit reached: #${p.number} (${msg}) left for a later run`);
-                  continue;
+                  errs=0; continue; // a definite answer: GitHub is answering
                 }
-                console.error(`GitHub API error on #${p.number} (${msg}): left for a later run`);
+                if (/HTTP 429|rate limit/i.test(msg)) { console.error(`stopping: rate limited at #${p.number} (${msg})`); break; }
+                console.error(`GitHub API error on #${p.number} (${msg}): left for a later run`); errored.push({ number: p.number, head: p.head });
                 if (++errs >= 3) { console.error("stopping: GitHub API errors on 3 PRs in a row"); break; }
+                if (errored.length >= cap) { console.error(`stopping: ${cap} GitHub API errors this run`); break; }
               }
             }
-            fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped))'
+            fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped)); fs.writeFileSync("sel/errored.json", JSON.stringify(errored))'
           node tools/fixture-watch.ts pr-select --prs sel/picked.json --cap 1000 > sel/checked.json # validates the merge bases
           n=$(node -p 'JSON.parse(require("fs").readFileSync("sel/checked.json","utf8")).length')
-          echo "picked $n PR(s): $(cat sel/checked.json); skipped: $(cat sel/skipped.json)"
+          echo "picked $n PR(s): $(cat sel/checked.json); skipped: $(cat sel/skipped.json); errored: $(cat sel/errored.json)"
           # A dry run that checks nothing would pass without testing anything.
           if [ "$dry" = true ] && [ "$n" -eq 0 ]; then echo "dry run: no PR could be checked" >&2; exit 1; fi
           { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"
-            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; echo "skipped=$(cat sel/skipped.json)"; } >> "$GITHUB_OUTPUT"
+            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; echo "skipped=$(cat sel/skipped.json)"; echo "errored=$(cat sel/errored.json)"; } >> "$GITHUB_OUTPUT"
 
   replay:
     needs: select
@@ -179,10 +184,14 @@ jobs:
           base_dir="$RUNNER_TEMP/base"; head_dir="$RUNNER_TEMP/head"
           base_out="$RUNNER_TEMP/base-out"; head_out="$RUNNER_TEMP/head-out"
           mkdir -p "$base_dir" "$head_dir" "$base_out" "$head_out"
-          sandbox() { # sandbox base|head 'script' [args...]
+          # Fetching and building need the network; replaying does not, so replays run with --offline (no network).
+          # Inside the container lib/sandbox.ts can't isolate each index (unshare is blocked), and needn't: the
+          # container is the isolation, so that is stated (GRAPH_ASSAY_ISOLATION=none) instead of probed.
+          sandbox() { # sandbox [--offline] base|head 'script' [args...]
+            local net=(); if [ "$1" = --offline ]; then net=(--network none); shift; fi
             local dir out; if [ "$1" = base ]; then dir=$base_dir out=$base_out SHA=$BASE_SHA; else dir=$head_dir out=$head_out SHA=$HEAD_SHA; fi
-            docker run --rm --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges \
-              -e HOME=/tmp/home -e N="$N" -e SHA="$SHA" \
+            docker run --rm --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges "${net[@]}" \
+              -e HOME=/tmp/home -e N="$N" -e SHA="$SHA" -e GRAPH_ASSAY_ISOLATION=none \
               -e CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" \
               -v "$PWD:/ga:ro" -v "$dir:/build" -v "$out:/out" -w /ga \
               "$SANDBOX_IMAGE" bash -eo pipefail -c "mkdir -p \"\$HOME\"; $2" sandbox "${@:3}"
@@ -192,30 +201,32 @@ jobs:
           take() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %s "$1")" -lt 50000000 ] && cp -P "$1" "$2" && test -s "$2"; }
           # No build cache in this workflow: both sides are built here, in the container, every run.
           sandbox base 'git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
-            tools/build-codegraph.sh "$SHA" /build >/dev/null
-            node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/prev.json || true'
+            tools/build-codegraph.sh "$SHA" /build >/dev/null'
           sandbox head 'git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
             git -C /build fetch -q origin "pull/$N/head"
-            tools/build-codegraph.sh "$SHA" /build >/dev/null
-            node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/next.json || true'
+            tools/build-codegraph.sh "$SHA" /build >/dev/null'
+          sandbox --offline base 'node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/prev.json || true'
+          sandbox --offline head 'node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/next.json || true'
           take "$base_out/prev.json" "$out/prev.json"
           take "$head_out/next.json" "$out/next.json"
           node tools/fixture-watch.ts flips --prev "$out/prev.json" --next "$out/next.json" --fixtures fixtures/oracle-candidates > "$out/flips.txt"
           mapfile -t flips < "$out/flips.txt"
           if [ "${#flips[@]}" -gt 0 ]; then
-            sandbox head 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-next.json || true' "${flips[@]}"
-            sandbox base 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-prev.json || true' "${flips[@]}"
+            sandbox --offline head 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-next.json || true' "${flips[@]}"
+            sandbox --offline base 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-prev.json || true' "${flips[@]}"
             take "$head_out/confirm-next.json" "$out/confirm-next.json"
             take "$base_out/confirm-prev.json" "$out/confirm-prev.json"
           fi
       - name: Report (job summary; issue states unknown here)
         env:
+          # Fixture links pin a commit that stays: on a pull_request run GITHUB_SHA is a temporary merge commit.
+          GA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           N: ${{ matrix.pr.number }}
           PR_JSON: ${{ toJSON(matrix.pr) }}
         run: |
           printf '[%s]' "$PR_JSON" > out/this.json
           echo '[]' > out/open.json
-          node tools/fixture-watch.ts pr-report --prs out/this.json --dir out --graph-assay "$GITHUB_SHA" --open out/open.json \
+          node tools/fixture-watch.ts pr-report --prs out/this.json --dir out --graph-assay "$GA_SHA" --open out/open.json \
             --fixtures fixtures/oracle-candidates --report-out out/capped.md --state-out out/unused.json --summary-out out/summary.md
           if [ -s out/summary.md ]; then cat out/summary.md; else echo "PR #$N: no fixture changes."; fi >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -231,9 +242,9 @@ jobs:
 
   report:
     needs: [select, replay]
-    # Runs even if some PR's replay failed: that PR is left unchecked and tried again next run.
+    # Runs even if some PR's replay failed: that PR is a failed check, retried once on the same head.
     # Not on cancel: a cancelled run would count its unfinished PRs as failed checks.
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.dry == 'false' && (needs.select.outputs.any == 'true' || needs.select.outputs.skipped != '[]') }}
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.dry == 'false' && (needs.select.outputs.any == 'true' || needs.select.outputs.skipped != '[]' || needs.select.outputs.errored != '[]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -245,6 +256,7 @@ jobs:
       PRS: ${{ needs.select.outputs.prs }}
       STATE_SHA: ${{ needs.select.outputs.state }}
       SKIPPED: ${{ needs.select.outputs.skipped }}
+      ERRORED: ${{ needs.select.outputs.errored }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -263,6 +275,7 @@ jobs:
           mkdir -p rep
           printf '%s' "$PRS" > rep/prs.json
           printf '%s' "$SKIPPED" > rep/skipped.json
+          printf '%s' "$ERRORED" > rep/errored.json
           gh api --paginate "repos/$UPSTREAM/pulls?state=open&per_page=100" --jq '.[].number' | node -e '
             const l=require("fs").readFileSync(0,"utf8").trim().split("\n").filter(Boolean).map(Number);
             require("fs").writeFileSync("rep/open.json", JSON.stringify(l))'
@@ -284,7 +297,7 @@ jobs:
       - name: Write the report
         run: |
           node tools/fixture-watch.ts pr-report --prs rep/prs.json --dir artifact --graph-assay "$GITHUB_SHA" --open rep/open.json \
-            --state rep/state.json --skipped rep/skipped.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
+            --state rep/state.json --skipped rep/skipped.json --errored rep/errored.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
             --report-out rep/report.md --state-out rep/new-state.json --summary-out rep/full.md
           if [ -s rep/full.md ]; then cat rep/full.md; else echo "No PR result changed."; fi >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on the tracking issue

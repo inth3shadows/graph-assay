@@ -21,11 +21,11 @@
 //   node tools/fixture-watch.ts pr-issues --prs selected.json --dir artifact [--fixtures dir]
 //       print the upstream issues every selected PR's report can list (for their open/closed state)
 //   node tools/fixture-watch.ts pr-report --prs selected.json --dir artifact --graph-assay <sha> --open open.json
-//       [--state pr-state.json] [--skipped skipped.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
+//       [--state pr-state.json] [--skipped skipped.json] [--errored errored.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
 //       --state-out pr-state.json [--summary-out full.md]
 //       one section per PR whose confirmed result changed since it was last reported (artifact/pr-N/ holds
 //       prev.json, next.json and, when reruns were needed, confirm-prev.json / confirm-next.json); a PR whose
-//       results are missing is left unchecked, so the next run tries it again
+//       results are missing or invalid is a failed check: retried once on the same head, then it waits for a new head
 //   node tools/fixture-watch.ts run --next next.json --sha <new sha> --graph-assay <sha>
 //       [--prev prev.json --prev-sha <sha> [--confirm-prev c.json --confirm-next c.json]] [--state stored.json]
 //       [--issue-states states.json] [--fixtures dir] [--date YYYY-MM-DD] [--summary-out full.md]
@@ -70,6 +70,18 @@ export function rows(doc: any, opts: { fixtures?: Set<string> } = {}): Row[] {
     const issue = r.issue === undefined || r.issue === null || r.issue === 0 ? null : r.issue;
     if (issue !== null && !(Number.isSafeInteger(issue) && issue > 0)) throw new Error(`${r.name}: bad issue ${JSON.stringify(r.issue)}`);
     return { name: r.name, issue, verdict: r.verdict, detail: typeof r.detail === 'string' ? r.detail : '' };
+  });
+}
+
+/**
+ * The rows with each fixture's upstream issue taken from this checkout's expect.json, never from the replay:
+ * the PR watch's head replay is written by the PR's own code (#87).
+ */
+export function withIssues(rs: Row[], fixturesDir: string): Row[] {
+  return rs.map((r) => {
+    let issue: number | null = null;
+    try { const e = JSON.parse(fs.readFileSync(path.join(fixturesDir, r.name, 'expect.json'), 'utf8')); if (Number.isSafeInteger(e?.issue) && e.issue > 0) issue = e.issue; } catch { /* unreadable: unfiled */ }
+    return { ...r, issue };
   });
 }
 
@@ -245,25 +257,32 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
 // issue's comment with a ready-to-paste review comment for the PR; nothing is posted upstream from here.
 
 export interface Pr { number: number; head: string; base: string }
-export interface PrState { prs: Record<string, { head: string; sig: string; failed?: number }> }
+export interface PrState { prs: Record<string, { head: string; sig: string; failed?: number; errored?: number; erroredAt?: string }> }
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A PR set aside after 3 unclear merge-base errors on one head is tried again this many days after its last strike. */
+export const SET_ASIDE_DAYS = 7;
 
 /** A stored PR state, checked (PR #85 review, P11). */
 export function prStateOf(st: any): PrState {
   if (!st || typeof st.prs !== 'object' || Array.isArray(st.prs) || st.prs === null) throw new Error('bad pr state');
   for (const [k, v] of Object.entries<any>(st.prs)) {
-    if (!/^\d+$/.test(k) || !v || !SHA.test(v.head) || typeof v.sig !== 'string' || (v.failed !== undefined && !(Number.isSafeInteger(v.failed) && v.failed > 0))) throw new Error(`bad pr state entry ${k}`);
+    const count = (x: any) => x === undefined || (Number.isSafeInteger(x) && x > 0);
+    // A strike carries the date of the last one, so a set-aside PR is tried again later (PR #88 review, R2-2).
+    const dated = v && (v.errored === undefined ? v.erroredAt === undefined : typeof v.erroredAt === 'string' && DAY.test(v.erroredAt) && !Number.isNaN(Date.parse(v.erroredAt)));
+    if (!/^\d+$/.test(k) || !v || !SHA.test(v.head) || typeof v.sig !== 'string' || !count(v.failed) || !count(v.errored) || !dated) throw new Error(`bad pr state entry ${k}`);
   }
   return st;
 }
 
 /** A stable summary of a PR's confirmed result, so a PR is re-reported only when its result changes. */
-export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}:${c.to.detail}`).sort().join('\n');
+// Detail text only where it is the result (wrong edges); error text can hold temp paths and would churn (#87).
+export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}${c.kind === 'edges' || c.kind === 'regression' ? `:${c.to.detail}` : ''}`).sort().join('\n');
 
 const DRAFTABLE = new Set<Kind>(['fixed', 'regression', 'edges']);
 const drafted = (c: Change) => DRAFTABLE.has(c.kind) && !!c.issue && !!c.from;
 
 /** A review comment for the PR, in the posting skill's shape, or null when no change can be drafted. */
-export function reviewDraft(pr: number, changes: Change[], ctx: Ctx): string | null {
+export function reviewDraft(pr: number, changes: Change[], ctx: Ctx, allScored = true): string | null {
   const ds = changes.filter(drafted);
   if (!ds.length) return null;
   const ref = (c: Change) => `the ${c.name} fixture (#${c.issue})`;
@@ -280,18 +299,19 @@ export function reviewDraft(pr: number, changes: Change[], ctx: Ctx): string | n
     else lines.push(`**The ${c.name} fixture's wrong edges change.** Verified on ${on}: it reads ${c.to.verdict} on both. Base: ${code(c.from.detail)}. Head: ${code(c.to.detail)} ${link}.`, '');
   }
   // Only claim the rest is unchanged when the draft covers every change (PR #85 review, P2).
-  const rest = ds.length === changes.length ? 'The other fixtures read the same on head and base. ' : '';
+  // ...and only when every fixture was scored on both sides (none errored, none missing: #87).
+  const rest = ds.length !== changes.length ? '' : allScored ? 'The other fixtures read the same on head and base. ' : 'Not every fixture could be scored on both sides, so the others are unchecked. ';
   lines.push(`${rest}Rerun: \`node bin/graph-assay replay <codegraph build>/dist/bin/codegraph.js ${ds.map((c) => c.name).join(' ')}\``);
   return lines.join('\n') + '\n';
 }
 
 /** One PR's section of the tracking-issue comment ('' when nothing changed). Upstream-written text (the PR's title) is never rendered. */
-export function prSection(pr: number, changes: Change[], ctx: Ctx): string {
+export function prSection(pr: number, changes: Change[], ctx: Ctx, allScored = true): string {
   if (!changes.length) return '';
   const lines = [`#### ${ref(pr)} at \`${short(ctx.next)}\` (merge base \`${short(ctx.prev)}\`)`, '',
     '| fixture | upstream issue | base | head | change |', '|---|---|---|---|---|',
     ...changes.map((c) => `| ${c.name} | ${issueCell(c, ctx)} | ${c.from?.verdict ?? '-'} | ${c.to.verdict} | ${what(c)} |`)];
-  const d = reviewDraft(pr, changes, ctx);
+  const d = reviewDraft(pr, changes, ctx, allScored);
   const left = changes.filter((c) => !drafted(c)).map((c) => c.name);
   if (d && left.length) lines.push('', `Not in the draft, check by hand before posting: ${left.join(', ')}.`);
   if (d) lines.push('', `<details><summary>Draft review comment for ${refHtml(pr)}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>');
@@ -299,8 +319,9 @@ export function prSection(pr: number, changes: Change[], ctx: Ctx): string {
 }
 
 /** The open PRs to check this run: head moved since the last check, in the given (newest-updated-first) order, capped. */
-export function prSelect(prs: Pr[], state: PrState, cap: number): Pr[] {
+export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Date().toISOString().slice(0, 10)): Pr[] {
   if (!(cap === Infinity || (Number.isSafeInteger(cap) && cap > 0))) throw new Error(`bad cap: ${cap}`);
+  if (!DAY.test(today) || Number.isNaN(Date.parse(today))) throw new Error(`bad date: ${today}`);
   if (!Array.isArray(prs)) throw new Error('bad pr list');
   for (const p of prs) if (!(Number.isSafeInteger(p?.number) && p.number > 0 && SHA.test(p.head) && SHA.test(p.base))) throw new Error(`bad pr: ${JSON.stringify(p)}`);
   const st = prStateOf(state);
@@ -308,13 +329,19 @@ export function prSelect(prs: Pr[], state: PrState, cap: number): Pr[] {
   // A head already checked is skipped; one whose check failed gets one retry, then waits for a new head (P5).
   return prs.filter((p) => !seen.has(p.number) && seen.add(p.number)).filter((p) => {
     const e = st.prs[String(p.number)];
-    return !e || e.head !== p.head || (e.failed !== undefined && e.failed < 2);
+    if (!e || e.head !== p.head) return true;
+    // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 runs (#87), and tried
+    // again SET_ASIDE_DAYS after the last strike: an outage that struck it costs a delay, never the PR (R2-2).
+    if ((e.errored ?? 0) >= 3) return (Date.parse(today) - Date.parse(e.erroredAt!)) / 86_400_000 >= SET_ASIDE_DAYS;
+    return e.failed !== undefined ? e.failed < 2 : e.errored !== undefined;
   }).slice(0, cap);
 }
 
 /** The PR state after a run: checked PRs updated, PRs no longer open dropped. */
 export function prState(state: PrState, open: number[], checked: Array<{ number: number; head: string; sig: string }>,
-  failed: Array<{ number: number; head: string }> = []): PrState {
+  failed: Array<{ number: number; head: string }> = [], errored: Array<{ number: number; head: string }> = [],
+  date = new Date().toISOString().slice(0, 10)): PrState {
+  if (!DAY.test(date)) throw new Error(`bad date: ${date}`);
   const keep = new Set(open.map(String));
   const prs: PrState['prs'] = {};
   for (const [k, v] of Object.entries(prStateOf(state).prs)) if (keep.has(k)) prs[k] = v;
@@ -323,6 +350,11 @@ export function prState(state: PrState, open: number[], checked: Array<{ number:
     const k = String(f.number); if (!keep.has(k)) continue;
     const old = prs[k];
     prs[k] = { head: f.head, sig: old?.sig ?? '', failed: old?.head === f.head && old.failed ? old.failed + 1 : 1 };
+  }
+  for (const f of errored) {
+    const k = String(f.number); if (!keep.has(k)) continue;
+    const old = prs[k];
+    prs[k] = { head: f.head, sig: old?.sig ?? '', ...(old?.head === f.head && old.failed ? { failed: old.failed } : {}), errored: old?.head === f.head && old.errored ? old.errored + 1 : 1, erroredAt: date };
   }
   return { prs: Object.fromEntries(Object.entries(prs).sort(([a], [b]) => Number(a) - Number(b))) };
 }
@@ -345,8 +377,10 @@ function main(argv: string[]) {
   if (cmd === 'flips') {
     const prev = opt(args, '--prev'); const next = opt(args, '--next');
     if (!prev || !next) throw new Error('flips needs --prev and --next');
-    const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const p = rows(read(prev), { fixtures }); const nx = rows(read(next), { fixtures });
+    const fxDir = opt(args, '--fixtures'); const fixtures = fixtureSet(fxDir);
+    // Issue numbers from this checkout's expect.json, as run and pr-report take them (PR #88 review, T4).
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
+    const p = iss(rows(read(prev), { fixtures })); const nx = iss(rows(read(next), { fixtures }));
     const names = new Set(rerunNames(p, nx));
     const picked = nx.filter((r) => names.has(r.name));
     const out = args.includes('--issues') ? [...new Set(picked.map((r) => r.issue ?? p.find((x) => x.name === r.name)?.issue).filter(Boolean))].map(String) : picked.map((r) => r.name);
@@ -356,8 +390,9 @@ function main(argv: string[]) {
   if (cmd === 'issues') {
     const prev = opt(args, '--prev'); const next = opt(args, '--next');
     if (!prev || !next) throw new Error('issues needs --prev and --next');
-    const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const out = listableIssues(rows(read(prev), { fixtures }), rows(read(next), { fixtures }));
+    const fxDir = opt(args, '--fixtures'); const fixtures = fixtureSet(fxDir);
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
+    const out = listableIssues(iss(rows(read(prev), { fixtures })), iss(rows(read(next), { fixtures })));
     if (out.length) console.log(out.join('\n'));
     return;
   }
@@ -366,7 +401,7 @@ function main(argv: string[]) {
     const cap = /^\d+$/.test(capArg) ? Number(capArg) : NaN;
     const prsFile = opt(args, '--prs'); if (!prsFile) throw new Error('pr-select needs --prs');
     const st = opt(args, '--state');
-    console.log(JSON.stringify(prSelect(read(prsFile), st ? prStateOf(read(st)) : { prs: {} }, cap)));
+    console.log(JSON.stringify(prSelect(read(prsFile), st ? prStateOf(read(st)) : { prs: {} }, cap, opt(args, '--date') ?? undefined)));
     return;
   }
   if (cmd === 'pr-issues' || cmd === 'pr-report') {
@@ -374,17 +409,23 @@ function main(argv: string[]) {
     const selected: Pr[] = prSelect(read(need('--prs')), { prs: {} }, Infinity); // validates every entry
     const dir = need('--dir');
     const fixtures = fixtureSet(opt(args, '--fixtures'));
+    const fxDir = opt(args, '--fixtures');
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
     const load = (pr: Pr) => {
       const d = path.join(dir, `pr-${pr.number}`);
       const f = (n: string) => path.join(d, `${n}.json`);
       // A PR whose results are missing or invalid fails on its own; the others are still reported (P6).
       try {
         if (!fs.existsSync(f('prev')) || !fs.existsSync(f('next'))) return null;
-        const prev = rows(read(f('prev')), { fixtures }); const next = rows(read(f('next')), { fixtures });
+        const prev = iss(rows(read(f('prev')), { fixtures })); const next = iss(rows(read(f('next')), { fixtures }));
         const reruns = rerunNames(prev, next);
         if (reruns.length && !(fs.existsSync(f('confirm-prev')) && fs.existsSync(f('confirm-next')))) return null;
-        const confirm = reruns.length ? { confirmPrev: rows(read(f('confirm-prev')), { fixtures }), confirmNext: rows(read(f('confirm-next')), { fixtures }) } : {};
-        return { prev, next, changes: diff(prev, next, confirm) };
+        const confirm = reruns.length ? { confirmPrev: iss(rows(read(f('confirm-prev')), { fixtures })), confirmNext: iss(rows(read(f('confirm-next')), { fixtures })) } : {};
+        // Every fixture scored on both sides: none errored, and both replays list the same fixtures (#87).
+        const names = (rs: Row[]) => rs.map((r) => r.name).sort().join('\n');
+        // With --fixtures, both must list every fixture this checkout has, not only the same ones (PR #88 review, T6).
+        const allScored = ![...prev, ...next].some((r) => r.verdict === 'ERROR') && names(prev) === names(next) && (!fixtures || names(next) === [...fixtures].sort().join('\n'));
+        return { prev, next, changes: diff(prev, next, confirm), allScored };
       } catch (e) { console.error(`pr-report: #${pr.number}: ${(e as Error).message}`); return null; }
     };
     if (cmd === 'pr-issues') {
@@ -409,12 +450,20 @@ function main(argv: string[]) {
       const sig = signature(l.changes);
       const before = state.prs[String(pr.number)]?.sig ?? '';
       const entry = { number: pr.number, head: pr.head, sig };
-      if (sig && sig !== before) reported.push({ entry, section: prSection(pr.number, l.changes, { prev: pr.base, next: pr.head, graphAssay: ga, date, states }) });
+      if (sig && sig !== before) reported.push({ entry, section: prSection(pr.number, l.changes, { prev: pr.base, next: pr.head, graphAssay: ga, date, states }, l.allScored) });
       // A PR reported before whose head now changes no fixture: say so once, so a stale draft is not the last word (P7).
-      else if (!sig && before) reported.push({ entry, section: `#### ${ref(pr.number)} at \`${short(pr.head)}\` (merge base \`${short(pr.base)}\`)\n\nThis head no longer changes any fixture: the earlier report on this PR no longer applies.\n` });
+      else if (!sig && before) reported.push({ entry, section: `#### ${ref(pr.number)} at \`${short(pr.head)}\` (merge base \`${short(pr.base)}\`)\n\nThis head no longer changes any fixture${l.allScored ? '' : ' that could be scored on both sides (some could not, so the others are unchecked)'}: the earlier report on this PR no longer applies.\n` });
       else quiet.push(entry);
     }
     // PRs select could not compare (no merge base) count as failed checks of their head (Q4).
+    // PRs whose merge-base lookup failed with an unclear API error: counted, set aside after 3 runs (#87).
+    const erroredFile = opt(args, '--errored');
+    const errored: Array<{ number: number; head: string }> = [];
+    if (erroredFile) {
+      const er = read(erroredFile);
+      if (!Array.isArray(er) || !er.every((x: any) => Number.isSafeInteger(x?.number) && x.number > 0 && SHA.test(x?.head))) throw new Error('bad --errored list');
+      errored.push(...er.map((x: any) => ({ number: x.number, head: x.head })));
+    }
     const skippedFile = opt(args, '--skipped');
     if (skippedFile) {
       const sk = read(skippedFile);
@@ -440,9 +489,14 @@ function main(argv: string[]) {
     const capped = reported.length ? [head(shown.length), ...shown.map((x) => x.section), ...tail].join('\n') : '';
     const recorded = [...shown, ...tooLarge].map((x) => x.entry);
     fs.writeFileSync(need('--report-out'), capped);
-    const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, all);
-    fs.writeFileSync(need('--state-out'), JSON.stringify(prState(state, open, [...quiet, ...recorded], failed), null, 1) + '\n');
-    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed`);
+    const next = prState(state, open, [...quiet, ...recorded], failed, errored, date);
+    const setAside = Object.entries(next.prs).filter(([, v]) => (v.errored ?? 0) >= 3).map(([k]) => Number(k));
+    fs.writeFileSync(need('--state-out'), JSON.stringify(next, null, 1) + '\n');
+    // Errored and set-aside PRs are named in the log and the job summary, so a PR the watch stopped trying is
+    // visible (PR #88 review, T8, R2-3).
+    const asideLine = setAside.length ? `Set aside after 3 unclear merge-base lookup errors (tried again ${SET_ASIDE_DAYS} days after the last): ${setAside.map(ref).join(', ')}.\n` : '';
+    const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, [all, asideLine].filter(Boolean).join('\n'));
+    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${setAside.length ? `; set aside, tried again ${SET_ASIDE_DAYS} days after the last strike: ${setAside.map((n) => `#${n}`).join(', ')}` : ''}`);
     return;
   }
   if (cmd === 'run') {
@@ -451,7 +505,9 @@ function main(argv: string[]) {
     if (!SHA.test(sha) || !SHA.test(ga)) throw new Error('--sha and --graph-assay must be full shas');
     const date = opt(args, '--date') ?? new Date().toISOString().slice(0, 10);
     const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const next = rows(read(need('--next')), { fixtures });
+    const fxDir = opt(args, '--fixtures');
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
+    const next = iss(rows(read(need('--next')), { fixtures }));
     const prevFile = opt(args, '--prev');
     const prevSha = opt(args, '--prev-sha');
     if (!!prevFile !== !!prevSha) throw new Error('--prev and --prev-sha go together');
@@ -462,11 +518,11 @@ function main(argv: string[]) {
     // (a baseline compares against nothing, so it refuses any stored state).
     if (stored && stored.codegraph !== prevSha) throw new Error(`stored state is for ${String(stored.codegraph).slice(0, 8)}, not ${prevSha ? `the previous commit ${prevSha.slice(0, 8)}` : 'a baseline'}`);
     const erroring = stored ? erroringOf(stored) : undefined;
-    const prev = prevFile ? rows(read(prevFile), { fixtures }) : [];
+    const prev = prevFile ? iss(rows(read(prevFile), { fixtures })) : [];
     const cp = opt(args, '--confirm-prev'); const cn = opt(args, '--confirm-next');
     if (!!cp !== !!cn) throw new Error('--confirm-prev and --confirm-next go together');
-    const confirmPrev = cp ? rows(read(cp), { fixtures }) : undefined;
-    const confirmNext = cn ? rows(read(cn), { fixtures }) : undefined;
+    const confirmPrev = cp ? iss(rows(read(cp), { fixtures })) : undefined;
+    const confirmNext = cn ? iss(rows(read(cn), { fixtures })) : undefined;
     const statesFile = opt(args, '--issue-states');
     const states = statesFile ? read(statesFile) : {};
     for (const [k, v] of Object.entries(states)) if (!/^\d+$/.test(k) || !ISSUE_STATES.has(v as string)) throw new Error(`bad issue state ${k}: ${v}`);
