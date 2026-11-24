@@ -58,7 +58,7 @@ check('F1: a fixture that keeps erroring is reported once, then quiet; R3-4: als
   // Both commits error under today's graph-assay, and the stored list (from an older run) does not have it.
   const both = step([r('b', 'ERROR', 'boom')], [r('b', 'ERROR', 'boom')], C, { erroring: [] });
   assert.deepEqual(kinds(both.changes), { b: 'error' });
-  assert.match(report(both.changes, ctx), /started erroring \(reported once\)/);
+  assert.match(report(both.changes, ctx), /errors on the new commit: check by hand/); // R5-4: no "reported once" promise
 });
 check('R3-1/F2/R4-4: recovery after errors is reported as recovered (no draft), and the run goes through', () => {
   const s1 = step([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'ERROR', 'boom')], B, { erroring: [] });
@@ -66,17 +66,19 @@ check('R3-1/F2/R4-4: recovery after errors is reported as recovered (no draft), 
   assert.deepEqual(kinds(s2.changes), { 'issue-1': 'recovered' });
   assert.equal(draft(s2.changes[0], { ...ctx, prev: B, next: C }), null);
 });
-check('R4-1: the previous commit erroring only on re-score is rerun: confirmed, the fix is a fix (with a draft); still erroring, it says check by hand', () => {
+check('R5-1/R5-2: when the previous commit errors, nothing is rerun or drafted: listed or not, the change is for a person to check', () => {
   const prev = [r('issue-1', 'ERROR', 'timeout')]; const next = [r('issue-1', 'FIXED')];
-  assert.deepEqual(rerunNames(prev, next), ['issue-1']);
-  const ok = diff(prev, next, { erroring: new Set(), confirmPrev: [r('issue-1', 'BROKEN', 'w')], confirmNext: next });
-  assert.deepEqual(kinds(ok), { 'issue-1': 'fixed' });
-  assert.equal(ok[0].from?.verdict, 'BROKEN');
-  assert.match(draft(ok[0], ctx), /goes from BROKEN on aaaaaaaa to FIXED on bbbbbbbb/);
-  const still = diff(prev, next, { erroring: new Set(), confirmPrev: prev, confirmNext: next });
-  assert.deepEqual(kinds(still), { 'issue-1': 'prev-error' });
-  assert.equal(draft(still[0], ctx), null);
-  assert.match(report(still, ctx), /the previous commit errored when re-scored: check by hand \(no draft\)/);
+  assert.deepEqual(rerunNames(prev, next), []);
+  const unlisted = diff(prev, next, { erroring: new Set() });
+  assert.deepEqual(kinds(unlisted), { 'issue-1': 'prev-error' });
+  assert.equal(unlisted[0].issue, 1);
+  assert.equal(draft(unlisted[0], ctx), null);
+  assert.match(report(unlisted, ctx), /\| issue-1 \| colbymchenry\/codegraph#1 \(closed\) \| - \| FIXED \| the previous commit errored when re-scored: check by hand \(no draft\) \|/);
+  const listed = diff(prev, next, { erroring: new Set(['issue-1']) });
+  assert.deepEqual(kinds(listed), { 'issue-1': 'recovered' });
+  assert.equal(draft(listed[0], ctx), null);
+  // A rerun of the previous commit, if one were passed, changes nothing: there is no flake-resolution path.
+  assert.deepEqual(kinds(diff(prev, next, { erroring: new Set(), confirmPrev: [r('issue-1', 'BROKEN', 'w')], confirmNext: next })), { 'issue-1': 'prev-error' });
 });
 check('R4-2: an ERROR on the new commit is reported when the previous commit has a verdict today, whatever the stored list says', () => {
   assert.deepEqual(kinds(diff([r('x', 'BROKEN', 'w')], [r('x', 'ERROR', 'boom')], { erroring: new Set(['x']) })), { x: 'error' });
@@ -94,7 +96,7 @@ check('F2: a draft names exactly the two commits both replays were made on', () 
   assert.match(d, /goes from BROKEN on aaaaaaaa to FIXED on bbbbbbbb/);
   assert.match(d, new RegExp(`compare/${A}\\.\\.\\.${B}`));
 });
-check('F9: a brand-new fixture: "started erroring" once while it errors, then "first verdict" with no draft', () => {
+check('F9: a brand-new fixture: reported once while it errors, then "first verdict" with no draft', () => {
   const s1 = step([], [r('a', 'ERROR', 'boom')], B, { erroring: [] });
   assert.deepEqual(kinds(s1.changes), { a: 'error' });
   assert.deepEqual(kinds(step([], [r('a', 'FIXED')], C, s1.state).changes), { a: 'new' });
@@ -192,14 +194,12 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     const r3 = f('r3.json', { results: [r('issue-1', 'ERROR', 'boom'), r('issue-2', 'FIXED', '', 2)] });
     assert.equal(cli('flips', '--prev', r1, '--next', r3).stdout, '');
     p = cli('run', '--prev', r1, '--prev-sha', A, '--next', r3, '--sha', B, '--graph-assay', G, '--state', o('s1.json'), '--state-out', o('e1.json'), '--report-out', o('e1.md'));
-    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e1.md'), 'utf8'), /started erroring/);
+    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e1.md'), 'utf8'), /errors on the new commit/);
     assert.deepEqual(JSON.parse(fs.readFileSync(o('e1.json'), 'utf8')).erroring, ['issue-1']);
-    // The previous commit errors and the new one has a verdict: rerun on both sides (R4-1), as the workflow does.
-    assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, 'issue-1\n');
-    const pick = (file: string, name: string) => f(`pick-${name}-${path.basename(file)}`, { results: JSON.parse(fs.readFileSync(file, 'utf8')).results.filter((x: any) => x.name === name) });
-    p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'),
-      '--confirm-prev', pick(r3, 'issue-1'), '--confirm-next', pick(r2, 'issue-1'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
-    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| issue-1 \| [^|]+ \| - \| FIXED \| recovered from errors \(no draft\) \|/); // R4-5
+    // The previous commit errors: nothing to rerun (no flake resolution), and run needs no rerun files.
+    assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, '');
+    p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
+    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| issue-1 \| [^|]+ \| - \| FIXED \| has a verdict again after erroring: check by hand \(no draft\) \|/); // R4-5
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('the workflow: the previous commit is replayed with today\'s checkout; reruns are required; the report job takes only replay results and checks the state it diffs', () => {

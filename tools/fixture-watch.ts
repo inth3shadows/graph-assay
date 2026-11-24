@@ -10,22 +10,23 @@
 //
 // Usage:
 //   node tools/fixture-watch.ts flips --prev prev.json --next next.json [--issues] [--fixtures dir]
-//       print the fixtures whose verdict or wrong edges changed (prev.json and next.json are replays of the
-//       previous and the new commit), one per line; with --issues their upstream issue numbers, deduplicated
+//       print the fixtures to rerun on both commits (rerunNames: a verdict on both, and the verdict or wrong
+//       edges changed; prev.json and next.json are replays of the previous and the new commit), one per line;
+//       with --issues their upstream issue numbers, deduplicated
 //   node tools/fixture-watch.ts run --next next.json --sha <new sha> --graph-assay <sha>
 //       [--prev prev.json --prev-sha <sha> [--confirm-prev c.json --confirm-next c.json]] [--state stored.json]
 //       [--issue-states states.json] [--fixtures dir] [--date YYYY-MM-DD] [--summary-out full.md]
 //       --state-out state.json --report-out report.md
 //       write the new state and the report (empty when nothing changed). Without --prev it records a baseline.
-//       A change other than a new fixture or an error needs both confirming reruns. --state must be the state
+//       When `flips` picks anything, both confirming reruns are required. --state must be the state
 //       recorded for --prev-sha (a baseline refuses any). --summary-out also writes the report uncapped.
 //
 // State: { codegraph, recordedAt, graphAssay, erroring: [fixture names], results }. Only `codegraph` (the commit to
 // compare against next time) and `erroring` (the fixtures erroring on it) are read back; `results` is a record
-// for people. A fixture that starts erroring, on either commit, is reported once and stays quiet while it is
-// on the list and the previous commit errors too; when it has a verdict again it is reported as recovered, with
-// no draft. A fixture that errors only on today's re-score of the previous commit is rerun there: the rerun's
-// verdict is compared, or, if it errors again, the change is reported for a person to check.
+// for people. A change where either commit errored is never rerun or drafted, only listed for a person: an
+// ERROR on the new commit is listed unless the fixture is on the list and the previous commit errors too; a
+// verdict after an ERROR on the previous commit is listed as "has a verdict again" (on the list) or "the
+// previous commit errored when re-scored" (not on it).
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,15 +72,15 @@ const same = (a: Row | undefined, b: Row) => !!a && a.verdict === b.verdict && a
 
 /**
  * The fixtures to rerun on both commits, from the two replays alone (so `flips`, which picks them, and `run`
- * always agree): every fixture whose verdict or wrong edges changed, and every fixture the previous commit's
- * replay has as ERROR while the new one has a verdict (an error only on re-score must not hide a fix).
+ * always agree): every fixture with a verdict on both commits whose verdict or wrong edges changed. A change
+ * where either commit errored is never rerun or drafted: it is listed for a person to check.
  */
 export function rerunNames(prev: Row[], next: Row[]): string[] {
   const before = new Map(prev.map((r) => [r.name, r]));
   return next.filter((to) => {
     const p = before.get(to.name);
-    if (!p || to.verdict === 'ERROR') return false;
-    return p.verdict === 'ERROR' || p.verdict !== to.verdict || (broken(to.verdict) && p.detail !== to.detail);
+    if (!p || p.verdict === 'ERROR' || to.verdict === 'ERROR') return false;
+    return p.verdict !== to.verdict || (broken(to.verdict) && p.detail !== to.detail);
   }).map((r) => r.name);
 }
 
@@ -96,7 +97,7 @@ export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; c
   const againNext = opts.confirmNext && new Map(opts.confirmNext.map((r) => [r.name, r]));
   const out: Change[] = [];
   for (const to of next) {
-    let p = before.get(to.name);
+    const p = before.get(to.name);
     const listed = erroring.has(to.name);
     let kind: Kind | null;
     if (to.verdict === 'ERROR') {
@@ -107,11 +108,9 @@ export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; c
     }
     if (!p) { out.push({ kind: 'new', name: to.name, issue: to.issue, from: null, to }); continue; }
     if (p.verdict === 'ERROR') {
-      if (listed) { out.push({ kind: 'recovered', name: to.name, issue: to.issue ?? p.issue, from: null, to }); continue; }
-      // Errored only on today's re-score: its rerun says what the previous commit really reads.
-      const again = againPrev?.get(to.name);
-      if (!again || again.verdict === 'ERROR') { out.push({ kind: 'prev-error', name: to.name, issue: to.issue ?? p.issue, from: null, to }); continue; }
-      p = again;
+      // No verdict on the previous commit today: listed for a person, never rerun or drafted.
+      out.push({ kind: listed ? 'recovered' : 'prev-error', name: to.name, issue: to.issue ?? p.issue, from: null, to });
+      continue;
     }
     const from = p;
     if (from.verdict === to.verdict) kind = broken(to.verdict) && from.detail !== to.detail ? 'edges' : listed ? 'recovered' : null;
@@ -165,7 +164,7 @@ export function draft(c: Change, ctx: Ctx): string | null {
 
 const what = (c: Change): string => ({
   fixed: 'fixed', regression: 'REGRESSION', edges: 'wrong edges changed', changed: 'changed (look by hand)',
-  new: 'first verdict (no draft)', error: 'started erroring (reported once)', recovered: 'recovered from errors (no draft)',
+  new: 'first verdict (no draft)', error: 'errors on the new commit: check by hand', recovered: 'has a verdict again after erroring: check by hand (no draft)',
   'prev-error': 'the previous commit errored when re-scored: check by hand (no draft)',
   unstable: 'unstable (a rerun disagreed; not re-checked later: check by hand)',
 } as Record<Kind, string>)[c.kind];
