@@ -429,7 +429,7 @@ function main(argv: string[]) {
     const shown: typeof reported = []; const tooLarge: typeof reported = [];
     let used = 0;
     for (const x of reported) {
-      if (x.section.length > room) tooLarge.push(x);
+      if (x.section.length + 1 > room) tooLarge.push(x); // could never fit, even alone
       else if (used + x.section.length + 1 <= room) { shown.push(x); used += x.section.length + 1; }
     }
     const deferred = reported.length - shown.length - tooLarge.length;

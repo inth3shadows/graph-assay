@@ -120,8 +120,15 @@ jobs:
             const ok=[]; const skipped=[];
             for (const p of JSON.parse(fs.readFileSync("sel/candidates.json","utf8"))) {
               if (ok.length >= cap) break;
-              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8"}).trim(); ok.push(p); }
-              catch (e) { console.error(`skipping #${p.number}: no merge base (${String(e.message).split("\n")[0]})`); skipped.push({ number: p.number, head: p.head }); }
+              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim(); ok.push(p); }
+              catch (e) {
+                const msg=String(e.stderr || e.message);
+                // Only a definite answer about this PR (404, 422: no such head, or no common history) counts as a
+                // failed check. Any other error (5xx, rate limit, timeout) is GitHub's, not the PR's: stop here and
+                // record nothing, so an outage can't use up every waiting PR's retry.
+                if (/HTTP (404|422)/.test(msg) && skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg.split("\n")[0]})`); skipped.push({ number: p.number, head: p.head }); }
+                else { console.error(`stopping: GitHub API error on #${p.number} (${msg.split("\n")[0]})`); break; }
+              }
             }
             fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped))'
           node tools/fixture-watch.ts pr-select --prs sel/picked.json --cap 1000 > sel/checked.json # validates the merge bases
@@ -158,41 +165,48 @@ jobs:
         with:
           path: ~/graph-assay-builds/${{ matrix.pr.base }}
           key: codegraph-build-${{ matrix.pr.base }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
-      - name: Build and replay the merge base (host), the PR head in a sandbox, rerun the changes on both
+      - name: Build and replay the merge base and the PR head, each in the sandbox; rerun the changes on both
         env:
           N: ${{ matrix.pr.number }}
           HEAD_SHA: ${{ matrix.pr.head }}
           BASE_SHA: ${{ matrix.pr.base }}
         run: |
-          replay() { node fixtures/replay.mts "$@" || true; } # exit 1 on an ERROR row; the rows still count
           out="out/pr-$N"; mkdir -p "$out"
-          # The merge base is an upstream branch commit: built and replayed here, on the runner.
-          BASE_JS=$(CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" tools/build-codegraph.sh "$BASE_SHA" ~/graph-assay-builds/"$BASE_SHA" | tail -1)
-          replay "$BASE_JS" --json "$out/prev.json"; test -s "$out/prev.json"
-          # The PR head is anyone's code (often a fork): it is fetched, built and replayed only inside a container
-          # with no docker socket, no privileges, no host namespaces and no runner environment, so it can't reach
-          # the runner's tokens (cache, artifacts) or this checkout (mounted read-only).
-          head_dir="$RUNNER_TEMP/head"; head_out="$RUNNER_TEMP/head-out"; mkdir -p "$head_dir" "$head_out"
-          sandbox() {
-            docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e N -e HEAD_SHA \
+          # Both sides are built and replayed in the same container image with the same options, so the only
+          # difference between them is the codegraph commit. The container has no docker socket, no privileges,
+          # no host namespaces and no runner environment, so the PR head's code (anyone's, often a fork's) can't
+          # reach the runner's tokens (cache, artifacts) or this checkout (mounted read-only).
+          base_dir=~/graph-assay-builds/"$BASE_SHA"; head_dir="$RUNNER_TEMP/head"
+          base_out="$RUNNER_TEMP/base-out"; head_out="$RUNNER_TEMP/head-out"
+          mkdir -p "$base_dir" "$head_dir" "$base_out" "$head_out"
+          sandbox() { # sandbox base|head 'script' [args...]
+            local dir out; if [ "$1" = base ]; then dir=$base_dir out=$base_out SHA=$BASE_SHA; else dir=$head_dir out=$head_out SHA=$HEAD_SHA; fi
+            docker run --rm --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges \
+              -e HOME=/tmp/home -e N -e SHA \
               -e CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" \
-              -v "$PWD:/ga:ro" -v "$head_dir:/build" -v "$head_out:/out" -w /ga \
-              "$SANDBOX_IMAGE" bash -eo pipefail -c "$1" sandbox "${@:2}"
+              -v "$PWD:/ga:ro" -v "$dir:/build" -v "$out:/out" -w /ga \
+              "$SANDBOX_IMAGE" bash -eo pipefail -c "mkdir -p \"\$HOME\"; $2" sandbox "${@:3}"
           }
-          sandbox 'mkdir -p "$HOME"
-            git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
+          # A sandbox output is taken only as a regular file of sane size: a symlink planted by the PR's code would
+          # otherwise make this runner copy a host file into the artifact (or /dev/zero onto the disk).
+          take() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %s "$1")" -lt 50000000 ] && cp -P "$1" "$2" && test -s "$2"; }
+          # The merge base is an upstream branch commit; its build may come from the cache (restored above).
+          sandbox base '[ -d /build/.git ] || git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
+            tools/build-codegraph.sh "$SHA" /build >/dev/null
+            node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/prev.json || true'
+          sandbox head 'git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
             git -C /build fetch -q origin "pull/$N/head"
-            tools/build-codegraph.sh "$HEAD_SHA" /build >/dev/null
+            tools/build-codegraph.sh "$SHA" /build >/dev/null
             node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/next.json || true'
-          cp "$head_out/next.json" "$out/next.json"; test -s "$out/next.json"
+          take "$base_out/prev.json" "$out/prev.json"
+          take "$head_out/next.json" "$out/next.json"
           node tools/fixture-watch.ts flips --prev "$out/prev.json" --next "$out/next.json" --fixtures fixtures/oracle-candidates > "$out/flips.txt"
           mapfile -t flips < "$out/flips.txt"
           if [ "${#flips[@]}" -gt 0 ]; then
-            sandbox 'mkdir -p "$HOME"; node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-next.json || true' "${flips[@]}"
-            cp "$head_out/confirm-next.json" "$out/confirm-next.json"
-            replay "$BASE_JS" "${flips[@]}" --json "$out/confirm-prev.json"
-            test -s "$out/confirm-next.json"
-            test -s "$out/confirm-prev.json"
+            sandbox head 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-next.json || true' "${flips[@]}"
+            sandbox base 'node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-prev.json || true' "${flips[@]}"
+            take "$head_out/confirm-next.json" "$out/confirm-next.json"
+            take "$base_out/confirm-prev.json" "$out/confirm-prev.json"
           fi
       - name: Report (job summary; issue states unknown here)
         env:
