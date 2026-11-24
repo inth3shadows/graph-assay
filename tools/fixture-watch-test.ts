@@ -8,9 +8,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { LIMIT, diff, draft, erroringOf, nextState, prSection, prSelect, prState, report, rerunNames, reviewDraft, rows, signature, type Change } from './fixture-watch.ts';
+import { LIMIT, diff, draft, erroringOf, nextState, prSection, prSelect, prState, report, rerunNames, reviewDraft, rows, signature, withIssues, type Change } from './fixture-watch.ts';
+import { execFileSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// A test fixture's expect.json carries the issue its rows claim (issue-N -> N; f-k -> 100 + k), as a real one does.
+const expectFor = (name: string) => JSON.stringify({ issue: /^issue-(\d+)$/.test(name) ? Number(name.slice(6)) : /^f-(\d+)$/.test(name) ? 100 + Number(name.slice(2)) : null });
 let n = 0;
 const check = (name: string, fn: () => void) => { fn(); n++; console.log(`ok    ${name}`); };
 const r = (name: string, verdict: string, detail = '', issue: number | null = 1) => ({ name, issue, verdict, detail });
@@ -153,7 +156,7 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-watch-'));
   try {
     const fx = path.join(tmp, 'fixtures');
-    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
     const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
     const o = (name: string) => path.join(tmp, name);
     const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fx], { encoding: 'utf8' });
@@ -266,7 +269,7 @@ check('PR watch command line: select, issues, report once per changed result, mi
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-prwatch-'));
   try {
     const fx = path.join(tmp, 'fixtures');
-    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
     const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(v)); return p; };
     const o = (name: string) => path.join(tmp, name);
     const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fx], { encoding: 'utf8' });
@@ -375,7 +378,7 @@ check('P6/P7/P8: a bad artifact fails only its PR; a reverted result is reported
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-prwatch2-'));
   try {
     const fx = path.join(tmp, 'fixtures');
-    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
     const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(v)); return p; };
     const o = (name: string) => path.join(tmp, name);
     const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fx], { encoding: 'utf8' });
@@ -397,7 +400,7 @@ check('P6/P7/P8: a bad artifact fails only its PR; a reverted result is reported
   try {
     const fx = path.join(t2, 'fixtures');
     const names = Array.from({ length: 40 }, (_, k) => `f-${k}`);
-    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
     const w = (rel: string, v: any) => { const q = path.join(t2, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, JSON.stringify(v)); return q; };
     const side = (d: string) => ({ results: names.map((nm, k) => r(nm, 'BROKEN', `${d}${k}`.padEnd(480, d), 100 + k)) });
     for (const n of [7, 8]) { w(`artifact/pr-${n}/prev.json`, side('x')); w(`artifact/pr-${n}/next.json`, side('y')); w(`artifact/pr-${n}/confirm-prev.json`, side('x')); w(`artifact/pr-${n}/confirm-next.json`, side('y')); }
@@ -416,7 +419,7 @@ check('Q4/Q8/Q9: PRs skipped by select are recorded as failed; the header counts
   try {
     const fx = path.join(t3, 'fixtures');
     const names = Array.from({ length: 70 }, (_, k) => `f-${k}`);
-    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
     const w = (rel: string, v: any) => { const q = path.join(t3, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, JSON.stringify(v)); return q; };
     const side = (d: string, n: number) => ({ results: names.map((nm, k) => r(nm, 'BROKEN', k < n ? `${d}${k}`.padEnd(480, d) : 'same', 100 + k)) });
     // #7: one section too large for any comment; #8: small; #9: small.
@@ -444,5 +447,64 @@ check('every node -e script in the workflows is one single-quoted shell word (an
       assert.ok(after === '' || /[\s;|)]/.test(after), `${name}.yml: a node -e script ends early (an apostrophe in it?): ...${m[1].slice(-60)}'${after}`);
     }
   }
+});
+// ---- #87: follow-ups from the PR watch's last review round ----
+check('#87: issue numbers come from this checkout\'s expect.json, never from a replay row', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-87-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'issue-3447')); fs.writeFileSync(path.join(tmp, 'issue-3447', 'expect.json'), JSON.stringify({ issue: 3447 }));
+    fs.mkdirSync(path.join(tmp, 'unfiled')); fs.writeFileSync(path.join(tmp, 'unfiled', 'expect.json'), JSON.stringify({ issue: null }));
+    assert.deepEqual(withIssues([r('issue-3447', 'FIXED', '', 1234), r('unfiled', 'FIXED', '', 99)], tmp).map((x) => x.issue), [3447, null]);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('#87: the signature ignores detail text except for wrong-edge changes', () => {
+  const e1 = diff([r('a', 'BROKEN', 'w')], [r('a', 'ERROR', 'boom /tmp/cg-replay-AAA')]);
+  const e2 = diff([r('a', 'BROKEN', 'w')], [r('a', 'ERROR', 'boom /tmp/cg-replay-BBB')]);
+  assert.equal(signature(e1), signature(e2));
+  const g1 = diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'y')]); const g2 = diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'z')]);
+  assert.notEqual(signature(g1), signature(g2));
+});
+check('#87: "the other fixtures read the same" only when every fixture was scored on both sides', () => {
+  const ch = diff([r('issue-3447', 'BROKEN', 'w', 3447)], [r('issue-3447', 'FIXED', '', 3447)]);
+  assert.match(reviewDraft(1, ch, pctx, true), /The other fixtures read the same/);
+  assert.doesNotMatch(reviewDraft(1, ch, pctx, false), /The other fixtures read the same/);
+  assert.match(reviewDraft(1, ch, pctx, false), /Not every fixture could be scored on both sides/);
+});
+check('#87: a PR whose merge-base lookup keeps failing with an unclear error is set aside after 3 runs on the same head', () => {
+  let st = prState({ prs: {} }, [4], [], [], [{ number: 4, head: B }]);
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 1 });
+  st = prState(st, [4], [], [], [{ number: 4, head: B }]); st = prState(st, [4], [], [], [{ number: 4, head: B }]);
+  assert.equal(st.prs['4'].errored, 3);
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6).length, 0);
+  assert.equal(prSelect([{ number: 4, head: C, base: A }], st, 6).length, 1); // a new head is tried again
+});
+check('#87: every run: block in both watch workflows parses as bash (bash -n)', () => {
+  for (const name of ['fixture-watch', 'pr-watch']) {
+    const lines = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(\s*)run: \|\s*$/.exec(lines[i]); if (!m) continue;
+      const body: string[] = []; let indent = -1;
+      for (let k = i + 1; k < lines.length; k++) {
+        const l = lines[k]; if (!l.trim()) { body.push(''); continue; }
+        const ind = l.length - l.trimStart().length; if (indent < 0) indent = ind; if (ind < indent) break; body.push(l.slice(indent));
+      }
+      const script = body.join('\n').replace(/\$\{\{[^}]*\}\}/g, 'X');
+      try { execFileSync('bash', ['-n'], { input: script, stdio: ['pipe', 'pipe', 'pipe'] }); }
+      catch (e: any) { assert.fail(`${name}.yml run block at line ${i + 1} does not parse: ${String(e.stderr)}`); }
+    }
+  }
+});
+check('#87: workflow: replay containers have no network; isolation fallback is explicit; dry runs have their own concurrency group; links pin the PR head; image by digest; compare has a timeout; errors reset on a definite answer', () => {
+  const wf = fs.readFileSync(path.join(here, '..', '.github/workflows/pr-watch.yml'), 'utf8');
+  assert.match(wf, /--network none/);
+  assert.match(wf, /GRAPH_ASSAY_ISOLATION=none/);
+  assert.match(wf, /format\('dry-\{0\}', inputs\.pr\)/);
+  assert.match(wf, /github\.event\.pull_request\.head\.sha \|\| github\.sha/);
+  assert.match(wf, /SANDBOX_IMAGE: node:22\.23\.2-bookworm@sha256:[0-9a-f]{64}/);
+  assert.match(wf, /timeout: 60000/);
+  assert.match(wf, /errs=0; continue;/);
+  assert.match(wf, /--errored rep\/errored\.json/);
+  assert.doesNotMatch(wf, /tried again next run/);
+  assert.doesNotMatch(fs.readFileSync(path.join(here, 'fixture-watch.ts'), 'utf8'), /left unchecked, so the next run tries it again/);
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
