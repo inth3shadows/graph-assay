@@ -198,6 +198,10 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     assert.deepEqual(JSON.parse(fs.readFileSync(o('e1.json'), 'utf8')).erroring, ['issue-1']);
     // The previous commit errors: nothing to rerun (no flake resolution), and run needs no rerun files.
     assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, '');
+    // #82: the issues to look up cover every change the report can list, not only the rerun ones.
+    assert.equal(cli('issues', '--prev', r3, '--next', r2).stdout, '1\n');
+    assert.equal(cli('issues', '--prev', r3, '--next', r3).stdout, '1\n'); // errors on both commits: may be listed
+    assert.equal(cli('issues', '--prev', r2, '--next', r2).stdout, ''); // nothing changed, nothing errors
     p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
     assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| issue-1 \| [^|]+ \| - \| FIXED \| has a verdict again after erroring: check by hand \(no draft\) \|/); // R4-5
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
@@ -212,10 +216,12 @@ check('the workflow: the previous commit is replayed with today\'s checkout; rer
   for (const file of ['next', 'prev', 'confirm-prev', 'confirm-next']) assert.match(wf, new RegExp(`artifact/${file}\\.json`));
   assert.match(wf, /--state watch\/stored\.json/); // R2-2: run checks it is the previous commit's
   assert.match(wf, /\|\| s=unknown/); // F6
+  assert.match(wf, /for n in \$\(node tools\/fixture-watch\.ts issues --prev watch\/prev\.json --next watch\/next\.json --fixtures fixtures\/oracle-candidates\)/); // #82
+  assert.doesNotMatch(wf, /A change is rerun on both commits before it counts/); // #82: errors are listed without a rerun
   assert.match(wf, /--summary-out watch\/full\.md/); // R2-5/R3-6: the report job's own uncapped summary
   assert.equal(wf.match(/key: codegraph-build-\$\{\{ steps\.shas\.outputs\.(new|prev) \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/g)?.length, 2); // R3-2
   assert.equal(wf.match(/node-version: \$\{\{ env\.NODE_VERSION \}\}/g)?.length, 2);
-  assert.equal(wf.match(/flips --prev watch\/prev\.json --next watch\/next\.json [^\n]*--fixtures fixtures\/oracle-candidates/g)?.length, 2); // R3-5
+  assert.equal(wf.match(/(?:flips|issues) --prev watch\/prev\.json --next watch\/next\.json [^\n]*--fixtures fixtures\/oracle-candidates/g)?.length, 2); // R3-5: both reads of replay names are checked
   assert.equal(wf.match(/if \[ -f watch\/stored\.json \]; then args\+=\(--state watch\/stored\.json\); fi/g)?.length, 2); // R3-3
 });
 console.log(`fixture-watch: ${n}/${n} checks`);

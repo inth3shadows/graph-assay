@@ -13,6 +13,9 @@
 //       print the fixtures to rerun on both commits (rerunNames: a verdict on both, and the verdict or wrong
 //       edges changed; prev.json and next.json are replays of the previous and the new commit), one per line;
 //       with --issues their upstream issue numbers, deduplicated
+//   node tools/fixture-watch.ts issues --prev prev.json --next next.json [--fixtures dir]
+//       print the upstream issue numbers (deduplicated) of every fixture the report can list: new, changed,
+//       or erroring on either commit; the report job looks up their open/closed state
 //   node tools/fixture-watch.ts run --next next.json --sha <new sha> --graph-assay <sha>
 //       [--prev prev.json --prev-sha <sha> [--confirm-prev c.json --confirm-next c.json]] [--state stored.json]
 //       [--issue-states states.json] [--fixtures dir] [--date YYYY-MM-DD] [--summary-out full.md]
@@ -127,6 +130,19 @@ export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; c
   return out;
 }
 
+/** The upstream issues of every fixture the report can list (a superset of the changes `diff` reports). */
+export function listableIssues(prev: Row[], next: Row[]): number[] {
+  const before = new Map(prev.map((r) => [r.name, r]));
+  const out = new Set<number>();
+  for (const to of next) {
+    const p = before.get(to.name);
+    const listable = !p || p.verdict === 'ERROR' || to.verdict === 'ERROR' || p.verdict !== to.verdict || p.detail !== to.detail;
+    const issue = to.issue ?? p?.issue ?? null;
+    if (listable && issue) out.add(issue);
+  }
+  return [...out];
+}
+
 /** Whether a change is one whose reruns must agree (the others need none, or were settled by one). */
 export const needsConfirm = (c: Pick<Change, 'kind'>) => ['fixed', 'regression', 'edges', 'changed'].includes(c.kind);
 
@@ -235,6 +251,14 @@ function main(argv: string[]) {
     if (out.length) console.log(out.join('\n'));
     return;
   }
+  if (cmd === 'issues') {
+    const prev = opt(args, '--prev'); const next = opt(args, '--next');
+    if (!prev || !next) throw new Error('issues needs --prev and --next');
+    const fixtures = fixtureSet(opt(args, '--fixtures'));
+    const out = listableIssues(rows(read(prev), { fixtures }), rows(read(next), { fixtures }));
+    if (out.length) console.log(out.join('\n'));
+    return;
+  }
   if (cmd === 'run') {
     const need = (k: string) => { const v = opt(args, k); if (!v) throw new Error(`run needs ${k}`); return v; };
     const sha = need('--sha'); const ga = need('--graph-assay');
@@ -274,7 +298,7 @@ function main(argv: string[]) {
     console.log(prevFile ? `${changes.length} change(s) since ${short(prevSha)}` : `baseline: ${next.length} fixtures`);
     return;
   }
-  throw new Error('usage: fixture-watch.ts flips|run ... (see the header)');
+  throw new Error('usage: fixture-watch.ts flips|issues|run ... (see the header)');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
