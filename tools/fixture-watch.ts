@@ -21,7 +21,7 @@
 //   node tools/fixture-watch.ts pr-issues --prs selected.json --dir artifact [--fixtures dir]
 //       print the upstream issues every selected PR's report can list (for their open/closed state)
 //   node tools/fixture-watch.ts pr-report --prs selected.json --dir artifact --graph-assay <sha> --open open.json
-//       [--state pr-state.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
+//       [--state pr-state.json] [--skipped skipped.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
 //       --state-out pr-state.json [--summary-out full.md]
 //       one section per PR whose confirmed result changed since it was last reported (artifact/pr-N/ holds
 //       prev.json, next.json and, when reruns were needed, confirm-prev.json / confirm-next.json); a PR whose
@@ -414,20 +414,35 @@ function main(argv: string[]) {
       else if (!sig && before) reported.push({ entry, section: `#### ${ref(pr.number)} at \`${short(pr.head)}\` (merge base \`${short(pr.base)}\`)\n\nThis head no longer changes any fixture: the earlier report on this PR no longer applies.\n` });
       else quiet.push(entry);
     }
-    const head = (n: number) => `### PR watch: ${quiet.length + reported.length} open PR(s) checked, ${n} with a changed result\n\nDrafts are candidates: re-check on the PR's current head, then post by hand after approval.\n`;
-    const all = reported.length ? [head(reported.length), ...reported.map((x) => x.section)].join('\n') : '';
-    // Sections that do not fit are left out of the comment and not recorded, so a later run reports them (P8).
-    let k = reported.length; let capped = all;
-    while (capped.length > LIMIT && k > 0) { k--; capped = [head(k), ...reported.slice(0, k).map((x) => x.section), `${reported.length - k} more PR section(s) left for the next run to stay under GitHub's comment limit; the report job's summary has them now.\n`].join('\n'); }
-    if (reported.length && k === 0) {
-      // Not even one section fits: name the PRs, point at the summary, and record them (else they never fit).
-      k = reported.length;
-      capped = `${head(k)}\nThese sections are too large for a comment; the report job's summary has them: ${reported.map((x) => ref(x.entry.number)).join(', ')}.\n`;
+    // PRs select could not compare (no merge base) count as failed checks of their head (Q4).
+    const skippedFile = opt(args, '--skipped');
+    if (skippedFile) {
+      const sk = read(skippedFile);
+      if (!Array.isArray(sk) || !sk.every((x: any) => Number.isSafeInteger(x?.number) && x.number > 0 && SHA.test(x?.head))) throw new Error('bad --skipped list');
+      for (const x of sk) failed.push({ number: x.number, head: x.head });
     }
+    const head = (shown: number) => `### PR watch: ${quiet.length + reported.length} open PR(s) checked, ${reported.length} with a changed result${shown < reported.length ? ` (${shown} shown)` : ''}\n\nDrafts are candidates: re-check on the PR's current head, then post by hand after approval.\n`;
+    const all = reported.length ? [head(reported.length), ...reported.map((x) => x.section)].join('\n') : '';
+    // Fill the comment in order with the sections that fit (Q9). A section too large for any comment is named
+    // and recorded (its full text is in the summary); one that only missed this comment is left for the next run.
+    const room = LIMIT - head(0).length - 400;
+    const shown: typeof reported = []; const tooLarge: typeof reported = [];
+    let used = 0;
+    for (const x of reported) {
+      if (x.section.length > room) tooLarge.push(x);
+      else if (used + x.section.length + 1 <= room) { shown.push(x); used += x.section.length + 1; }
+    }
+    const deferred = reported.length - shown.length - tooLarge.length;
+    const tail = [
+      tooLarge.length ? `Too large for a comment; the report job's summary has them: ${tooLarge.map((x) => ref(x.entry.number)).join(', ')}.\n` : '',
+      deferred ? `${deferred} more PR section(s) left for the next run to stay under GitHub's comment limit; the report job's summary has them now.\n` : '',
+    ].filter(Boolean);
+    const capped = reported.length ? [head(shown.length), ...shown.map((x) => x.section), ...tail].join('\n') : '';
+    const recorded = [...shown, ...tooLarge].map((x) => x.entry);
     fs.writeFileSync(need('--report-out'), capped);
     const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, all);
-    fs.writeFileSync(need('--state-out'), JSON.stringify(prState(state, open, [...quiet, ...reported.slice(0, k).map((x) => x.entry)], failed), null, 1) + '\n');
-    console.log(`${quiet.length + reported.length} PR(s) checked, ${k} reported, ${failed.length} failed`);
+    fs.writeFileSync(need('--state-out'), JSON.stringify(prState(state, open, [...quiet, ...recorded], failed), null, 1) + '\n');
+    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed`);
     return;
   }
   if (cmd === 'run') {

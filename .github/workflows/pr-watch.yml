@@ -7,8 +7,10 @@
 # checking it. State (head and result per open PR) lives on the `pr-watch-state` branch.
 #
 # Three jobs, so a write token never shares a runner with code upstream controls: `select` (no upstream code)
-# picks the PRs; `replay` (one per PR, read-only token) builds and runs upstream code; `report` runs only this
-# repo's code on the replay results and alone can write.
+# picks the PRs; `replay` (one per PR, read-only token) builds the merge base on the runner and the PR head only
+# inside a locked-down container (no docker socket, privileges, host namespaces or runner environment), so a
+# fork's code can't reach the runner's cache or artifact tokens; `report` runs only this repo's code on the
+# replay results and alone can write.
 # Dry run (report in each replay job's summary; no state, no comment): any pull request touching the watch
 # (upstream PR 3454, which fixed issue-3447), or a dispatch with `pr` set.
 name: pr-watch
@@ -47,6 +49,9 @@ on:
       - tools/fixture-watch.ts
       - tools/package.json
 permissions: {}
+defaults:
+  run:
+    shell: bash # -eo pipefail: a failed `gh api | node` must fail the step, not feed it an empty list
 concurrency:
   group: pr-watch-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
@@ -54,6 +59,8 @@ env:
   UPSTREAM: colbymchenry/codegraph
   NODE_VERSION: '22.23.2'
   CAP: '6'
+  # The image PR-head code runs in (same Node as setup-node).
+  SANDBOX_IMAGE: node:22.23.2-bookworm
 jobs:
   select:
     runs-on: ubuntu-24.04
@@ -65,6 +72,7 @@ jobs:
       any: ${{ steps.pick.outputs.any }}
       dry: ${{ steps.pick.outputs.dry }}
       state: ${{ steps.pick.outputs.state }}
+      skipped: ${{ steps.pick.outputs.skipped }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -102,23 +110,27 @@ jobs:
             else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
           fi
           cap=$CAP; [ "$dry" = true ] && cap=1
-          node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --cap "$cap" > sel/picked.json
-          # Each PR is compared with its merge base, not with the base branch's tip.
-          node -e '
+          node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --cap 1000 > sel/candidates.json
+          # Each PR is compared with its merge base, not with the base branch's tip. The cap applies to PRs whose
+          # merge base was found; one whose compare fails (404, timeout, an unreachable fork head) is skipped
+          # and recorded as a failed check by the report job, so it can't hold a slot every day.
+          CAP_N="$cap" node -e '
             const {execFileSync}=require("child_process"); const fs=require("fs");
-            const up=process.env.UPSTREAM; const l=JSON.parse(fs.readFileSync("sel/picked.json","utf8"));
-            const ok=[];
-            for (const p of l) {
-              // One PR whose compare fails (404, timeout, an unreachable fork head) is skipped, not the whole run.
+            const up=process.env.UPSTREAM; const cap=Number(process.env.CAP_N);
+            const ok=[]; const skipped=[];
+            for (const p of JSON.parse(fs.readFileSync("sel/candidates.json","utf8"))) {
+              if (ok.length >= cap) break;
               try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8"}).trim(); ok.push(p); }
-              catch (e) { console.error(`skipping #${p.number}: no merge base (${String(e.message).split("\n")[0]})`); }
+              catch (e) { console.error(`skipping #${p.number}: no merge base (${String(e.message).split("\n")[0]})`); skipped.push({ number: p.number, head: p.head }); }
             }
-            fs.writeFileSync("sel/picked.json", JSON.stringify(ok))'
+            fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped))'
           node tools/fixture-watch.ts pr-select --prs sel/picked.json --cap 1000 > sel/checked.json # validates the merge bases
           n=$(node -p 'JSON.parse(require("fs").readFileSync("sel/checked.json","utf8")).length')
-          echo "picked $n PR(s): $(cat sel/checked.json)"
+          echo "picked $n PR(s): $(cat sel/checked.json); skipped: $(cat sel/skipped.json)"
+          # A dry run that checks nothing would pass without testing anything.
+          if [ "$dry" = true ] && [ "$n" -eq 0 ]; then echo "dry run: no PR could be checked" >&2; exit 1; fi
           { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"
-            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; } >> "$GITHUB_OUTPUT"
+            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; echo "skipped=$(cat sel/skipped.json)"; } >> "$GITHUB_OUTPUT"
 
   replay:
     needs: select
@@ -146,7 +158,7 @@ jobs:
         with:
           path: ~/graph-assay-builds/${{ matrix.pr.base }}
           key: codegraph-build-${{ matrix.pr.base }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
-      - name: Build both, replay both, rerun the changes on both
+      - name: Build and replay the merge base (host), the PR head in a sandbox, rerun the changes on both
         env:
           N: ${{ matrix.pr.number }}
           HEAD_SHA: ${{ matrix.pr.head }}
@@ -154,20 +166,30 @@ jobs:
         run: |
           replay() { node fixtures/replay.mts "$@" || true; } # exit 1 on an ERROR row; the rows still count
           out="out/pr-$N"; mkdir -p "$out"
-          head_dir=~/graph-assay-builds/"$HEAD_SHA"
-          # A PR's head may live in a fork: fetch it through the upstream PR ref before building.
-          if [ ! -d "$head_dir/.git" ]; then
-            git clone -q --filter=blob:none "https://github.com/$UPSTREAM.git" "$head_dir"
-            git -C "$head_dir" fetch -q origin "pull/$N/head"
-          fi
-          HEAD_JS=$(CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" tools/build-codegraph.sh "$HEAD_SHA" "$head_dir" | tail -1)
+          # The merge base is an upstream branch commit: built and replayed here, on the runner.
           BASE_JS=$(CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" tools/build-codegraph.sh "$BASE_SHA" ~/graph-assay-builds/"$BASE_SHA" | tail -1)
           replay "$BASE_JS" --json "$out/prev.json"; test -s "$out/prev.json"
-          replay "$HEAD_JS" --json "$out/next.json"; test -s "$out/next.json"
+          # The PR head is anyone's code (often a fork): it is fetched, built and replayed only inside a container
+          # with no docker socket, no privileges, no host namespaces and no runner environment, so it can't reach
+          # the runner's tokens (cache, artifacts) or this checkout (mounted read-only).
+          head_dir="$RUNNER_TEMP/head"; head_out="$RUNNER_TEMP/head-out"; mkdir -p "$head_dir" "$head_out"
+          sandbox() {
+            docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e N -e HEAD_SHA \
+              -e CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" \
+              -v "$PWD:/ga:ro" -v "$head_dir:/build" -v "$head_out:/out" -w /ga \
+              "$SANDBOX_IMAGE" bash -eo pipefail -c "$1" sandbox "${@:2}"
+          }
+          sandbox 'mkdir -p "$HOME"
+            git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
+            git -C /build fetch -q origin "pull/$N/head"
+            tools/build-codegraph.sh "$HEAD_SHA" /build >/dev/null
+            node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/next.json || true'
+          cp "$head_out/next.json" "$out/next.json"; test -s "$out/next.json"
           node tools/fixture-watch.ts flips --prev "$out/prev.json" --next "$out/next.json" --fixtures fixtures/oracle-candidates > "$out/flips.txt"
           mapfile -t flips < "$out/flips.txt"
           if [ "${#flips[@]}" -gt 0 ]; then
-            replay "$HEAD_JS" "${flips[@]}" --json "$out/confirm-next.json"
+            sandbox 'mkdir -p "$HOME"; node fixtures/replay.mts /build/dist/bin/codegraph.js "$@" --json /out/confirm-next.json || true' "${flips[@]}"
+            cp "$head_out/confirm-next.json" "$out/confirm-next.json"
             replay "$BASE_JS" "${flips[@]}" --json "$out/confirm-prev.json"
             test -s "$out/confirm-next.json"
             test -s "$out/confirm-prev.json"
@@ -196,7 +218,8 @@ jobs:
   report:
     needs: [select, replay]
     # Runs even if some PR's replay failed: that PR is left unchecked and tried again next run.
-    if: always() && needs.select.outputs.any == 'true' && needs.select.outputs.dry == 'false'
+    # Not on cancel: a cancelled run would count its unfinished PRs as failed checks.
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.dry == 'false' && (needs.select.outputs.any == 'true' || needs.select.outputs.skipped != '[]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -207,6 +230,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PRS: ${{ needs.select.outputs.prs }}
       STATE_SHA: ${{ needs.select.outputs.state }}
+      SKIPPED: ${{ needs.select.outputs.skipped }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -224,6 +248,7 @@ jobs:
           # read only as each PR's four result files, by `pr-report`.
           mkdir -p rep
           printf '%s' "$PRS" > rep/prs.json
+          printf '%s' "$SKIPPED" > rep/skipped.json
           gh api --paginate "repos/$UPSTREAM/pulls?state=open&per_page=100" --jq '.[].number' | node -e '
             const l=require("fs").readFileSync(0,"utf8").trim().split("\n").filter(Boolean).map(Number);
             require("fs").writeFileSync("rep/open.json", JSON.stringify(l))'
@@ -236,14 +261,16 @@ jobs:
           # The state must be the one select picked from: a re-run of an old run, or a hand edit since, is refused.
           [ "$(sha256sum rep/state.json | cut -d' ' -f1)" = "$STATE_SHA" ] || { echo "pr-watch-state changed since this run picked its PRs" >&2; exit 1; }
           echo '{}' > rep/issue-states.json
-          for n in $(node tools/fixture-watch.ts pr-issues --prs rep/prs.json --dir artifact --fixtures fixtures/oracle-candidates); do
+          # Written to a file first: a failing pr-issues must fail the step, not look like "no issues".
+          node tools/fixture-watch.ts pr-issues --prs rep/prs.json --dir artifact --fixtures fixtures/oracle-candidates > rep/issues.txt
+          for n in $(cat rep/issues.txt); do
             s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
             node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' rep/issue-states.json "$n" "$s"
           done
       - name: Write the report
         run: |
           node tools/fixture-watch.ts pr-report --prs rep/prs.json --dir artifact --graph-assay "$GITHUB_SHA" --open rep/open.json \
-            --state rep/state.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
+            --state rep/state.json --skipped rep/skipped.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
             --report-out rep/report.md --state-out rep/new-state.json --summary-out rep/full.md
           if [ -s rep/full.md ]; then cat rep/full.md; else echo "No PR result changed."; fi >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on the tracking issue

@@ -302,7 +302,6 @@ check('PR watch workflow: upstream code runs only in the read-only replay job; t
   assert.match(report, /contents: write/);
   assert.doesNotMatch(report, /build-codegraph|replay\.mts/); // the write job never builds or runs upstream code
   assert.doesNotMatch(select, /build-codegraph|replay\.mts/);
-  assert.match(replay, /fetch -q origin "pull\/\$N\/head"/); // fork heads
   assert.match(wf, /pr-watch-state/); assert.doesNotMatch(wf, /watch-state\b(?<!pr-watch-state)/);
   assert.doesNotMatch(wf, /\.title/); // upstream-written text never reaches our comment
   // P1: a job that runs PR code never saves a cache (a fork could plant a build the fixture watch then restores).
@@ -310,6 +309,17 @@ check('PR watch workflow: upstream code runs only in the read-only replay job; t
   assert.match(replay, /uses: actions\/cache\/restore@\S+ # v4\.2\.0\n {8}with:\n {10}path: ~\/graph-assay-builds\/\$\{\{ matrix\.pr\.base \}\}\n {10}key: codegraph-build-\$\{\{ matrix\.pr\.base \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/);
   assert.match(select, /catch \(e\) \{ console\.error\(`skipping #/); // P4
   assert.match(report, /pr-watch-state changed since this run picked its PRs/); // P13
+  // Q1/Q2: PR-head code runs only in a locked-down container; the runner itself only builds and runs the merge base.
+  assert.match(replay, /docker run --rm --user "\$\(id -u\):\$\(id -g\)"/);
+  assert.match(replay, /-v "\$PWD:\/ga:ro"/);
+  assert.doesNotMatch(wf, /--privileged|docker\.sock|--pid=host|--network[= ]host|--cap-add/);
+  assert.doesNotMatch(replay, /HEAD_JS/); // no host-side build or replay of the PR head
+  assert.match(replay, /sandbox 'mkdir -p "\$HOME"\n\s+git clone -q --filter=blob:none "\$CODEGRAPH_REPO" \/build\n\s+git -C \/build fetch -q origin "pull\/\$N\/head"/);
+  assert.match(wf, /^defaults:\n  run:\n    shell: bash/m); // Q3: pipefail
+  assert.match(report, /if: \$\{\{ !cancelled\(\) && /); // Q5
+  assert.match(report, /pr-issues [^\n]* > rep\/issues\.txt/); // Q6
+  assert.match(select, /dry run: no PR could be checked/); // Q7
+  assert.match(report, /--skipped rep\/skipped\.json/); // Q4
 });
 // ---- PR #85 review round 1 (.review/pr-85.md) ----
 check('P3: reports never write an upstream reference GitHub would turn into a cross-reference on the upstream timeline', () => {
@@ -383,5 +393,31 @@ check('P6/P7/P8: a bad artifact fails only its PR; a reverted result is reported
     assert.match(c, /1 more PR section\(s\) left for the next run/);
     assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(t2, 's.json'), 'utf8')).prs), ['7']); // #8 not recorded: reported next run
   } finally { fs.rmSync(t2, { recursive: true, force: true }); }
+});
+// ---- PR #85 review round 2 ----
+check('Q4/Q8/Q9: PRs skipped by select are recorded as failed; the header counts every changed PR; sections that fit are kept', () => {
+  const t3 = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-prwatch4-'));
+  try {
+    const fx = path.join(t3, 'fixtures');
+    const names = Array.from({ length: 70 }, (_, k) => `f-${k}`);
+    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    const w = (rel: string, v: any) => { const q = path.join(t3, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, JSON.stringify(v)); return q; };
+    const side = (d: string, n: number) => ({ results: names.map((nm, k) => r(nm, 'BROKEN', k < n ? `${d}${k}`.padEnd(480, d) : 'same', 100 + k)) });
+    // #7: one section too large for any comment; #8: small; #9: small.
+    const put = (pr: number, n: number) => { for (const [f, v] of [['prev', side('x', n)], ['next', side('y', n)], ['confirm-prev', side('x', n)], ['confirm-next', side('y', n)]] as const) w(`artifact/pr-${pr}/${f}.json`, v); };
+    put(7, 70); put(8, 1); put(9, 1);
+    const q = spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'pr-report', '--prs', w('prs.json', [{ number: 7, head: B, base: A }, { number: 8, head: C, base: A }, { number: 9, head: G, base: A }]),
+      '--skipped', w('skipped.json', [{ number: 11, head: B }]),
+      '--dir', path.join(t3, 'artifact'), '--graph-assay', G, '--open', w('open.json', [7, 8, 9, 11]), '--fixtures', fx, '--report-out', path.join(t3, 'c.md'), '--state-out', path.join(t3, 's.json')], { encoding: 'utf8' });
+    assert.equal(q.status, 0, q.stderr);
+    const c = fs.readFileSync(path.join(t3, 'c.md'), 'utf8');
+    assert.ok(c.length <= LIMIT);
+    assert.match(c, /^### PR watch: 3 open PR\(s\) checked, 3 with a changed result/); // Q8
+    assert.match(c, /`colbymchenry\/codegraph#8` at/); assert.match(c, /`colbymchenry\/codegraph#9` at/); // Q9: small sections still shown
+    assert.match(c, /Too large for a comment[^\n]*`colbymchenry\/codegraph#7`/);
+    const st = JSON.parse(fs.readFileSync(path.join(t3, 's.json'), 'utf8')).prs;
+    assert.deepEqual(Object.keys(st), ['7', '8', '9', '11']);
+    assert.deepEqual(st['11'], { head: B, sig: '', failed: 1 }); // Q4
+  } finally { fs.rmSync(t3, { recursive: true, force: true }); }
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
