@@ -32,15 +32,15 @@ check('the edgediff workflow runs on a change to any file the build differ loads
   const missing = importClosure(['differential/builds.ts']).filter((f) => !paths.has(f));
   assert.deepEqual(missing, [], `edgediff.yml's path filter leaves out: ${missing.join(', ')}`);
 });
-check('the fixture-watch workflow runs on a change to any file the replay or the watch tool loads', () => {
+for (const name of ['fixture-watch', 'pr-watch']) check(`the ${name} workflow runs on a change to any file the replay or the watch tool loads`, () => {
   // Same hand list as edgediff's: a PR touching an unlisted import would skip the watch's dry run.
-  const wf = fs.readFileSync(path.join(qa, '.github/workflows/fixture-watch.yml'), 'utf8');
+  const wf = fs.readFileSync(path.join(qa, `.github/workflows/${name}.yml`), 'utf8');
   const block = /\n {2}pull_request:\n {4}paths:\n((?: {6}(?:- .*|#.*)\n)+)/.exec(wf);
-  assert.ok(block, 'fixture-watch.yml has no pull_request paths block');
+  assert.ok(block, `${name}.yml has no pull_request paths block`);
   const paths = new Set([...block[1].matchAll(/^ {6}- (\S+)$/gm)].map((m) => m[1]));
   const missing = [...importClosure(['fixtures/replay.mts', 'tools/fixture-watch.ts']), 'tools/build-codegraph.sh']
     .filter((f) => !paths.has(f));
-  assert.deepEqual(missing, [], `fixture-watch.yml's path filter leaves out: ${missing.join(', ')}`);
+  assert.deepEqual(missing, [], `${name}.yml's path filter leaves out: ${missing.join(', ')}`);
 });
 check('the walk reads every import form, takes the nearest package.json, and refuses a dangling import', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-closure-'));
