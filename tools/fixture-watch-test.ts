@@ -306,7 +306,6 @@ check('PR watch workflow: upstream code runs only in the read-only replay job; t
   assert.doesNotMatch(wf, /\.title/); // upstream-written text never reaches our comment
   // P1: a job that runs PR code never saves a cache (a fork could plant a build the fixture watch then restores).
   assert.doesNotMatch(wf, /uses: actions\/cache@/);
-  assert.match(replay, /uses: actions\/cache\/restore@\S+ # v4\.2\.0\n {8}with:\n {10}path: ~\/graph-assay-builds\/\$\{\{ matrix\.pr\.base \}\}\n {10}key: codegraph-build-\$\{\{ matrix\.pr\.base \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/);
   assert.match(select, /console\.error\(`skipping #\$\{p\.number\}: no merge base/); // P4: one PR's failed compare skips that PR only
   assert.match(report, /pr-watch-state changed since this run picked its PRs/); // P13
   // Q1/Q2: PR-head code runs only in a locked-down container; the runner itself only builds and runs the merge base.
@@ -321,8 +320,16 @@ check('PR watch workflow: upstream code runs only in the read-only replay job; t
   assert.match(replay, /take\(\) \{ \[ -f "\$1" \] && \[ ! -L "\$1" \] && \[ "\$\(stat -c %s "\$1"\)" -lt 50000000 \]/);
   assert.doesNotMatch(replay, /\bcp "\$head_out|\bcp "\$base_out/);
   // R3: only a definite 404/422 counts as a failed check; any other API error stops the loop, unrecorded.
-  assert.match(select, /if \(\/HTTP \(404\|422\)\/\.test\(msg\) && skipped\.length < cap\)/);
-  assert.match(select, /stopping: GitHub API error/);
+  assert.match(select, /if \(\/HTTP \(404\|422\)\/\.test\(msg\)\)/);
+  // S3: an unclear API error leaves that PR for a later run and moves on; only several in a row stop the lookups.
+  assert.match(select, /left for a later run/);
+  assert.match(select, /if \(\+\+errs >= 3\)/);
+  assert.match(select, /skip limit reached/); // S5
+  // S2: every value the container needs is passed with its value, not forwarded from an unexported shell variable.
+  assert.match(replay, /-e SHA="\$SHA"/);
+  assert.doesNotMatch(replay, /-e SHA( |\\)/);
+  // S4: no cache at all in the PR watch: both sides are built in the container, every run.
+  assert.doesNotMatch(wf, /actions\/cache/);
   assert.match(replay, /sandbox head 'git clone -q --filter=blob:none "\$CODEGRAPH_REPO" \/build\n\s+git -C \/build fetch -q origin "pull\/\$N\/head"/); // fork heads, fetched in the sandbox
   assert.match(wf, /^defaults:\n  run:\n    shell: bash/m); // Q3: pipefail
   assert.match(report, /if: \$\{\{ !cancelled\(\) && /); // Q5

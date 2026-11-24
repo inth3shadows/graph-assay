@@ -117,17 +117,24 @@ jobs:
           CAP_N="$cap" node -e '
             const {execFileSync}=require("child_process"); const fs=require("fs");
             const up=process.env.UPSTREAM; const cap=Number(process.env.CAP_N);
-            const ok=[]; const skipped=[];
+            const ok=[]; const skipped=[]; let errs=0;
             for (const p of JSON.parse(fs.readFileSync("sel/candidates.json","utf8"))) {
               if (ok.length >= cap) break;
-              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim(); ok.push(p); }
+              // per_page=1: only the merge base is needed, not the list of commits (a large compare can time out).
+              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}?per_page=1`,"--jq",".merge_base_commit.sha"],{encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim(); ok.push(p); errs=0; }
               catch (e) {
-                const msg=String(e.stderr || e.message);
+                const msg=String(e.stderr || e.message).split("\n")[0];
                 // Only a definite answer about this PR (404, 422: no such head, or no common history) counts as a
-                // failed check. Any other error (5xx, rate limit, timeout) comes from GitHub, not from the PR: stop
-                // here and record nothing, so an outage cannot use up the retry of every waiting PR.
-                if (/HTTP (404|422)/.test(msg) && skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg.split("\n")[0]})`); skipped.push({ number: p.number, head: p.head }); }
-                else { console.error(`stopping: GitHub API error on #${p.number} (${msg.split("\n")[0]})`); break; }
+                // failed check. Any other error (5xx, rate limit, timeout) comes from GitHub, not from the PR: that
+                // PR is left for a later run, unrecorded, and the lookups go on; several in a row mean an outage, so
+                // they stop, and an outage cannot use up the retry of every waiting PR.
+                if (/HTTP (404|422)/.test(msg)) {
+                  if (skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg})`); skipped.push({ number: p.number, head: p.head }); }
+                  else console.error(`skip limit reached: #${p.number} (${msg}) left for a later run`);
+                  continue;
+                }
+                console.error(`GitHub API error on #${p.number} (${msg}): left for a later run`);
+                if (++errs >= 3) { console.error("stopping: GitHub API errors on 3 PRs in a row"); break; }
               }
             }
             fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped))'
@@ -158,13 +165,6 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      # Restore only, never save: this job runs the PR's own code (often from a fork), which could rewrite the
-      # merge base's build on disk; a saved cache would hand that to the fixture watch and later PRs.
-      - name: Restore the merge-base build (read-only)
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
-        with:
-          path: ~/graph-assay-builds/${{ matrix.pr.base }}
-          key: codegraph-build-${{ matrix.pr.base }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
       - name: Build and replay the merge base and the PR head, each in the sandbox; rerun the changes on both
         env:
           N: ${{ matrix.pr.number }}
@@ -176,13 +176,13 @@ jobs:
           # difference between them is the codegraph commit. The container has no docker socket, no privileges,
           # no host namespaces and no runner environment, so the PR head's code (anyone's, often a fork's) can't
           # reach the runner's tokens (cache, artifacts) or this checkout (mounted read-only).
-          base_dir=~/graph-assay-builds/"$BASE_SHA"; head_dir="$RUNNER_TEMP/head"
+          base_dir="$RUNNER_TEMP/base"; head_dir="$RUNNER_TEMP/head"
           base_out="$RUNNER_TEMP/base-out"; head_out="$RUNNER_TEMP/head-out"
           mkdir -p "$base_dir" "$head_dir" "$base_out" "$head_out"
           sandbox() { # sandbox base|head 'script' [args...]
             local dir out; if [ "$1" = base ]; then dir=$base_dir out=$base_out SHA=$BASE_SHA; else dir=$head_dir out=$head_out SHA=$HEAD_SHA; fi
             docker run --rm --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges \
-              -e HOME=/tmp/home -e N -e SHA \
+              -e HOME=/tmp/home -e N="$N" -e SHA="$SHA" \
               -e CODEGRAPH_REPO="https://github.com/$UPSTREAM.git" \
               -v "$PWD:/ga:ro" -v "$dir:/build" -v "$out:/out" -w /ga \
               "$SANDBOX_IMAGE" bash -eo pipefail -c "mkdir -p \"\$HOME\"; $2" sandbox "${@:3}"
@@ -190,8 +190,8 @@ jobs:
           # A sandbox output is taken only as a regular file of sane size: a symlink planted by the PR's code would
           # otherwise make this runner copy a host file into the artifact (or /dev/zero onto the disk).
           take() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %s "$1")" -lt 50000000 ] && cp -P "$1" "$2" && test -s "$2"; }
-          # The merge base is an upstream branch commit; its build may come from the cache (restored above).
-          sandbox base '[ -d /build/.git ] || git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
+          # No build cache in this workflow: both sides are built here, in the container, every run.
+          sandbox base 'git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
             tools/build-codegraph.sh "$SHA" /build >/dev/null
             node fixtures/replay.mts /build/dist/bin/codegraph.js --json /out/prev.json || true'
           sandbox head 'git clone -q --filter=blob:none "$CODEGRAPH_REPO" /build
