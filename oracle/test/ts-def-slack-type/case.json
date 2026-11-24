@@ -1,0 +1,12 @@
+{
+ "lang": "ts",
+ "mode": "forward",
+ "inputs": "ts-def-slack-wrapper",
+ "note": "A type node (code-graph-rag's and codebase-memory-mcp's `type`, codegraph's `type_alias`: a type alias, which names no callable) does not withhold DEF_SLACK (rule def-slack-own-node, SPEC v6.0; PR #79 round 3). The patch turns the outer Wrapped into a one-line `type` node at line 3, scip-typescript's definition, so it does not enclose the function Wrapped (line 4) the call on line 14 links to: the edge stays ok, as with codegraph's type_alias.",
+ "patch": [
+  { "op": "span", "node": { "name": "Wrapped", "kind": "constant" }, "end": 3, "kind": "type" }
+ ],
+ "expect": [
+  { "at": "a.ts:14", "name": "Wrapped", "key": "ok|calls" }
+ ]
+}

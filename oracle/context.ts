@@ -164,8 +164,9 @@ export function createContext(opts: Options) {
   // away. A node holds the definition when it starts on or below its line, above the target, or spans
   // it from above (a decorated definition started at its decorator). A node that encloses the target
   // holds nothing, whatever its kind (`forwardRef(function W…)` given a function node of its own).
+  // Not `type` / `type_alias`: a type alias names no callable.
   const DEF_KINDS = new Set(['function', 'method', 'class', 'struct', 'interface', 'trait', 'protocol', 'enum',
-    'union', 'type', 'test', 'component', 'constructor']);
+    'union', 'test', 'component', 'constructor']);
   const defNodes = new Map<string, Array<{ start: number; end: number }>>();
   for (const n of snap.nodes) {
     if (!DEF_KINDS.has(n.kind)) continue;

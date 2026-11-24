@@ -69,12 +69,15 @@ TECHNICAL.md and are not part of this specification.
      the declaration. The exception does not apply when another subject node of that name in the same
      file holds `D` (rule `def-slack-own-node`): one that starts at or below `D`'s line and above the
      node's start, or that spans `D`'s line from above (a definition started at its decorator or
-     annotation); a node that encloses the target node never counts. `D` is then that other node, as with two one-line methods of one
-     name on adjacent lines. Only a node of a kind that can be a definition counts (function, method,
-     class, struct, interface, trait, protocol, enum, union, type, test, component, constructor; not a
-     type alias, which names no callable), never a value node: `const W = wrap(\n function W…)` keeps
-     the slack for its inner function. The
-     function-pair track (§3) maps nodes to definitions by the same rule.
+     annotation); a node that encloses the target node never counts. `D` is then that other node, as
+     with two one-line methods of one name on adjacent lines. Only a node of a kind that can be a
+     definition counts (function, method, class, struct, interface, trait, protocol, enum, union,
+     test, component, constructor), never a type alias (`type`, `type_alias`, which names no
+     callable) or a value node: `const W = wrap(\n function W…)` keeps the slack for its inner
+     function. The function-pair track (§3) maps nodes to definitions by the same rule; a caller node
+     whose only same-named definitions nearby belong to other nodes is left unmapped. Known limit: a
+     wrong edge to a function nested one or two lines inside a same-named function that is the
+     callee is indistinguishable from the wrapper case and keeps the slack.
   2. **Name:** the node's name equals either the definition's name (the last descriptor of the
      oracle symbol, so an aliased import `import { a as b }` still matches `a`) or the name called
      at the site (which covers suffixed or decorated symbol names such as scip-typescript's

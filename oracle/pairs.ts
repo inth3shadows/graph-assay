@@ -73,8 +73,12 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
   const mapCaller = (e) => {
     if (!scipFiles.has(e.sfile)) return null;
     if (e.skind === 'file' || e.skind === 'module') return fileId(e.sfile);
-    const held = (containers.get(e.sfile) ?? []).filter((c) => inWindow(c.line, e.sfile, e.ssimple, e.sstart, e.send) && nameOk(c.sym, e.ssimple));
-    return held.length ? nearest(held, e.sstart).sym : callerAt(e.sfile, e.sstart);
+    const named = (containers.get(e.sfile) ?? []).filter((c) => c.line <= e.send && c.line >= e.sstart - 2 && nameOk(c.sym, e.ssimple));
+    const held = named.filter((c) => inWindow(c.line, e.sfile, e.ssimple, e.sstart, e.send));
+    if (held.length) return nearest(held, e.sstart).sym;
+    // Every same-named definition near the node belongs to another node (def-slack-own-node): the
+    // caller has no definition of its own here, so it is unmapped, not charged to whatever holds its line.
+    return named.length ? null : callerAt(e.sfile, e.sstart);
   };
   const defsIn = new Map();
   for (const [sym, list] of defs) {
