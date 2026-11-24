@@ -1,0 +1,11 @@
+{
+ "lang": "go",
+ "mode": "forward",
+ "note": "SPEC §2 DEF_SLACK lets a same-named definition up to two lines above the target's start count as the target (for `const x =\\n (…) =>`). It must not when the subject has its own node of that name starting there (rule def-slack-own-node, SPEC v6.0, #78): codegraph links sub.Path (line 20) to Route.Path (line 7) where scip-go resolves Router.Path (line 6, a node of its own), and links a.Run (line 33) to Beta.Run (line 15) where the callee is Alpha.Run (line 13, one blank line above). Both are wrong-target, not ok. Controls: r.Path (24) and rt.Path (28) are right and stay ok.",
+ "expect": [
+  { "at": "m.go:20", "name": "Path", "key": "wrong-target|calls|instance-method" },
+  { "at": "m.go:33", "name": "Run", "key": "wrong-target|calls|instance-method" },
+  { "at": "m.go:24", "name": "Path", "key": "ok|calls" },
+  { "at": "m.go:28", "name": "Path", "key": "ok|calls" }
+ ]
+}

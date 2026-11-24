@@ -189,7 +189,18 @@ code-graph-rag (`"subject"` in its case.json; `regen.ts` honours it).
 An edge counts for a call only when its target node is named like the callee (the last descriptor of
 the SCIP symbol), not merely when the node's span contains the definition: an `instantiates` edge to
 class `Req` on `pkg.Req().prepare()` does not carry `prepare` (rule `callee-name`, SPEC §2; a
-constructor node stands for its class). In missing-edge mode each edge carries at most one call site:
+constructor node stands for its class). A node named like the callee may start up to `DEF_SLACK` = 2
+lines below the definition (`const x =\n (…) =>`), unless another node of that name and a definition kind holds
+the definition: it starts there, as with two one-line same-named methods on adjacent lines, or spans it
+from a decorator above (rule `def-slack-own-node`, SPEC v6.0, #78). A value node does not count
+(`const W = wrap(\n function W…)`), nor a type alias, nor a node that encloses the target. The pair
+track's node mapping applies the same rule to callers and targets, and leaves a caller unmapped when
+every nearby same-named definition belongs to another node. Self-tests: `go-def-slack`,
+`go-def-slack-missing`, `go-def-slack-pairs`, `go-def-slack-caller`, `py-def-slack-decorated` (the
+rule's side); `ts-def-slack-arrow`, `ts-def-slack-wrapper`, `ts-def-slack-enclosing`,
+`ts-def-slack-value`, `ts-def-slack-type` (the slack's side). `oracle/test/run.ts` patches take `start`
+to pick one of several same-named nodes, and a validated `span` op moves a node's lines or changes its
+kind or name. In missing-edge mode each edge carries at most one call site:
 same-line edges are assigned first in SCIP document order, then edges within 3 lines, nearest first
 (rule `one-edge-per-unit`, SPEC §6), so `r.name("a").name("b")` with one edge has one `found` site.
 `oracle/test/py-multiplicity` pins both.

@@ -1,0 +1,9 @@
+{
+ "lang": "ts",
+ "mode": "forward",
+ "note": "The case DEF_SLACK exists for (SPEC §2): codegraph starts `export const twice =\\n  (n) => …` at the arrow's line (2), scip-typescript at the declaration's (1); with two lines between (`thrice`, 4 and 6) as well. Both calls on line 9 stay ok under rule def-slack-own-node (SPEC v6.0), because the subject has no other node of those names at the declaration's line.",
+ "expect": [
+  { "at": "a.ts:9", "name": "twice", "key": "ok|calls" },
+  { "at": "a.ts:9", "name": "thrice", "key": "ok|calls" }
+ ]
+}

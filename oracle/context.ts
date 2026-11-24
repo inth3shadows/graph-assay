@@ -155,9 +155,33 @@ export function createContext(opts: Options) {
     return e.tname === name || e.tname === callee || CTOR.has(e.tname) || (CTOR.has(callee) && e.tkind === 'class');
   };
   // codegraph starts `const x =\n  (...) =>` at the arrow's line; SCIP at the declaration's.
-  // So a same-named definition up to two lines above the target's start is the same symbol.
+  // So a same-named definition up to two lines above the target's start is the same symbol
+  // (SPEC §2 DEF_SLACK), unless another subject node of that name holds the definition: then the
+  // definition is that node, not the target (`def-slack-own-node`, SPEC §5). Without the check, a
+  // wrong edge to a one-line method declared right below a same-named one scores `ok` (#78).
+  // Only a node that can itself be a call's definition counts: a value node (`const W = wrap(\n
+  // function W…)`'s constant) shares the name of the function it holds and must not take the slack
+  // away. A node holds the definition when it starts on or below its line, above the target, or spans
+  // it from above (a decorated definition started at its decorator). A node that encloses the target
+  // holds nothing, whatever its kind (`forwardRef(function W…)` given a function node of its own).
+  // Not `type` / `type_alias`: a type alias names no callable.
+  const DEF_KINDS = new Set(['function', 'method', 'class', 'struct', 'interface', 'trait', 'protocol', 'enum',
+    'union', 'test', 'component', 'constructor']);
+  const defNodes = new Map<string, Array<{ start: number; end: number }>>();
+  for (const n of snap.nodes) {
+    if (!DEF_KINDS.has(n.kind)) continue;
+    const key = `${n.file}\0${n.name}`;
+    const list = defNodes.get(key);
+    if (list) list.push({ start: n.start, end: n.end }); else defNodes.set(key, [{ start: n.start, end: n.end }]);
+  }
+  const slackHeldElsewhere = (file: string, name: string, def: number, start: number, end: number) =>
+    on('def-slack-own-node') && (defNodes.get(`${file}\0${name}`) ?? []).some((n) => !(n.start === start && n.end === end)
+      && !(n.start <= start && end <= n.end)
+      && ((n.start >= def && n.start < start) || (n.start < def && def <= n.end)));
+  const inSlack = (x, e, name) => name === e.tname && x.line >= e.tstart - 2
+    && !slackHeldElsewhere(e.tfile, e.tname, x.line, e.tstart, e.tend);
   const inTarget = (d, e, name, sym) => d && (!on('callee-name') || sameCallee(e, name, sym))
-    && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || (name === e.tname && x.line >= e.tstart - 2)));
+    && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || inSlack(x, e, name)));
 
   // SPEC §5 `scip-name-mismatch`, Python: the oracle's symbol for a function, method or class the
   // project defines names another definition than the identifier it sits on, so it gives no answer
@@ -360,7 +384,7 @@ export function createContext(opts: Options) {
 
   return {
     opts, on, index, snap, allEdges, classAround, defs, refsAt, scipFiles, docEncoding, subjectEncoding,
-    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, nameMismatch, compositeLiteral,
+    fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, waterfall, skipped, skip, allSites, inTarget, slackHeldElsewhere, nameMismatch, compositeLiteral,
   };
 }
 

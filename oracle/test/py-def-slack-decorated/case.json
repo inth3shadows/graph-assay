@@ -1,0 +1,12 @@
+{
+ "lang": "python",
+ "mode": "forward",
+ "note": "Rule def-slack-own-node (SPEC v6.0) also withholds DEF_SLACK when another node of the callee's name spans the definition from above: a subject that starts a decorated method's node at its decorator (the patch moves A.run to lines 2-3; codegraph itself starts it at the def, line 3) has that node span scip-python's definition (line 3) from above. The call on line 9 is retargeted to B.run (line 5, two lines below the definition): it must score wrong-target, not ok (PR #79 round 1, F2).",
+ "patch": [
+  { "op": "span", "node": { "name": "run", "kind": "method", "start": 3 }, "start": 2 },
+  { "op": "retarget", "at": "m.py:9", "to": { "name": "run", "kind": "method", "start": 5 } }
+ ],
+ "expect": [
+  { "at": "m.py:9", "name": "run", "key": "wrong-target|calls" }
+ ]
+}

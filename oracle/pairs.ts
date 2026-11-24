@@ -19,7 +19,7 @@ import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
 export interface Unit { file: string; line: number; sym: string; decorator?: boolean }
 
 export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
-  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch, compositeLiteral } = ctx;
+  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch, compositeLiteral, slackHeldElsewhere } = ctx;
   const ALLSITES = ctx.opts.allSites;
   const name = (sym) => {
     let n = defName(sym);
@@ -65,12 +65,20 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
     for (const c of containers.get(file) ?? []) if (c.s <= line && line <= c.e && (!best || c.e - c.s < best.e - best.s || (c.e - c.s === best.e - best.s && c.s > best.s))) best = c;
     return best ? best.sym : fileId(file);
   };
+  // SPEC §2 as on the call-site track, for callers and targets alike: a definition inside the node's
+  // span, or up to DEF_SLACK = 2 lines above its start unless another node holds it (def-slack-own-node).
+  const inWindow = (line, file, nm, start, end) => line <= end && line >= start - 2
+    && (line >= start || !slackHeldElsewhere(file, nm, line, start, end));
   const nearest = (list, start) => list.sort((x, y) => Math.abs(x.line - start) - Math.abs(y.line - start))[0];
   const mapCaller = (e) => {
     if (!scipFiles.has(e.sfile)) return null;
     if (e.skind === 'file' || e.skind === 'module') return fileId(e.sfile);
-    const held = (containers.get(e.sfile) ?? []).filter((c) => c.line <= e.send && c.line >= e.sstart - 2 && nameOk(c.sym, e.ssimple));
-    return held.length ? nearest(held, e.sstart).sym : callerAt(e.sfile, e.sstart);
+    const named = (containers.get(e.sfile) ?? []).filter((c) => c.line <= e.send && c.line >= e.sstart - 2 && nameOk(c.sym, e.ssimple));
+    const held = named.filter((c) => inWindow(c.line, e.sfile, e.ssimple, e.sstart, e.send));
+    if (held.length) return nearest(held, e.sstart).sym;
+    // Every same-named definition near the node belongs to another node (def-slack-own-node): the
+    // caller has no definition of its own here, so it is unmapped, not charged to whatever holds its line.
+    return named.length ? null : callerAt(e.sfile, e.sstart);
   };
   const defsIn = new Map();
   for (const [sym, list] of defs) {
@@ -79,7 +87,7 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
   }
   const mapTarget = (e) => {
     if (!scipFiles.has(e.tfile)) return null;
-    const held = (defsIn.get(e.tfile) ?? []).filter((x) => x.line <= e.tend && x.line >= e.tstart - 2 && nameOk(x.sym, e.tname));
+    const held = (defsIn.get(e.tfile) ?? []).filter((x) => inWindow(x.line, e.tfile, e.tname, e.tstart, e.tend) && nameOk(x.sym, e.tname));
     return held.length ? canon(nearest(held, e.tstart).sym) : null;
   };
   const key = (c, d) => `${c}\u0000${d}`;

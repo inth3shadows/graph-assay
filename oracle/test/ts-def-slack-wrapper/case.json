@@ -1,0 +1,8 @@
+{
+ "lang": "ts",
+ "mode": "forward",
+ "note": "Rule def-slack-own-node (SPEC v6.0) counts only nodes that can be a call's definition: a value node of the same name does not withhold DEF_SLACK. codegraph gives `export const Wrapped = wrap(\\n  function Wrapped…)` a constant Wrapped (line 3) and a function Wrapped (line 4) and links the call on line 14 to the function, where scip-typescript defines Wrapped at line 3: it stays ok (PR #79 round 1, F1). The class-field arrow `handler` (8-9) is not a slack case: codegraph's method node spans scip's definition line, so its call on line 10 is ok without the slack.",
+ "expect": [
+  { "at": "a.ts:14", "name": "Wrapped", "key": "ok|calls" }
+ ]
+}

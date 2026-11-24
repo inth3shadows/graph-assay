@@ -15,8 +15,8 @@ All notable changes to this project are recorded here. The format follows
   local initialized by a chain starting with `new(T)` is typed `T`) and `issue-3448` (a Go local takes a
   same-named closure parameter's type). Where the issue names the right target (`issue-3443`, `issue-3447`),
   `right` pins it; a variant with the bug removed scores FIXED. The Go fixtures keep `Router` and `Route` in
-  separate files: with both in one file the oracle reads the wrong `Route.Path` edge as `ok`, because
-  `Router.Path` is declared on the next line. `known-shapes.json` adds the six, tagged at f72c9d2e like the
+  separate files: with both in one file, the oracle before SPEC v6.0 read the wrong `Route.Path` edge as
+  `ok`, because `Router.Path` is declared on the line above (see the SPEC v6.0 entry below). `known-shapes.json` adds the six, tagged at f72c9d2e like the
   rest; every existing entry is unchanged.
 - `.runechoguardignore` lists the DOM types `CanvasRenderingContext2D` and `HTMLCanvasElement`, so the
   runecho-guard pre-commit check doesn't flag them as unresolved in fixtures.
@@ -103,6 +103,22 @@ All notable changes to this project are recorded here. The format follows
   step shows its last 40 lines, not 8, and says how many earlier lines it left out.
 
 ### Changed
+- SPEC v6.0 (#78): the `DEF_SLACK` exception (a node may start up to 2 lines below the definition, for
+  `const x =\n (…) =>`) no longer applies when another subject node of the callee's name and a definition
+  kind holds the definition: it starts there, or spans it from a decorator above (rule
+  `def-slack-own-node`, on the call-site and function-pair tracks). Before, a wrong edge to a one-line
+  method declared right below a same-named one scored `ok` forward and `found` missing, in any language.
+  A value node (`const W = wrap(\n function W…)`'s constant) does not count, nor does a node that
+  encloses the target, so those stay `ok`. A type alias does not count either, and on
+  the pair track a caller whose only nearby same-named definitions belong to other nodes is left
+  unmapped. Self-tests `go-def-slack`, `go-def-slack-missing`, `go-def-slack-pairs`,
+  `go-def-slack-caller` and `py-def-slack-decorated` fail with the rule off; `ts-def-slack-arrow`,
+  `ts-def-slack-wrapper`, `ts-def-slack-enclosing`, `ts-def-slack-value` and `ts-def-slack-type` keep
+  the slack's cases `ok`. `oracle/test/run.ts` patches can pick a node by `start`, and move, retype or
+  rename one with a validated `span` op. On the dev split it changes no verdict and no function pair: no site flips in 58 comparisons and
+  identical pair sets in all 29 runs (23 cached work dirs across the four subjects, plus codegraph
+  461a5d87's runs of mux, ky, express, click, requests and excalidraw; the two cached mux dirs predate
+  the current oracle and were skipped).
 - The reproduction measures current builds: codegraph `147fe290` (upstream `main` on 2026-11-17, was
   `f72c9d2e`) and code-graph-rag 0.7.1 (was 0.5.0), in `Dockerfile` and `tools/setup.sh`.
   `docker/requirements.lock` is re-resolved for 0.7.1 in the image's Python (wheels only, PyPI
