@@ -189,7 +189,10 @@ code-graph-rag (`"subject"` in its case.json; `regen.ts` honours it).
 An edge counts for a call only when its target node is named like the callee (the last descriptor of
 the SCIP symbol), not merely when the node's span contains the definition: an `instantiates` edge to
 class `Req` on `pkg.Req().prepare()` does not carry `prepare` (rule `callee-name`, SPEC §2; a
-constructor node stands for its class). In missing-edge mode each edge carries at most one call site:
+constructor node stands for its class). A node named like the callee may start up to `DEF_SLACK` = 2
+lines below the definition (`const x =\n (…) =>`), unless the subject has its own node of that name
+starting there, as with two one-line same-named methods on adjacent lines (rule `def-slack-own-node`,
+SPEC v6.0, #78); `oracle/test/go-def-slack`, `go-def-slack-missing` and `ts-def-slack-arrow` pin both sides. In missing-edge mode each edge carries at most one call site:
 same-line edges are assigned first in SCIP document order, then edges within 3 lines, nearest first
 (rule `one-edge-per-unit`, SPEC §6), so `r.name("a").name("b")` with one edge has one `found` site.
 `oracle/test/py-multiplicity` pins both.

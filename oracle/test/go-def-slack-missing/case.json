@@ -1,0 +1,12 @@
+{
+ "lang": "go",
+ "mode": "missing",
+ "inputs": "go-def-slack",
+ "note": "go-def-slack in the missing direction (rule def-slack-own-node, SPEC v6.0, #78): sub.Path (line 20) and a.Run (line 33) have an edge naming the callee, to another target, so they are wrong-edge, not found. The right calls r.Path (24) and rt.Path (28) stay found.",
+ "expect": [
+  { "at": "m.go:20", "name": "Path", "key": "missing|wrong-edge" },
+  { "at": "m.go:33", "name": "Run", "key": "missing|wrong-edge" },
+  { "at": "m.go:24", "name": "Path", "key": "missing|found" },
+  { "at": "m.go:28", "name": "Path", "key": "missing|found" }
+ ]
+}

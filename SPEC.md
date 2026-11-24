@@ -1,18 +1,21 @@
-# Code-graph accuracy: scoring semantics (SPEC v5.0)
+# Code-graph accuracy: scoring semantics (SPEC v6.0)
 
 This document defines the unit being compared, when a subject and the reference agree, how
 failures count, and how scores are aggregated and versioned. Every scorer must follow it: the
 SCIP oracle, fixture replay, PyCG, the metamorphic relations and the tables. Every adapter must
 emit what it requires.
 
-**Status: in force** from 2026-11-16. Results produced under it record `SPEC v5.0`. Results
-produced under SPEC v4.0, v3.0, v2.0 (all in force from 2026-11-16) and v1.0 (in force from
+**Status: in force** from 2026-11-21. Results produced under it record `SPEC v6.0`. Results
+produced under SPEC v5.0, v4.0, v3.0, v2.0 (all in force from 2026-11-16) and v1.0 (in force from
 2026-11-11) keep their labels, and results from before v1.0 stay labelled SPEC v0 (§12). v2.0 added
 `scip-name-mismatch` and v3.0 `skip-composite-literal` (§5), each prompted by a held-out result and
 re-validated on the dev split (§9). v4.0 changes `skip-composite-literal`: signatures are read from
 the source file itself, and a function-local type and any type in a literal's type expression count.
 v5.0 changes the diagnostic-language rule (§9): the labelled sample's strata are weighted by their
 share of the tabled run's sites, and a heavy stratum with too few labels makes a language diagnostic.
+v6.0 narrows `DEF_SLACK` (§2) with rule `def-slack-own-node` (§5): the slack no longer applies when the
+subject has its own node of the callee's name starting there. A fixture prompted it (#78); on the dev
+split it changed no verdict.
 
 "Must" marks a requirement. A result conforms to this version only if every "must" holds for it. Operational
 details (command-line flags, file names, exit codes, the build-vs-build gate, history) are in
@@ -63,7 +66,10 @@ TECHNICAL.md and are not part of this specification.
   1. **Span:** the node's file is `D`'s file and the node's span contains `D`'s line. There is one
      exception. A node named like the callee may start up to `DEF_SLACK` = 2 lines *below* `D`'s
      line, because a subject may start `const x =\n (…) =>` at the arrow while the oracle starts at
-     the declaration.
+     the declaration. The exception does not apply when the subject has another node of that name in
+     the same file starting at or below `D`'s line and above the node's start (rule
+     `def-slack-own-node`): `D` is then that other node, as with two one-line methods of one name on
+     adjacent lines.
   2. **Name:** the node's name equals either the definition's name (the last descriptor of the
      oracle symbol, so an aliased import `import { a as b }` still matches `a`) or the name called
      at the site (which covers suffixed or decorated symbol names such as scip-typescript's
@@ -188,6 +194,7 @@ the spec version. Adding, removing or changing a rule is a major change (§12).
 | Rule | Mode | Effect |
 |---|---|---|
 | `callee-name` | both | §2 name condition |
+| `def-slack-own-node` | both | §2 `DEF_SLACK`: no slack when another subject node of the callee's name starts at or below `D`'s line, above the target's start |
 | `one-edge-per-unit` | missing | §6 assignment |
 | `ctor-init` | forward | §4 constructor: a Python `__init__` target is compared as its class |
 | `ok-overload-set`, `ok-other-column`, `local-module-alias`, `cross-file-unimported`, `found-other-line`, `decl-tag` | as in the verdict tables | produce the verdict or tag of the same name |

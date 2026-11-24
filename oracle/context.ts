@@ -155,9 +155,23 @@ export function createContext(opts: Options) {
     return e.tname === name || e.tname === callee || CTOR.has(e.tname) || (CTOR.has(callee) && e.tkind === 'class');
   };
   // codegraph starts `const x =\n  (...) =>` at the arrow's line; SCIP at the declaration's.
-  // So a same-named definition up to two lines above the target's start is the same symbol.
+  // So a same-named definition up to two lines above the target's start is the same symbol
+  // (SPEC §2 DEF_SLACK), unless the subject has its own node of that name starting there: then the
+  // definition is that node, not the target (`def-slack-own-node`, SPEC §5). Without the check, a
+  // wrong edge to a one-line method declared right below a same-named one scores `ok` (#78).
+  const nodeStarts = new Map<string, number[]>();
+  for (const n of snap.nodes) {
+    if (n.kind === 'file') continue;
+    const key = `${n.file}\0${n.name}`;
+    const list = nodeStarts.get(key);
+    if (list) list.push(n.start); else nodeStarts.set(key, [n.start]);
+  }
+  const ownNode = (file: string, name: string, from: number, before: number) =>
+    (nodeStarts.get(`${file}\0${name}`) ?? []).some((s) => s >= from && s < before);
+  const inSlack = (x, e, name) => name === e.tname && x.line >= e.tstart - 2
+    && !(on('def-slack-own-node') && ownNode(e.tfile, e.tname, x.line, e.tstart));
   const inTarget = (d, e, name, sym) => d && (!on('callee-name') || sameCallee(e, name, sym))
-    && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || (name === e.tname && x.line >= e.tstart - 2)));
+    && d.some((x) => x.file === e.tfile && x.line <= e.tend && (x.line >= e.tstart || inSlack(x, e, name)));
 
   // SPEC §5 `scip-name-mismatch`, Python: the oracle's symbol for a function, method or class the
   // project defines names another definition than the identifier it sits on, so it gives no answer
