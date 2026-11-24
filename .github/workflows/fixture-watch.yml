@@ -2,8 +2,9 @@
 # `watch-state` branch, build both commits, replay every fixture in fixtures/oracle-candidates on each with this
 # checkout (fixtures/replay.mts), and report which verdicts changed (tools/fixture-watch.ts). Both sides are
 # scored by the same graph-assay code, so a change in graph-assay itself never passes for an upstream change.
-# A change is rerun on both commits before it counts. The report, with a ready-to-paste draft per upstream
-# issue, is a comment on this repo's open issue labelled `fixture-watch`; the new commit's verdicts are stored as
+# A change with a verdict on both commits is rerun on both before it counts and can get a ready-to-paste draft
+# for its upstream issue; a change where either commit errored is listed for a person, never rerun or drafted.
+# The report is a comment on this repo's open issue labelled `fixture-watch`; the new commit's verdicts are stored as
 # state.json on `watch-state`. Nothing is ever posted to codegraph: this workflow's token reaches only this
 # repository, and a draft is posted by hand after a person checks it.
 #
@@ -224,7 +225,8 @@ jobs:
           if [ -n "$PREV" ] && [ ! -f watch/stored.json ]; then echo "the stored state disappeared since the replay job read it" >&2; exit 1; fi
           echo '{}' > watch/issue-states.json
           if [ -f watch/prev.json ]; then
-            for n in $(node tools/fixture-watch.ts flips --prev watch/prev.json --next watch/next.json --issues --fixtures fixtures/oracle-candidates); do
+            # Every issue the report can list, the rerun changes and the ones an error was involved in alike (#82).
+            for n in $(node tools/fixture-watch.ts issues --prev watch/prev.json --next watch/next.json --fixtures fixtures/oracle-candidates); do
               s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
               node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' watch/issue-states.json "$n" "$s"
             done
