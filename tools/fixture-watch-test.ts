@@ -429,4 +429,13 @@ check('Q4/Q8/Q9: PRs skipped by select are recorded as failed; the header counts
     assert.deepEqual(st['11'], { head: B, sig: '', failed: 1 }); // Q4
   } finally { fs.rmSync(t3, { recursive: true, force: true }); }
 });
+check('every node -e script in the workflows is one single-quoted shell word (an apostrophe inside would end it early)', () => {
+  for (const name of ['fixture-watch', 'pr-watch']) {
+    const wf = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8');
+    for (const m of wf.matchAll(/node -e '([^']*)'/g)) {
+      const after = wf.slice(m.index + m[0].length, m.index + m[0].length + 1);
+      assert.ok(after === '' || /[\s;|)]/.test(after), `${name}.yml: a node -e script ends early (an apostrophe in it?): ...${m[1].slice(-60)}'${after}`);
+    }
+  }
+});
 console.log(`fixture-watch: ${n}/${n} checks`);

@@ -124,8 +124,8 @@ jobs:
               catch (e) {
                 const msg=String(e.stderr || e.message);
                 // Only a definite answer about this PR (404, 422: no such head, or no common history) counts as a
-                // failed check. Any other error (5xx, rate limit, timeout) is GitHub's, not the PR's: stop here and
-                // record nothing, so an outage can't use up every waiting PR's retry.
+                // failed check. Any other error (5xx, rate limit, timeout) comes from GitHub, not from the PR: stop
+                // here and record nothing, so an outage cannot use up the retry of every waiting PR.
                 if (/HTTP (404|422)/.test(msg) && skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg.split("\n")[0]})`); skipped.push({ number: p.number, head: p.head }); }
                 else { console.error(`stopping: GitHub API error on #${p.number} (${msg.split("\n")[0]})`); break; }
               }
