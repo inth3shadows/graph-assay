@@ -73,7 +73,7 @@ check('R5-1/R5-2: when the previous commit errors, nothing is rerun or drafted: 
   assert.deepEqual(kinds(unlisted), { 'issue-1': 'prev-error' });
   assert.equal(unlisted[0].issue, 1);
   assert.equal(draft(unlisted[0], ctx), null);
-  assert.match(report(unlisted, ctx), /\| issue-1 \| colbymchenry\/codegraph#1 \(closed\) \| - \| FIXED \| the previous commit errored when re-scored: check by hand \(no draft\) \|/);
+  assert.match(report(unlisted, ctx), /\| issue-1 \| `colbymchenry\/codegraph#1` \(closed\) \| - \| FIXED \| the previous commit errored when re-scored: check by hand \(no draft\) \|/);
   const listed = diff(prev, next, { erroring: new Set(['issue-1']) });
   assert.deepEqual(kinds(listed), { 'issue-1': 'recovered' });
   assert.equal(draft(listed[0], ctx), null);
@@ -133,8 +133,8 @@ check('a backtick or line break in detail text cannot break out of its code span
 check('the report: empty with no changes, a table plus drafts otherwise, and a baseline line on the first run', () => {
   assert.equal(report([], ctx), '');
   const out = report(diff([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'FIXED')]), ctx);
-  assert.match(out, /\| issue-1 \| colbymchenry\/codegraph#1 \(closed\) \| BROKEN \| FIXED \| fixed \|/);
-  assert.match(out, /<details><summary>Draft for colbymchenry\/codegraph#1:/);
+  assert.match(out, /\| issue-1 \| `colbymchenry\/codegraph#1` \(closed\) \| BROKEN \| FIXED \| fixed \|/);
+  assert.match(out, /<details><summary>Draft for <code>colbymchenry\/codegraph#1<\/code>:/);
   assert.match(out, /````markdown\nConfirmed fixed/);
   assert.doesNotMatch(out, /\/home\//);
   assert.match(report([], ctx, { baseline: { FIXED: 2, BROKEN: 1 } }), /baseline\n\nNo earlier state.*BROKEN 1, FIXED 2/);
@@ -171,7 +171,7 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st.json', { 1: 'unknown' }));
     assert.equal(p.status, 0, p.stderr);
     const m = fs.readFileSync(o('m2.md'), 'utf8');
-    assert.match(m, /#1 \(state unknown\) \| BROKEN \| FIXED/); assert.match(m, /This looks fixed/); // F6
+    assert.match(m, /#1` \(state unknown\) \| BROKEN \| FIXED/); assert.match(m, /This looks fixed/); // F6
     assert.equal(JSON.parse(fs.readFileSync(o('s2.json'), 'utf8')).codegraph, B);
     p = run2('--state', o('s2.json'), '--confirm-prev', r1, '--confirm-next', r2); // s2 is B's state, not A's
     assert.equal(p.status, 2); assert.match(p.stderr, /stored state is for bbbbbbbb, not the previous commit aaaaaaaa/);
@@ -189,7 +189,7 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     // R3-6: --summary-out writes the uncapped report, with the issue states the comment has.
     p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st2.json', { 1: 'closed' }), '--summary-out', o('full.md'));
     assert.equal(p.status, 0, p.stderr);
-    assert.match(fs.readFileSync(o('full.md'), 'utf8'), /#1 \(closed\)[\s\S]*Confirmed fixed/);
+    assert.match(fs.readFileSync(o('full.md'), 'utf8'), /#1` \(closed\)[\s\S]*Confirmed fixed/);
     // R3-1 end to end, reruns limited to what flips picks: baseline, error, recovery. Every run goes through.
     const r3 = f('r3.json', { results: [r('issue-1', 'ERROR', 'boom'), r('issue-2', 'FIXED', '', 2)] });
     assert.equal(cli('flips', '--prev', r1, '--next', r3).stdout, '');
@@ -223,5 +223,12 @@ check('the workflow: the previous commit is replayed with today\'s checkout; rer
   assert.equal(wf.match(/node-version: \$\{\{ env\.NODE_VERSION \}\}/g)?.length, 2);
   assert.equal(wf.match(/(?:flips|issues) --prev watch\/prev\.json --next watch\/next\.json [^\n]*--fixtures fixtures\/oracle-candidates/g)?.length, 2); // R3-5: both reads of replay names are checked
   assert.equal(wf.match(/if \[ -f watch\/stored\.json \]; then args\+=\(--state watch\/stored\.json\); fi/g)?.length, 2); // R3-3
+});
+check('the report never writes an upstream reference GitHub would turn into a cross-reference on the upstream timeline', () => {
+  const ch = diff([r('issue-3447', 'BROKEN', 'w', 3447)], [r('issue-3447', 'FIXED', '', 3447)]);
+  const md = report(ch, ctx);
+  const bare = md.replace(/````markdown[\s\S]*?````/g, '').replace(/`[^`]*`/g, '').replace(/<code>[\s\S]*?<\/code>/g, '');
+  assert.doesNotMatch(bare, /colbymchenry\/codegraph#\d/);
+  assert.doesNotMatch(bare, /github\.com\/colbymchenry\/codegraph\/(issues|pull)\//);
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
