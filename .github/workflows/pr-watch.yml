@@ -64,6 +64,7 @@ jobs:
       prs: ${{ steps.pick.outputs.prs }}
       any: ${{ steps.pick.outputs.any }}
       dry: ${{ steps.pick.outputs.dry }}
+      state: ${{ steps.pick.outputs.state }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -106,12 +107,18 @@ jobs:
           node -e '
             const {execFileSync}=require("child_process"); const fs=require("fs");
             const up=process.env.UPSTREAM; const l=JSON.parse(fs.readFileSync("sel/picked.json","utf8"));
-            for (const p of l) p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8"}).trim();
-            fs.writeFileSync("sel/picked.json", JSON.stringify(l))'
+            const ok=[];
+            for (const p of l) {
+              // One PR whose compare fails (404, timeout, an unreachable fork head) is skipped, not the whole run.
+              try { p.base=execFileSync("gh",["api",`repos/${up}/compare/${p.base}...${p.head}`,"--jq",".merge_base_commit.sha"],{encoding:"utf8"}).trim(); ok.push(p); }
+              catch (e) { console.error(`skipping #${p.number}: no merge base (${String(e.message).split("\n")[0]})`); }
+            }
+            fs.writeFileSync("sel/picked.json", JSON.stringify(ok))'
           node tools/fixture-watch.ts pr-select --prs sel/picked.json --cap 1000 > sel/checked.json # validates the merge bases
           n=$(node -p 'JSON.parse(require("fs").readFileSync("sel/checked.json","utf8")).length')
           echo "picked $n PR(s): $(cat sel/checked.json)"
-          { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"; } >> "$GITHUB_OUTPUT"
+          { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"
+            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; } >> "$GITHUB_OUTPUT"
 
   replay:
     needs: select
@@ -132,13 +139,10 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Cache the head build
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
-        with:
-          path: ~/graph-assay-builds/${{ matrix.pr.head }}
-          key: codegraph-build-${{ matrix.pr.head }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
-      - name: Cache the merge-base build
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+      # Restore only, never save: this job runs the PR's own code (often from a fork), which could rewrite the
+      # merge base's build on disk; a saved cache would hand that to the fixture watch and later PRs.
+      - name: Restore the merge-base build (read-only)
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: ~/graph-assay-builds/${{ matrix.pr.base }}
           key: codegraph-build-${{ matrix.pr.base }}-node${{ env.NODE_VERSION }}-${{ hashFiles('tools/build-codegraph.sh') }}
@@ -202,6 +206,7 @@ jobs:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       PRS: ${{ needs.select.outputs.prs }}
+      STATE_SHA: ${{ needs.select.outputs.state }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -228,6 +233,8 @@ jobs:
             git show FETCH_HEAD:pr-state.json > rep/state.json
           elif [ "$rc" = 2 ]; then echo '{"prs":{}}' > rep/state.json
           else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
+          # The state must be the one select picked from: a re-run of an old run, or a hand edit since, is refused.
+          [ "$(sha256sum rep/state.json | cut -d' ' -f1)" = "$STATE_SHA" ] || { echo "pr-watch-state changed since this run picked its PRs" >&2; exit 1; }
           echo '{}' > rep/issue-states.json
           for n in $(node tools/fixture-watch.ts pr-issues --prs rep/prs.json --dir artifact --fixtures fixtures/oracle-candidates); do
             s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited

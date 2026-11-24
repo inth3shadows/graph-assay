@@ -73,7 +73,7 @@ check('R5-1/R5-2: when the previous commit errors, nothing is rerun or drafted: 
   assert.deepEqual(kinds(unlisted), { 'issue-1': 'prev-error' });
   assert.equal(unlisted[0].issue, 1);
   assert.equal(draft(unlisted[0], ctx), null);
-  assert.match(report(unlisted, ctx), /\| issue-1 \| colbymchenry\/codegraph#1 \(closed\) \| - \| FIXED \| the previous commit errored when re-scored: check by hand \(no draft\) \|/);
+  assert.match(report(unlisted, ctx), /\| issue-1 \| `colbymchenry\/codegraph#1` \(closed\) \| - \| FIXED \| the previous commit errored when re-scored: check by hand \(no draft\) \|/);
   const listed = diff(prev, next, { erroring: new Set(['issue-1']) });
   assert.deepEqual(kinds(listed), { 'issue-1': 'recovered' });
   assert.equal(draft(listed[0], ctx), null);
@@ -133,8 +133,8 @@ check('a backtick or line break in detail text cannot break out of its code span
 check('the report: empty with no changes, a table plus drafts otherwise, and a baseline line on the first run', () => {
   assert.equal(report([], ctx), '');
   const out = report(diff([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'FIXED')]), ctx);
-  assert.match(out, /\| issue-1 \| colbymchenry\/codegraph#1 \(closed\) \| BROKEN \| FIXED \| fixed \|/);
-  assert.match(out, /<details><summary>Draft for colbymchenry\/codegraph#1:/);
+  assert.match(out, /\| issue-1 \| `colbymchenry\/codegraph#1` \(closed\) \| BROKEN \| FIXED \| fixed \|/);
+  assert.match(out, /<details><summary>Draft for <code>colbymchenry\/codegraph#1<\/code>:/);
   assert.match(out, /````markdown\nConfirmed fixed/);
   assert.doesNotMatch(out, /\/home\//);
   assert.match(report([], ctx, { baseline: { FIXED: 2, BROKEN: 1 } }), /baseline\n\nNo earlier state.*BROKEN 1, FIXED 2/);
@@ -171,7 +171,7 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st.json', { 1: 'unknown' }));
     assert.equal(p.status, 0, p.stderr);
     const m = fs.readFileSync(o('m2.md'), 'utf8');
-    assert.match(m, /#1 \(state unknown\) \| BROKEN \| FIXED/); assert.match(m, /This looks fixed/); // F6
+    assert.match(m, /#1` \(state unknown\) \| BROKEN \| FIXED/); assert.match(m, /This looks fixed/); // F6
     assert.equal(JSON.parse(fs.readFileSync(o('s2.json'), 'utf8')).codegraph, B);
     p = run2('--state', o('s2.json'), '--confirm-prev', r1, '--confirm-next', r2); // s2 is B's state, not A's
     assert.equal(p.status, 2); assert.match(p.stderr, /stored state is for bbbbbbbb, not the previous commit aaaaaaaa/);
@@ -189,7 +189,7 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     // R3-6: --summary-out writes the uncapped report, with the issue states the comment has.
     p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st2.json', { 1: 'closed' }), '--summary-out', o('full.md'));
     assert.equal(p.status, 0, p.stderr);
-    assert.match(fs.readFileSync(o('full.md'), 'utf8'), /#1 \(closed\)[\s\S]*Confirmed fixed/);
+    assert.match(fs.readFileSync(o('full.md'), 'utf8'), /#1` \(closed\)[\s\S]*Confirmed fixed/);
     // R3-1 end to end, reruns limited to what flips picks: baseline, error, recovery. Every run goes through.
     const r3 = f('r3.json', { results: [r('issue-1', 'ERROR', 'boom'), r('issue-2', 'FIXED', '', 2)] });
     assert.equal(cli('flips', '--prev', r1, '--next', r3).stdout, '');
@@ -243,9 +243,9 @@ check('PR watch: a PR that breaks a fixture gets the failing case; an error-only
 check('PR watch: the PR section names the PR by number only (no upstream-written title), with a table and the draft', () => {
   const ch = diff([r('issue-3447', 'BROKEN', 'w', 3447)], [r('issue-3447', 'FIXED', '', 3447)]);
   const sec = prSection(3454, ch, pctx);
-  assert.match(sec, /^#### colbymchenry\/codegraph#3454 at `bbbbbbbb` \(merge base `aaaaaaaa`\)/);
-  assert.match(sec, /\| issue-3447 \| colbymchenry\/codegraph#3447 \(open\) \| BROKEN \| FIXED \| fixed \|/);
-  assert.match(sec, /<details><summary>Draft review comment for colbymchenry\/codegraph#3454<\/summary>/);
+  assert.match(sec, /^#### `colbymchenry\/codegraph#3454` at `bbbbbbbb` \(merge base `aaaaaaaa`\)/);
+  assert.match(sec, /\| issue-3447 \| `colbymchenry\/codegraph#3447` \(open\) \| BROKEN \| FIXED \| fixed \|/);
+  assert.match(sec, /<details><summary>Draft review comment for <code>colbymchenry\/codegraph#3454<\/code><\/summary>/);
   assert.equal(prSection(3454, [], pctx), '');
 });
 check('PR watch: select PRs whose head moved since the last check, newest first, capped; state keeps open PRs only', () => {
@@ -282,14 +282,14 @@ check('PR watch command line: select, issues, report once per changed result, mi
     assert.equal(p.status, 0, p.stderr); assert.match(p.stderr, /no complete results for #6/);
     const c = fs.readFileSync(o('c.md'), 'utf8');
     assert.match(c, /^### PR watch: 1 open PR\(s\) checked, 1 with a changed result/);
-    assert.match(c, /#### colbymchenry\/codegraph#5 at `bbbbbbbb` \(merge base `aaaaaaaa`\)[\s\S]*this PR fixes the issue-1 fixture \(#1\)/);
+    assert.match(c, /#### `colbymchenry\/codegraph#5` at `bbbbbbbb` \(merge base `aaaaaaaa`\)[\s\S]*this PR fixes the issue-1 fixture \(#1\)/);
     const st = JSON.parse(fs.readFileSync(o('s.json'), 'utf8'));
-    assert.deepEqual(Object.keys(st.prs), ['5']); assert.equal(st.prs['5'].head, B);
+    assert.deepEqual(Object.keys(st.prs), ['5', '6']); assert.equal(st.prs['5'].head, B); assert.equal(st.prs['6'].failed, 1); // P5: a failed PR is recorded for one retry
     fs.copyFileSync(o('s.json'), o('s0.json'));
     p = report('--state', o('s0.json'));
     assert.equal(p.status, 0, p.stderr); assert.equal(fs.readFileSync(o('c.md'), 'utf8'), ''); // same result: not reported again
     fs.rmSync(path.join(tmp, 'artifact/pr-5/confirm-next.json'));
-    p = report(); assert.equal(p.status, 0); assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['5'], undefined); // reruns missing: unchecked
+    p = report(); assert.equal(p.status, 0); assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['5'].failed, 1); // reruns missing: failed, retried once
     assert.equal(cli('pr-report', '--prs', f('bad.json', [{ number: 1, head: 'x', base: A }]), '--dir', o('artifact'), '--graph-assay', G, '--open', o('open.json'), '--report-out', o('x'), '--state-out', o('y')).status, 2);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
@@ -305,6 +305,83 @@ check('PR watch workflow: upstream code runs only in the read-only replay job; t
   assert.match(replay, /fetch -q origin "pull\/\$N\/head"/); // fork heads
   assert.match(wf, /pr-watch-state/); assert.doesNotMatch(wf, /watch-state\b(?<!pr-watch-state)/);
   assert.doesNotMatch(wf, /\.title/); // upstream-written text never reaches our comment
-  assert.match(wf, /key: codegraph-build-\$\{\{ matrix\.pr\.head \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/);
+  // P1: a job that runs PR code never saves a cache (a fork could plant a build the fixture watch then restores).
+  assert.doesNotMatch(wf, /uses: actions\/cache@/);
+  assert.match(replay, /uses: actions\/cache\/restore@\S+ # v4\.2\.0\n {8}with:\n {10}path: ~\/graph-assay-builds\/\$\{\{ matrix\.pr\.base \}\}\n {10}key: codegraph-build-\$\{\{ matrix\.pr\.base \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/);
+  assert.match(select, /catch \(e\) \{ console\.error\(`skipping #/); // P4
+  assert.match(report, /pr-watch-state changed since this run picked its PRs/); // P13
+});
+// ---- PR #85 review round 1 (.review/pr-85.md) ----
+check('P3: reports never write an upstream reference GitHub would turn into a cross-reference on the upstream timeline', () => {
+  const ch = diff([r('issue-3447', 'BROKEN', 'w', 3447)], [r('issue-3447', 'FIXED', '', 3447)]);
+  const outside = (md: string) => md.replace(/````markdown[\s\S]*?````/g, ''); // a fenced draft is inert until a person pastes it
+  for (const md of [report(ch, pctx), prSection(3454, ch, pctx)]) {
+    const bare = outside(md).replace(/`[^`]*`/g, '').replace(/<code>[\s\S]*?<\/code>/g, '');
+    assert.doesNotMatch(bare, /colbymchenry\/codegraph#\d/, md);
+    assert.doesNotMatch(bare, /github\.com\/colbymchenry\/codegraph\/(issues|pull)\//, md);
+  }
+});
+check('P2: the PR draft claims nothing about fixtures it does not cover; the section names them for a person', () => {
+  const ch = diff([r('issue-3447', 'BROKEN', 'w', 3447), r('b', 'FIXED', '', 3035)], [r('issue-3447', 'FIXED', '', 3447), r('b', 'ERROR', 'boom', 3035)]);
+  const d = reviewDraft(1, ch, pctx);
+  assert.doesNotMatch(d, /The other fixtures read the same/);
+  assert.match(prSection(1, ch, pctx), /Not in the draft, check by hand before posting: b\./);
+  const only = diff([r('issue-3447', 'BROKEN', 'w', 3447)], [r('issue-3447', 'FIXED', '', 3447)]);
+  assert.match(reviewDraft(1, only, pctx), /The other fixtures read the same on head and base\./);
+});
+check('P9: an empty base detail adds no empty code span to the draft', () => {
+  const d = reviewDraft(1, diff([r('issue-3447', 'CHANGED', '', 3447)], [r('issue-3447', 'FIXED', '', 3447)]), pctx);
+  assert.doesNotMatch(d, /``/);
+});
+check('P5/P10/P11/P12: select retries a failed head once, dedupes, refuses a bad cap or a bad stored state', () => {
+  const prs = [{ number: 5, head: B, base: A }, { number: 5, head: C, base: A }, { number: 4, head: B, base: A }];
+  assert.deepEqual(prSelect(prs, { prs: {} }, 6).map((p) => p.number), [5, 4]);
+  assert.deepEqual(prSelect([{ number: 4, head: B, base: A }], { prs: { 4: { head: B, sig: '', failed: 1 } } }, 6).length, 1);
+  assert.deepEqual(prSelect([{ number: 4, head: B, base: A }], { prs: { 4: { head: B, sig: '', failed: 2 } } }, 6).length, 0);
+  assert.throws(() => prSelect(prs, { prs: {} }, NaN), /bad cap/);
+  assert.throws(() => prSelect(prs, { prs: [] } as any, 6), /bad pr state/);
+  assert.throws(() => prSelect(prs, { prs: { 4: { head: 'main', sig: '' } } }, 6), /bad pr state/);
+  const st = prState({ prs: { 4: { head: A, sig: 'old' } } }, [4, 5], [], [{ number: 4, head: B }, { number: 5, head: B }]);
+  assert.deepEqual(st.prs['4'], { head: B, sig: 'old', failed: 1 });
+  assert.deepEqual(prState(st, [4], [], [{ number: 4, head: B }]).prs['4'], { head: B, sig: 'old', failed: 2 });
+});
+check('P6/P7/P8: a bad artifact fails only its PR; a reverted result is reported once; a section cut for size is re-reported later', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-prwatch2-'));
+  try {
+    const fx = path.join(tmp, 'fixtures');
+    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(v)); return p; };
+    const o = (name: string) => path.join(tmp, name);
+    const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fx], { encoding: 'utf8' });
+    const same = { results: [r('issue-1', 'BROKEN', 'w'), r('issue-2', 'FIXED', '', 2)] };
+    f('artifact/pr-5/prev.json', same); f('artifact/pr-5/next.json', same);
+    f('artifact/pr-6/prev.json', same); f('artifact/pr-6/next.json', { results: [r('issue-1', 'PWNED')] });
+    const prs = f('prs.json', [{ number: 5, head: B, base: A }, { number: 6, head: C, base: A }]);
+    const st = f('st.json', { prs: { 5: { head: A, sig: 'issue-1:fixed:FIXED:' } } });
+    const p = cli('pr-report', '--prs', prs, '--dir', o('artifact'), '--graph-assay', G, '--open', f('open.json', [5, 6]), '--state', st, '--report-out', o('c.md'), '--state-out', o('s.json'));
+    assert.equal(p.status, 0, p.stderr);
+    assert.match(p.stderr, /#6/);
+    const c = fs.readFileSync(o('c.md'), 'utf8');
+    assert.match(c, /`colbymchenry\/codegraph#5` at `bbbbbbbb`[\s\S]*no longer changes any fixture/);
+    const s2 = JSON.parse(fs.readFileSync(o('s.json'), 'utf8'));
+    assert.deepEqual(s2.prs['5'], { head: B, sig: '' }); assert.equal(s2.prs['6'].failed, 1);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  // P8: a PR section left out of the comment for size is not recorded, so the next run reports it.
+  const t2 = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-prwatch3-'));
+  try {
+    const fx = path.join(t2, 'fixtures');
+    const names = Array.from({ length: 40 }, (_, k) => `f-${k}`);
+    for (const name of names) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), '{}'); }
+    const w = (rel: string, v: any) => { const q = path.join(t2, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, JSON.stringify(v)); return q; };
+    const side = (d: string) => ({ results: names.map((nm, k) => r(nm, 'BROKEN', `${d}${k}`.padEnd(480, d), 100 + k)) });
+    for (const n of [7, 8]) { w(`artifact/pr-${n}/prev.json`, side('x')); w(`artifact/pr-${n}/next.json`, side('y')); w(`artifact/pr-${n}/confirm-prev.json`, side('x')); w(`artifact/pr-${n}/confirm-next.json`, side('y')); }
+    const q = spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'pr-report', '--prs', w('prs.json', [{ number: 7, head: B, base: A }, { number: 8, head: C, base: A }]),
+      '--dir', path.join(t2, 'artifact'), '--graph-assay', G, '--open', w('open.json', [7, 8]), '--fixtures', fx, '--report-out', path.join(t2, 'c.md'), '--state-out', path.join(t2, 's.json')], { encoding: 'utf8' });
+    assert.equal(q.status, 0, q.stderr);
+    const c = fs.readFileSync(path.join(t2, 'c.md'), 'utf8');
+    assert.ok(c.length <= LIMIT, String(c.length));
+    assert.match(c, /1 more PR section\(s\) left for the next run/);
+    assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(t2, 's.json'), 'utf8')).prs), ['7']); // #8 not recorded: reported next run
+  } finally { fs.rmSync(t2, { recursive: true, force: true }); }
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
