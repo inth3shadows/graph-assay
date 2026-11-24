@@ -1,12 +1,14 @@
-# Fixture watch: once a day, when upstream codegraph main has moved, build it, replay every fixture in
-# fixtures/oracle-candidates (fixtures/replay.mts), and report which verdicts changed since the last recorded
-# commit (tools/fixture-watch.ts). A change is rerun once before it counts. The report, with a ready-to-paste
-# draft per upstream issue, is a comment on this repo's open issue labelled `fixture-watch`; the verdicts are
-# stored as state.json on the `watch-state` branch. Nothing is ever posted to codegraph: this workflow's token
-# reaches only this repository, and a draft is posted by hand after a person checks it.
+# Fixture watch: once a day, when upstream codegraph main has moved past the commit recorded on the
+# `watch-state` branch, build both commits, replay every fixture in fixtures/oracle-candidates on each with this
+# checkout (fixtures/replay.mts), and report which verdicts changed (tools/fixture-watch.ts). Both sides are
+# scored by the same graph-assay code, so a change in graph-assay itself never passes for an upstream change.
+# A change is rerun on both commits before it counts. The report, with a ready-to-paste draft per upstream
+# issue, is a comment on this repo's open issue labelled `fixture-watch`; the new commit's verdicts are stored as
+# state.json on `watch-state`. Nothing is ever posted to codegraph: this workflow's token reaches only this
+# repository, and a draft is posted by hand after a person checks it.
 #
 # Two jobs, so a write token never shares a runner with code upstream controls: `replay` builds and runs
-# upstream codegraph with a read-only token; `report` runs only this repo's own code, on the replay JSON.
+# upstream codegraph with a read-only token; `report` runs only this repo's own code, on the replay results.
 # Dry run (no state, no comment; the report goes to the job summary): any pull request touching the watch
 # (461a5d87 -> 73c6cff6, where issue-3447 goes BROKEN -> FIXED), or a dispatch with `old` set.
 name: fixture-watch
@@ -20,7 +22,7 @@ on:
         required: false
         default: ''
       old:
-        description: compare with this commit instead of the stored state (a dry run that writes nothing)
+        description: compare with this commit instead of the recorded one (a dry run that writes nothing)
         required: false
         default: ''
       force:
@@ -40,7 +42,6 @@ on:
       - lib/fixture-install.ts
       - lib/fixture.ts
       - lib/main.ts
-      - lib/manifest.ts
       - lib/package.json
       - lib/provenance.ts
       - lib/sandbox.ts
@@ -71,6 +72,7 @@ jobs:
       skip: ${{ steps.shas.outputs.skip }}
       dry: ${{ steps.shas.outputs.dry }}
       new: ${{ steps.shas.outputs.new }}
+      prev: ${{ steps.shas.outputs.prev }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -94,68 +96,73 @@ jobs:
           fi
           [ -n "$NEW" ] || NEW=$(git ls-remote "https://github.com/$UPSTREAM.git" refs/heads/main | cut -f1)
           for s in "$NEW" ${OLD:+"$OLD"}; do [[ "$s" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full sha: $s" >&2; exit 1; }; done
-          dry=false skip=false
+          dry=false skip=false prev=
           if [ -n "$OLD" ]; then
-            dry=true
+            dry=true prev=$OLD
           else
-            # No branch yet (exit 2) is a first run; any other failure must not pass for one.
+            # No branch yet (exit 2) is a first run (baseline); any other failure must not pass for one.
             rc=0; git ls-remote --exit-code "https://github.com/$REPO.git" refs/heads/watch-state >/dev/null || rc=$?
             if [ "$rc" = 0 ]; then
               git fetch -q --depth=1 "https://github.com/$REPO.git" watch-state
-              git show FETCH_HEAD:state.json > watch/prev-state.json
-              last=$(node -p 'require("./watch/prev-state.json").codegraph')
-              if [ "$last" = "$NEW" ] && [ "$FORCE" != true ]; then skip=true; fi
+              git show FETCH_HEAD:state.json > watch/stored.json
+              prev=$(node -p 'require("./watch/stored.json").codegraph')
+              [[ "$prev" =~ ^[0-9a-f]{40}$ ]] || { echo "stored state has no full codegraph sha" >&2; exit 1; }
+              if [ "$prev" = "$NEW" ] && [ "$FORCE" != true ]; then skip=true; fi
             elif [ "$rc" != 2 ]; then
               echo "could not read the watch-state branch (git ls-remote exit $rc)" >&2; exit 1
             fi
           fi
-          echo "new=$NEW old=${OLD:-stored state} dry=$dry skip=$skip"
-          { echo "new=$NEW"; echo "old=$OLD"; echo "dry=$dry"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
+          echo "new=$NEW prev=${prev:-none (baseline)} dry=$dry skip=$skip"
+          { echo "new=$NEW"; echo "prev=$prev"; echo "dry=$dry"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
       - name: Cache the new build
         if: steps.shas.outputs.skip == 'false'
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: ~/graph-assay-builds/${{ steps.shas.outputs.new }}
           key: codegraph-build-${{ steps.shas.outputs.new }}-node22.23.2
-      - name: Cache the old build
-        if: steps.shas.outputs.skip == 'false' && steps.shas.outputs.old != ''
+      - name: Cache the previous build
+        if: steps.shas.outputs.skip == 'false' && steps.shas.outputs.prev != ''
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
-          path: ~/graph-assay-builds/${{ steps.shas.outputs.old }}
-          key: codegraph-build-${{ steps.shas.outputs.old }}-node22.23.2
-      - name: Build, replay, confirm the changes
+          path: ~/graph-assay-builds/${{ steps.shas.outputs.prev }}
+          key: codegraph-build-${{ steps.shas.outputs.prev }}-node22.23.2
+      - name: Build both commits, replay both, rerun the changes on both
         if: steps.shas.outputs.skip == 'false'
         env:
           NEW: ${{ steps.shas.outputs.new }}
-          OLD: ${{ steps.shas.outputs.old }}
+          PREV: ${{ steps.shas.outputs.prev }}
         run: |
           replay() { node fixtures/replay.mts "$@" || true; } # exit 1 on an ERROR row; the rows still count
           NEW_JS=$(tools/build-codegraph.sh "$NEW" ~/graph-assay-builds/"$NEW" | tail -1)
           replay "$NEW_JS" --json watch/next.json
           test -s watch/next.json
-          if [ -n "$OLD" ]; then
-            OLD_JS=$(tools/build-codegraph.sh "$OLD" ~/graph-assay-builds/"$OLD" | tail -1)
-            replay "$OLD_JS" --json watch/old.json
-            node tools/fixture-watch.ts state watch/old.json "$OLD" watch/prev-state.json
-          fi
-          if [ -f watch/prev-state.json ]; then
+          if [ -n "$PREV" ]; then
+            # The previous commit is replayed with this checkout too: both sides scored by the same code.
+            PREV_JS=$(tools/build-codegraph.sh "$PREV" ~/graph-assay-builds/"$PREV" | tail -1)
+            replay "$PREV_JS" --json watch/prev.json
+            test -s watch/prev.json
             # Written to a file first: a failing flips command must fail the step, not read as "no changes".
-            node tools/fixture-watch.ts flips --prev watch/prev-state.json --next watch/next.json > watch/flips.txt
+            node tools/fixture-watch.ts flips --prev watch/prev.json --next watch/next.json > watch/flips.txt
             mapfile -t flips < watch/flips.txt
             if [ "${#flips[@]}" -gt 0 ]; then
-              replay "$NEW_JS" "${flips[@]}" --json watch/confirm.json
-              test -s watch/confirm.json # a rerun that wrote nothing must not let the changes through unconfirmed
+              replay "$NEW_JS" "${flips[@]}" --json watch/confirm-next.json
+              replay "$PREV_JS" "${flips[@]}" --json watch/confirm-prev.json
+              # A rerun that wrote nothing must not let the changes through unconfirmed.
+              test -s watch/confirm-next.json
+              test -s watch/confirm-prev.json
             fi
           fi
-      - name: Report (job summary)
+      - name: Report (job summary, uncapped)
         if: steps.shas.outputs.skip == 'false'
         env:
           NEW: ${{ steps.shas.outputs.new }}
+          PREV: ${{ steps.shas.outputs.prev }}
         run: |
           args=(--next watch/next.json --sha "$NEW" --graph-assay "$GITHUB_SHA" --fixtures fixtures/oracle-candidates
-            --state-out watch/dry-state.json --report-out watch/dry-report.md)
-          [ -f watch/prev-state.json ] && args+=(--prev watch/prev-state.json)
-          [ -f watch/confirm.json ] && args+=(--confirm watch/confirm.json)
+            --state-out watch/dry-state.json --report-out watch/dry-report.md --no-limit)
+          if [ -n "$PREV" ]; then args+=(--prev watch/prev.json --prev-sha "$PREV"); fi
+          if [ -f watch/stored.json ]; then args+=(--state watch/stored.json); fi
+          if [ -f watch/confirm-next.json ]; then args+=(--confirm-prev watch/confirm-prev.json --confirm-next watch/confirm-next.json); fi
           node tools/fixture-watch.ts run "${args[@]}"
           if [ -s watch/dry-report.md ]; then cat watch/dry-report.md; else echo "No verdict changed."; fi >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -164,7 +171,9 @@ jobs:
           name: fixture-watch
           path: |
             watch/next.json
-            watch/confirm.json
+            watch/prev.json
+            watch/confirm-next.json
+            watch/confirm-prev.json
           if-no-files-found: error
           retention-days: 5
 
@@ -179,6 +188,8 @@ jobs:
     env:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
+      NEW: ${{ needs.replay.outputs.new }}
+      PREV: ${{ needs.replay.outputs.prev }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -190,36 +201,37 @@ jobs:
         with:
           name: fixture-watch
           path: artifact
-      - name: Read the stored state and the issues' states
+      - name: Take the replay results; read the stored state and the issues' states
         run: |
-          # Only the replay results come from the replay job (whose runner ran upstream code); nothing else in
-          # its artifact is read, so it cannot plant a previous state.
+          # Only the replay results come from the replay job (whose runner ran upstream code): nothing else in
+          # its artifact is read. The stored state is read here again, and `run` refuses it unless it is the
+          # state recorded for the commit the replay job compared against.
           mkdir -p watch
           cp artifact/next.json watch/next.json
-          if [ -f artifact/confirm.json ]; then cp artifact/confirm.json watch/confirm.json; fi
-          # Read here again, not taken from the replay job: that runner ran upstream code.
+          if [ -f artifact/prev.json ]; then cp artifact/prev.json watch/prev.json; fi
+          if [ -f artifact/confirm-prev.json ]; then cp artifact/confirm-prev.json watch/confirm-prev.json; fi
+          if [ -f artifact/confirm-next.json ]; then cp artifact/confirm-next.json watch/confirm-next.json; fi
           rc=0; git ls-remote --exit-code "https://github.com/$REPO.git" refs/heads/watch-state >/dev/null || rc=$?
           if [ "$rc" = 0 ]; then
             git fetch -q --depth=1 "https://github.com/$REPO.git" watch-state
-            git show FETCH_HEAD:state.json > watch/prev-state.json
+            git show FETCH_HEAD:state.json > watch/stored.json
           elif [ "$rc" != 2 ]; then
             echo "could not read the watch-state branch (git ls-remote exit $rc)" >&2; exit 1
           fi
+          if [ -n "$PREV" ] && [ ! -f watch/stored.json ]; then echo "the stored state disappeared since the replay job read it" >&2; exit 1; fi
           echo '{}' > watch/issue-states.json
-          if [ -f watch/prev-state.json ]; then
-            for n in $(node tools/fixture-watch.ts flips --prev watch/prev-state.json --next watch/next.json --issues); do
+          if [ -f watch/prev.json ]; then
+            for n in $(node tools/fixture-watch.ts flips --prev watch/prev.json --next watch/next.json --issues); do
               s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
               node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' watch/issue-states.json "$n" "$s"
             done
           fi
       - name: Diff and write the report
-        env:
-          NEW: ${{ needs.replay.outputs.new }}
         run: |
           args=(--next watch/next.json --sha "$NEW" --graph-assay "$GITHUB_SHA" --fixtures fixtures/oracle-candidates
             --issue-states watch/issue-states.json --state-out watch/state.json --report-out watch/report.md)
-          [ -f watch/prev-state.json ] && args+=(--prev watch/prev-state.json)
-          [ -f watch/confirm.json ] && args+=(--confirm watch/confirm.json)
+          if [ -n "$PREV" ]; then args+=(--prev watch/prev.json --prev-sha "$PREV" --state watch/stored.json); fi
+          if [ -f watch/confirm-next.json ]; then args+=(--confirm-prev watch/confirm-prev.json --confirm-next watch/confirm-next.json); fi
           node tools/fixture-watch.ts run "${args[@]}"
       - name: Comment on the tracking issue
         run: |
@@ -240,13 +252,14 @@ jobs:
           git -C "$d" init -q
           git -C "$d" config user.name "github-actions[bot]"
           git -C "$d" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f watch/prev-state.json ]; then
-            git -C "$d" fetch -q --depth=1 "$url" watch-state && git -C "$d" checkout -q -b watch-state FETCH_HEAD
+          if [ -f watch/stored.json ]; then
+            git -C "$d" fetch -q --depth=1 "$url" watch-state
+            git -C "$d" checkout -q -b watch-state FETCH_HEAD
           else
             git -C "$d" checkout -q --orphan watch-state
           fi
           cp watch/state.json "$d/state.json"
           git -C "$d" add state.json
           if git -C "$d" diff --cached --quiet; then echo "state unchanged"; exit 0; fi
-          git -C "$d" commit -q -m "codegraph $(node -p 'require("./watch/state.json").codegraph')"
+          git -C "$d" commit -q -m "codegraph $NEW"
           git -C "$d" push -q "$url" HEAD:refs/heads/watch-state

@@ -2,3 +2,5 @@
 # DOM library types that fixtures reference as annotations (fixtures/oracle-candidates/issue-3444).
 CanvasRenderingContext2D
 HTMLCanvasElement
+# JavaScript global value (tools/fixture-watch-test.ts: an uncapped report limit).
+Infinity
