@@ -56,7 +56,12 @@ function prepare(name) {
   let snapshot = path.join(dir, 'snapshot.json');
   if (spec.dropLines || spec.patch) {
     const snap = JSON.parse(fs.readFileSync(snapshot, 'utf8'));
-    const node = (q) => { const n = snap.nodes.find((x) => x.name === q.name && (!q.kind || x.kind === q.kind) && (q.start === undefined || x.start === q.start)); if (!n) throw new Error(`${name}: patch: no node ${JSON.stringify(q)}`); return n; };
+    const node = (q) => {
+      const ns = snap.nodes.filter((x) => x.name === q.name && (!q.kind || x.kind === q.kind) && (q.start === undefined || x.start === q.start));
+      if (!ns.length) throw new Error(`${name}: patch: no node ${JSON.stringify(q)}`);
+      if (ns.length > 1) throw new Error(`${name}: patch: ambiguous node ${JSON.stringify(q)} (${ns.length} match; give "start")`);
+      return ns[0];
+    };
     const at = (e, where) => { const src = snap.nodes.find((x) => x.id === e.src); return `${src.file}:${e.line}` === where; };
     const CALLS = new Set(['calls', 'instantiates']);
     for (const p of spec.patch ?? []) {

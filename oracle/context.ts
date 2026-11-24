@@ -175,8 +175,7 @@ export function createContext(opts: Options) {
     if (list) list.push({ start: n.start, end: n.end }); else defNodes.set(key, [{ start: n.start, end: n.end }]);
   }
   const slackHeldElsewhere = (file: string, name: string, def: number, start: number, end: number) =>
-    on('def-slack-own-node') && (defNodes.get(`${file}\0${name}`) ?? []).some((n) => !(n.start === start && n.end === end)
-      && !(n.start <= start && end <= n.end)
+    on('def-slack-own-node') && (defNodes.get(`${file}\0${name}`) ?? []).some((n) => !(n.start <= start && end <= n.end)
       && ((n.start >= def && n.start < start) || (n.start < def && def <= n.end)));
   const inSlack = (x, e, name) => name === e.tname && x.line >= e.tstart - 2
     && !slackHeldElsewhere(e.tfile, e.tname, x.line, e.tstart, e.tend);

@@ -247,7 +247,8 @@ A unit is a (caller, callee) pair, counted once however many calls carry it.
 - **Subject pairs**: every non-guessed call or instantiation edge, with or without a site line. The
   source node maps to the caller definition it holds (same name; span as SPEC §2), else to the one
   around its start, else the file. The target node maps to the definition it holds, the one nearest
-  its start. An edge with an endpoint the oracle never indexed is counted in `unmappedEdges`.
+  its start. An edge with an endpoint the oracle never indexed is counted in `unmappedEdges`, as is a
+  caller whose every nearby same-named definition belongs to another subject node (def-slack-own-node).
 - **Scoring**: recall = matched ÷ oracle pairs. A subject pair the oracle lacks is judged only where
   the oracle answers for it: some SCIP reference named like the callee lies inside the caller (a
   project, library or defined local symbol). Otherwise the pair is `oracleSilent`, unaligned, like a
