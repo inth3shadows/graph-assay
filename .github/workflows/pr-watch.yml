@@ -7,10 +7,10 @@
 # checking it. State (head and result per open PR) lives on the `pr-watch-state` branch.
 #
 # Three jobs, so a write token never shares a runner with code upstream controls: `select` (no upstream code)
-# picks the PRs; `replay` (one per PR, read-only token) builds the merge base on the runner and the PR head only
-# inside a locked-down container (no docker socket, privileges, host namespaces or runner environment), so a
-# fork's code can't reach the runner's cache or artifact tokens; `report` runs only this repo's code on the
-# replay results and alone can write.
+# picks the PRs; `replay` (one per PR, read-only token) builds and replays the merge base and the PR head, each
+# in the same locked-down container image (no docker socket, no capabilities, no new privileges, no host
+# namespaces, no runner environment, no build cache), so a fork's code can't reach the runner's cache or artifact
+# tokens; `report` runs only this repo's code on the replay results and alone can write.
 # Dry run (report in each replay job's summary; no state, no comment): any pull request touching the watch
 # (upstream PR 3454, which fixed issue-3447), or a dispatch with `pr` set.
 name: pr-watch
@@ -59,7 +59,7 @@ env:
   UPSTREAM: colbymchenry/codegraph
   NODE_VERSION: '22.23.2'
   CAP: '6'
-  # The image PR-head code runs in (same Node as setup-node).
+  # The image both sides are built and replayed in (same Node as setup-node).
   SANDBOX_IMAGE: node:22.23.2-bookworm
 jobs:
   select:
@@ -112,7 +112,7 @@ jobs:
           cap=$CAP; [ "$dry" = true ] && cap=1
           node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --cap 1000 > sel/candidates.json
           # Each PR is compared with its merge base, not with the base branch's tip. The cap applies to PRs whose
-          # merge base was found; one whose compare fails (404, timeout, an unreachable fork head) is skipped
+          # merge base was found; one whose compare answers 404/422 (no such head, no common history) is skipped
           # and recorded as a failed check by the report job, so it can't hold a slot every day.
           CAP_N="$cap" node -e '
             const {execFileSync}=require("child_process"); const fs=require("fs");
