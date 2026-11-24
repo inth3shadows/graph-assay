@@ -40,6 +40,7 @@ on:
       - lib/fixture-install.ts
       - lib/fixture.ts
       - lib/main.ts
+      - lib/manifest.ts
       - lib/package.json
       - lib/provenance.ts
       - lib/sandbox.ts
@@ -138,8 +139,13 @@ jobs:
             node tools/fixture-watch.ts state watch/old.json "$OLD" watch/prev-state.json
           fi
           if [ -f watch/prev-state.json ]; then
-            mapfile -t flips < <(node tools/fixture-watch.ts flips --prev watch/prev-state.json --next watch/next.json)
-            if [ "${#flips[@]}" -gt 0 ]; then replay "$NEW_JS" "${flips[@]}" --json watch/confirm.json; fi
+            # Written to a file first: a failing flips command must fail the step, not read as "no changes".
+            node tools/fixture-watch.ts flips --prev watch/prev-state.json --next watch/next.json > watch/flips.txt
+            mapfile -t flips < watch/flips.txt
+            if [ "${#flips[@]}" -gt 0 ]; then
+              replay "$NEW_JS" "${flips[@]}" --json watch/confirm.json
+              test -s watch/confirm.json # a rerun that wrote nothing must not let the changes through unconfirmed
+            fi
           fi
       - name: Report (job summary)
         if: steps.shas.outputs.skip == 'false'
@@ -183,9 +189,14 @@ jobs:
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: fixture-watch
-          path: watch
+          path: artifact
       - name: Read the stored state and the issues' states
         run: |
+          # Only the replay results come from the replay job (whose runner ran upstream code); nothing else in
+          # its artifact is read, so it cannot plant a previous state.
+          mkdir -p watch
+          cp artifact/next.json watch/next.json
+          if [ -f artifact/confirm.json ]; then cp artifact/confirm.json watch/confirm.json; fi
           # Read here again, not taken from the replay job: that runner ran upstream code.
           rc=0; git ls-remote --exit-code "https://github.com/$REPO.git" refs/heads/watch-state >/dev/null || rc=$?
           if [ "$rc" = 0 ]; then
@@ -197,7 +208,7 @@ jobs:
           echo '{}' > watch/issue-states.json
           if [ -f watch/prev-state.json ]; then
             for n in $(node tools/fixture-watch.ts flips --prev watch/prev-state.json --next watch/next.json --issues); do
-              s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state)
+              s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
               node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' watch/issue-states.json "$n" "$s"
             done
           fi

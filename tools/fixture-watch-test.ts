@@ -11,6 +11,15 @@ import { diff, draft, nextState, report, rows, type Change } from './fixture-wat
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let n = 0;
+// A fixture set for the command line tests: the names they use, each with an expect.json.
+let fixDir = '';
+const fixtureDir = () => {
+  if (fixDir) return fixDir;
+  fixDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-watch-fx-'));
+  for (const name of ['issue-1', 'issue-2', 'a']) { fs.mkdirSync(path.join(fixDir, name)); fs.writeFileSync(path.join(fixDir, name, 'expect.json'), '{}'); }
+  process.on('exit', () => fs.rmSync(fixDir, { recursive: true, force: true }));
+  return fixDir;
+};
 const check = (name: string, fn: () => void) => { fn(); n++; console.log(`ok    ${name}`); };
 const r = (name: string, verdict: string, detail = '', issue: number | null = 1) => ({ name, issue, verdict, detail });
 const A = 'a'.repeat(40); const B = 'b'.repeat(40); const G = 'c'.repeat(40);
@@ -30,12 +39,15 @@ check('a confirming rerun that disagrees makes the change unstable; one that agr
   const confirm = [r('a', 'FIXED'), r('b', 'BROKEN', 'x')]; // c missing from the rerun: unstable too
   assert.deepEqual(kinds(diff(prev, next, confirm)), { a: 'fixed', b: 'unstable', c: 'unstable' });
 });
-check('the stored state keeps the previous row for ERROR and unstable fixtures, and drops a new ERROR', () => {
+// Changed in review round 1 (F1/F9, .review/pr-81.md): a new ERROR is now stored as an ERROR row (so it is reported
+// once), an erroring fixture's held row is marked, and every stored row carries the commit it was seen on.
+check('the stored state holds the previous row for ERROR (marked) and unstable fixtures, and stores a new ERROR as such', () => {
   const prev = [r('e', 'BROKEN', 'x'), r('u', 'BROKEN', 'x'), r('f', 'BROKEN', 'x')];
   const next = [r('e', 'ERROR', 'boom'), r('u', 'FIXED'), r('f', 'FIXED'), r('n', 'ERROR', 'boom')];
   const changes = diff(prev, next, [r('u', 'BROKEN', 'x'), r('f', 'FIXED')]);
   const s = nextState(prev, next, changes, { codegraph: B, recordedAt: 'd', graphAssay: G });
-  assert.deepEqual(s.results, [r('e', 'BROKEN', 'x'), r('u', 'BROKEN', 'x'), r('f', 'FIXED')]);
+  assert.deepEqual(s.results, [{ ...r('e', 'BROKEN', 'x'), erroringSince: B }, r('u', 'BROKEN', 'x'), { ...r('f', 'FIXED'), seenAt: B },
+    { ...r('n', 'ERROR', 'boom'), seenAt: B }]);
 });
 check('input is refused when its shape is wrong, never rendered', () => {
   assert.throws(() => rows({}), /no results/);
@@ -75,7 +87,7 @@ check('the command line: baseline, then a change, then flips; malformed input ex
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-watch-'));
   try {
     const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
-    const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a], { encoding: 'utf8' });
+    const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fixtureDir()], { encoding: 'utf8' });
     const out = (name: string) => path.join(tmp, name);
     const r1 = f('r1.json', { results: [r('issue-1', 'BROKEN', 'w'), r('issue-2', 'FIXED', '', 2)] });
     let p = cli('run', '--next', r1, '--sha', A, '--graph-assay', G, '--state-out', out('s1.json'), '--report-out', out('m1.md'));
@@ -96,5 +108,86 @@ check('the command line: baseline, then a change, then flips; malformed input ex
     assert.equal(cli('run', '--next', r2, '--sha', 'abc', '--graph-assay', G, '--state-out', out('x'), '--report-out', out('y')).status, 2);
     assert.equal(cli('run', '--next', r2, '--sha', A, '--graph-assay', G, '--issue-states', f('bs.json', { 1: 'merged' }), '--state-out', out('x'), '--report-out', out('y')).status, 2);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// ---- review round 1 (.review/pr-81.md) ----
+const C = 'd'.repeat(40);
+const meta = (sha: string) => ({ codegraph: sha, recordedAt: 'd', graphAssay: G });
+const step = (prev: any[], next: any[], sha: string, confirm?: any[]) => {
+  const changes = diff(prev, next, confirm ?? next);
+  return { changes, state: nextState(prev, next, changes, meta(sha)).results };
+};
+check('F1: a fixture that keeps erroring is reported once, then quiet until it recovers', () => {
+  const s0 = [{ ...r('a', 'BROKEN', 'w'), seenAt: A }];
+  const s1 = step(s0, [r('a', 'ERROR', 'boom')], B);
+  assert.deepEqual(kinds(s1.changes), { a: 'error' });
+  const s2 = step(s1.state, [r('a', 'ERROR', 'boom again')], C);
+  assert.deepEqual(kinds(s2.changes), {});
+  const s3 = step(s2.state, [r('a', 'FIXED')], C);
+  assert.deepEqual(kinds(s3.changes), { a: 'fixed' });
+});
+check('F1/F9: a fixture with no verdict yet stays quiet while it errors, and its first verdict is "new", not "fixed"', () => {
+  const s1 = step([], [r('a', 'ERROR', 'boom')], A);
+  assert.deepEqual(kinds(s1.changes), { a: 'error' });
+  const s2 = step(s1.state, [r('a', 'ERROR', 'boom')], B);
+  assert.deepEqual(kinds(s2.changes), {});
+  const s3 = step(s2.state, [r('a', 'FIXED')], C);
+  assert.deepEqual(kinds(s3.changes), { a: 'new' });
+  assert.equal(draft(s3.changes[0], { ...ctx, prev: B, next: C }), null);
+});
+check('F2: a held row keeps the commit it was seen on, and the draft names that commit and range', () => {
+  const s1 = step([{ ...r('issue-1', 'BROKEN', 'w'), seenAt: A }], [r('issue-1', 'ERROR', 'boom')], B);
+  const s2 = step(s1.state, [r('issue-1', 'FIXED')], C);
+  const d = draft(s2.changes[0], { ...ctx, prev: B, next: C });
+  assert.match(d, /goes from BROKEN on aaaaaaaa to FIXED on dddddddd/);
+  assert.match(d, new RegExp(`compare/${A}\\.\\.\\.${C}`));
+  const u1 = step([{ ...r('issue-1', 'BROKEN', 'w'), seenAt: A }], [r('issue-1', 'FIXED')], B, [r('issue-1', 'BROKEN', 'w')]);
+  assert.deepEqual(kinds(u1.changes), { 'issue-1': 'unstable' });
+  assert.equal(u1.state[0].seenAt, A);
+});
+check('F5: a change where graph-assay changed the fixture or its scoring gets no draft and says so', () => {
+  const prev = [{ ...r('issue-1', 'BROKEN', 'w'), seenAt: A, fixture: '1'.repeat(64) }];
+  const own = diff(prev, [{ ...r('issue-1', 'FIXED'), fixture: '2'.repeat(64) }]);
+  assert.equal(own[0].local, true);
+  assert.equal(draft(own[0], ctx), null);
+  assert.match(report(own, ctx), /graph-assay changed this fixture or its scoring/);
+  const closure = diff(prev, [{ ...r('issue-1', 'FIXED'), fixture: '1'.repeat(64) }], undefined, { closureChanged: true });
+  assert.equal(closure[0].local, true);
+  assert.equal(diff(prev, [{ ...r('issue-1', 'FIXED'), fixture: '1'.repeat(64) }])[0].local, false);
+});
+check('F7: a report never exceeds GitHub\'s comment limit: drafts go first, then rows', () => {
+  const big = Array.from({ length: 400 }, (_, i) => ({ kind: 'edges' as const, name: `issue-${i}`, issue: i + 1, local: false,
+    from: { ...r(`issue-${i}`, 'BROKEN', 'x'.repeat(500)), seenAt: A }, to: r(`issue-${i}`, 'BROKEN', 'y'.repeat(500)) }));
+  const out = report(big, ctx);
+  assert.ok(out.length <= 60000, String(out.length));
+  assert.match(out, /left out/);
+});
+check('F8: an ERROR row with no issue keeps the issue its previous row had', () => {
+  assert.equal(diff([r('a', 'BROKEN', 'w', 5)], [r('a', 'ERROR', 'boom', null)])[0].issue, 5);
+});
+check('F3/F6/F9: the command line refuses changes without --confirm, accepts an unknown issue state, and state keeps ERROR rows', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-watch-'));
+  try {
+    const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
+    const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fixtureDir()], { encoding: 'utf8' });
+    const o = (name: string) => path.join(tmp, name);
+    assert.equal(cli('state', f('r0.json', { results: [r('issue-1', 'BROKEN', 'w'), r('issue-2', 'ERROR', 'boom', 2)] }), A, o('s0.json')).status, 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(o('s0.json'), 'utf8')).results.map((x: any) => x.verdict), ['BROKEN', 'ERROR']);
+    const r1 = f('r1.json', { results: [r('issue-1', 'FIXED'), r('issue-2', 'ERROR', 'boom', 2)] });
+    let p = cli('run', '--prev', o('s0.json'), '--next', r1, '--sha', B, '--graph-assay', G, '--state-out', o('x'), '--report-out', o('y'));
+    assert.equal(p.status, 2); assert.match(p.stderr, /--confirm/);
+    p = cli('run', '--prev', o('s0.json'), '--next', r1, '--confirm', r1, '--sha', B, '--graph-assay', G,
+      '--issue-states', f('st.json', { 1: 'unknown' }), '--state-out', o('s1.json'), '--report-out', o('m1.md'));
+    assert.equal(p.status, 0, p.stderr);
+    const m = fs.readFileSync(o('m1.md'), 'utf8');
+    assert.match(m, /#1 \(state unknown\)/); assert.match(m, /This looks fixed/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('F4/F3: the report job reads only next.json and confirm.json from the artifact, and the replay job checks its rerun', () => {
+  const wf = fs.readFileSync(path.join(here, '..', '.github/workflows/fixture-watch.yml'), 'utf8');
+  const dl = /uses: actions\/download-artifact@\S+[^\n]*\n(?: {8}.*\n)+/.exec(wf)?.[0] ?? '';
+  assert.match(dl, /path: artifact\n/);
+  assert.match(wf, /cp artifact\/next\.json watch\/next\.json/);
+  assert.match(wf, /test -s watch\/confirm\.json/);
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
