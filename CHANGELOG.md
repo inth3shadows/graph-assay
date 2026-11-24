@@ -108,10 +108,11 @@ All notable changes to this project are recorded here. The format follows
   kind holds the definition: it starts there, or spans it from a decorator above (rule
   `def-slack-own-node`, on the call-site and function-pair tracks). Before, a wrong edge to a one-line
   method declared right below a same-named one scored `ok` forward and `found` missing, in any language.
-  A value node (`const W = wrap(\n function W…)`, a class field holding an arrow) does not count, so those
-  stay `ok`. Self-tests `go-def-slack`, `go-def-slack-missing`, `go-def-slack-pairs` and
-  `py-def-slack-decorated` fail with the rule off; `ts-def-slack-arrow` and `ts-def-slack-wrapper` keep the
-  slack's cases `ok`. `oracle/test/run.ts` patches can pick a node by `start` and move a node with `span`. On the dev split it changes no verdict and no function pair: no site flips in 58 comparisons and
+  A value node (`const W = wrap(\n function W…)`'s constant) does not count, nor does a node that
+  encloses the target, so those stay `ok`. Self-tests `go-def-slack`, `go-def-slack-missing`, `go-def-slack-pairs` and
+  `py-def-slack-decorated` fail with the rule off; `ts-def-slack-arrow`, `ts-def-slack-wrapper` and
+  `ts-def-slack-enclosing` keep the slack's cases `ok`. `oracle/test/run.ts` patches can pick a node by
+  `start`, and move or retype one with a validated `span` op. On the dev split it changes no verdict and no function pair: no site flips in 58 comparisons and
   identical pair sets in all 29 runs (23 cached work dirs across the four subjects, plus codegraph
   461a5d87's runs of mux, ky, express, click, requests and excalidraw; the two cached mux dirs predate
   the current oracle and were skipped).

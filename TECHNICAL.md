@@ -193,10 +193,10 @@ constructor node stands for its class). A node named like the callee may start u
 lines below the definition (`const x =\n (…) =>`), unless another node of that name and a definition kind holds
 the definition: it starts there, as with two one-line same-named methods on adjacent lines, or spans it
 from a decorator above (rule `def-slack-own-node`, SPEC v6.0, #78). A value node does not count
-(`const W = wrap(\n function W…)`). The pair track's node mapping applies the same rule. Self-tests:
+(`const W = wrap(\n function W…)`), nor does a node that encloses the target. The pair track's node mapping applies the same rule. Self-tests:
 `go-def-slack`, `go-def-slack-missing`, `go-def-slack-pairs`, `py-def-slack-decorated` (the rule's
-side), `ts-def-slack-arrow`, `ts-def-slack-wrapper` (the slack's side). `oracle/test/run.ts` patches take
-`start` to pick one of several same-named nodes, and a `span` op moves a node's lines. In missing-edge mode each edge carries at most one call site:
+side), `ts-def-slack-arrow`, `ts-def-slack-wrapper`, `ts-def-slack-enclosing` (the slack's side). `oracle/test/run.ts` patches take
+`start` to pick one of several same-named nodes, and a `span` op moves a node's lines or changes its kind. In missing-edge mode each edge carries at most one call site:
 same-line edges are assigned first in SCIP document order, then edges within 3 lines, nearest first
 (rule `one-edge-per-unit`, SPEC §6), so `r.name("a").name("b")` with one edge has one `found` site.
 `oracle/test/py-multiplicity` pins both.

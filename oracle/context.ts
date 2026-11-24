@@ -160,10 +160,10 @@ export function createContext(opts: Options) {
   // definition is that node, not the target (`def-slack-own-node`, SPEC §5). Without the check, a
   // wrong edge to a one-line method declared right below a same-named one scores `ok` (#78).
   // Only a node that can itself be a call's definition counts: a value node (`const W = wrap(\n
-  // function W…)`'s constant, a class field holding an arrow) shares the name of the function it
-  // holds and must not take the slack away. A node holds the definition when it starts on or below
-  // its line, above the target, or spans it from above (a decorated definition started at its
-  // decorator), without enclosing the target.
+  // function W…)`'s constant) shares the name of the function it holds and must not take the slack
+  // away. A node holds the definition when it starts on or below its line, above the target, or spans
+  // it from above (a decorated definition started at its decorator). A node that encloses the target
+  // holds nothing, whatever its kind (`forwardRef(function W…)` given a function node of its own).
   const DEF_KINDS = new Set(['function', 'method', 'class', 'struct', 'interface', 'trait', 'protocol', 'enum',
     'union', 'type', 'test', 'component', 'constructor']);
   const defNodes = new Map<string, Array<{ start: number; end: number }>>();
@@ -175,7 +175,8 @@ export function createContext(opts: Options) {
   }
   const slackHeldElsewhere = (file: string, name: string, def: number, start: number, end: number) =>
     on('def-slack-own-node') && (defNodes.get(`${file}\0${name}`) ?? []).some((n) => !(n.start === start && n.end === end)
-      && ((n.start >= def && n.start < start) || (n.start < def && def <= n.end && !(n.start <= start && end <= n.end))));
+      && !(n.start <= start && end <= n.end)
+      && ((n.start >= def && n.start < start) || (n.start < def && def <= n.end)));
   const inSlack = (x, e, name) => name === e.tname && x.line >= e.tstart - 2
     && !slackHeldElsewhere(e.tfile, e.tname, x.line, e.tstart, e.tend);
   const inTarget = (d, e, name, sym) => d && (!on('callee-name') || sameCallee(e, name, sym))

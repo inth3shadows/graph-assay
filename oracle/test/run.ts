@@ -21,8 +21,8 @@
 //   real subject makes on the case: { "op": "drop", "at": "file:line", "kind" } removes call edges;
 //   { "op": "retarget", "at", "to": { "name", "kind", "start"? } } points them at another node ("start" picks one of several same-named nodes); { "op": "add",
 //   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
-//   one with "provenance"); { "op": "span", "node": { "name", "kind", "start"? }, "start"?, "end"? } moves a node's
-//   span, as a subject that starts a decorated definition at its decorator does.
+//   one with "provenance"); { "op": "span", "node": { "name", "kind", "start"? }, "start"?, "end"?, "kind"? } moves a
+//   node's span or changes its kind, as a subject that starts a decorated definition at its decorator does.
 // --dump: print every site's bucket per case (for writing expectations), then exit.
 // --mutate: re-run every case once per rule in the modules oracle.ts imports (each `on('<rule>')`, see rules.ts) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
@@ -62,7 +62,13 @@ function prepare(name) {
     for (const p of spec.patch ?? []) {
       if (p.op === 'drop') snap.edges = snap.edges.filter((e) => !(CALLS.has(e.kind) && at(e, p.at) && (!p.kind || e.kind === p.kind)));
       else if (p.op === 'retarget') for (const e of snap.edges) { if (CALLS.has(e.kind) && at(e, p.at)) e.dst = node(p.to).id; }
-      else if (p.op === 'span') { const n = node(p.node); n.start = p.start ?? n.start; n.end = p.end ?? n.end; }
+      else if (p.op === 'span') {
+        if (!p.node) throw new Error(`${name}: patch: span needs "node"`);
+        const n = node(p.node);
+        if (p.start === undefined && p.end === undefined && p.kind === undefined) throw new Error(`${name}: patch: span changes nothing`);
+        n.start = p.start ?? n.start; n.end = p.end ?? n.end; n.kind = p.kind ?? n.kind;
+        if (n.start > n.end) throw new Error(`${name}: patch: span gives ${n.name} start ${n.start} > end ${n.end}`);
+      }
       else if (p.op === 'add') snap.edges.push({ kind: 'calls', src: node(p.from).id, dst: node(p.to).id, line: p.line, col: null, provenance: p.provenance ?? null, ref: p.to.name, resolvedBy: null });
       else throw new Error(`${name}: unknown patch op ${p.op}`);
     }
