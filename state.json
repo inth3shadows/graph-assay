@@ -1,5 +1,5 @@
 {
- "codegraph": "461a5d87a873a4932997cd9a49042ab30e45a675",
+ "codegraph": "73c6cff66e525a92bff65675b6b0c46687e91ef1",
  "recordedAt": "2026-11-24",
  "graphAssay": "acad04eac1ba4222f62f633a84e0f8d33e7e3d07",
  "erroring": [],
@@ -181,8 +181,8 @@
   {
    "name": "issue-3447",
    "issue": 3447,
-   "verdict": "BROKEN",
-   "detail": "fromNew -calls-> route.go:Route::Path; fromNewShort -calls-> route.go:Route::Path"
+   "verdict": "FIXED",
+   "detail": ""
   },
   {
    "name": "issue-3448",
