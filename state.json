@@ -1,0 +1,314 @@
+{
+ "codegraph": "461a5d87a873a4932997cd9a49042ab30e45a675",
+ "recordedAt": "2026-11-24",
+ "graphAssay": "acad04eac1ba4222f62f633a84e0f8d33e7e3d07",
+ "erroring": [],
+ "results": [
+  {
+   "name": "a",
+   "issue": 3034,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "b",
+   "issue": 3035,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "c",
+   "issue": 3036,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "g1-go-new-receiver",
+   "issue": 3237,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2944",
+   "issue": 2944,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2946",
+   "issue": 2946,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2947",
+   "issue": 2947,
+   "verdict": "BROKEN",
+   "detail": "a -calls-> app.ts:App::render"
+  },
+  {
+   "name": "issue-2948",
+   "issue": 2948,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2949",
+   "issue": 2949,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2951",
+   "issue": 2951,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2952",
+   "issue": 2952,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2953",
+   "issue": 2953,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2954",
+   "issue": 2954,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2957",
+   "issue": 2957,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2958",
+   "issue": 2958,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2962",
+   "issue": 2962,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2963",
+   "issue": 2963,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2964",
+   "issue": 2964,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2966",
+   "issue": 2966,
+   "verdict": "CHANGED",
+   "detail": "caller not in graph: init"
+  },
+  {
+   "name": "issue-2967",
+   "issue": 2967,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2973",
+   "issue": 2973,
+   "verdict": "CHANGED",
+   "detail": "missing saveCart -calls-> src/a_cart.js:handleSave; saveProfile -calls-> src/b_profile.js:handleSave (only guessed: saveCart -calls-> src/a_cart.js:handleSave; saveProfile -calls-> src/b_profile.js:handleSave)"
+  },
+  {
+   "name": "issue-2974",
+   "issue": 2974,
+   "verdict": "CHANGED",
+   "detail": "missing loadOwn -calls-> src/server.js:src/server.js::GET:/users/:id (only guessed: loadOwn -calls-> src/server.js:src/server.js::GET:/users/:id)"
+  },
+  {
+   "name": "issue-2975",
+   "issue": 2975,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-2976",
+   "issue": 2976,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-3271",
+   "issue": 3271,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "issue-3443",
+   "issue": 3443,
+   "verdict": "BROKEN",
+   "detail": "destructured -calls-> app.tsx:App::mutateElement; plain -calls-> app.tsx:App::mutateElement"
+  },
+  {
+   "name": "issue-3444",
+   "issue": 3444,
+   "verdict": "BROKEN",
+   "detail": "chained -calls-> a.ts:Viewport::translate; twoSteps -calls-> a.ts:Viewport::translate; fromFactory -calls-> a.ts:Viewport::translate"
+  },
+  {
+   "name": "issue-3445",
+   "issue": 3445,
+   "verdict": "BROKEN",
+   "detail": "loop_annotated -calls-> models.py:Widget::describe; loop_returned -calls-> models.py:Widget::describe; comprehension -calls-> models.py:Widget::describe; run -calls-> cmd.py:CliRunner::invoke"
+  },
+  {
+   "name": "issue-3446",
+   "issue": 3446,
+   "verdict": "BROKEN",
+   "detail": "with_tuple -calls-> formatting.py:HelpFormatter::getvalue; loop_threads -calls-> formatting.py:Capture::start"
+  },
+  {
+   "name": "issue-3447",
+   "issue": 3447,
+   "verdict": "BROKEN",
+   "detail": "fromNew -calls-> route.go:Route::Path; fromNewShort -calls-> route.go:Route::Path"
+  },
+  {
+   "name": "issue-3448",
+   "issue": 3448,
+   "verdict": "BROKEN",
+   "detail": "closureSameName -calls-> route.go:Route::Path"
+  },
+  {
+   "name": "j1-java-overload",
+   "issue": 3040,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "java-fq-static-receiver",
+   "issue": 3290,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "java-typed-var-wildcard",
+   "issue": 3291,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "kmp-22",
+   "issue": 3033,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "laravel-route-fq-class",
+   "issue": 3292,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "laravel-route-group-use",
+   "issue": 3292,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "laravel-route-namespace-use",
+   "issue": 3292,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "m1-py-super",
+   "issue": 3218,
+   "verdict": "BROKEN",
+   "detail": "missing Child::__init__ -calls-> base.py:Base::__init__; Child::greet -calls-> base.py:Base::greet; LocalChild::run -calls-> child.py:Local::run"
+  },
+  {
+   "name": "m2-py-method-return-local",
+   "issue": 3240,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "n1-py-local-import",
+   "issue": 3229,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "n2-py-comprehension",
+   "issue": 3230,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "n3-py-enclosing-local",
+   "issue": 3231,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "n4-py-builtin",
+   "issue": 3232,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "n5-ts-barrel-member",
+   "issue": 3233,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "p1",
+   "issue": 3037,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "p3",
+   "issue": 3038,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "p4",
+   "issue": 3039,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "p5-py-stdlib-import",
+   "issue": 3239,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "t1-ts-global-builtin",
+   "issue": 3238,
+   "verdict": "FIXED",
+   "detail": ""
+  },
+  {
+   "name": "t2-ts-typed-instance-member",
+   "issue": null,
+   "verdict": "BROKEN",
+   "detail": "loadUser -calls-> index.ts:client"
+  }
+ ]
+}
