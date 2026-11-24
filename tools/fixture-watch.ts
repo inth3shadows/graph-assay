@@ -257,14 +257,19 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
 // issue's comment with a ready-to-paste review comment for the PR; nothing is posted upstream from here.
 
 export interface Pr { number: number; head: string; base: string }
-export interface PrState { prs: Record<string, { head: string; sig: string; failed?: number; errored?: number }> }
+export interface PrState { prs: Record<string, { head: string; sig: string; failed?: number; errored?: number; erroredAt?: string }> }
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A PR set aside after 3 unclear merge-base errors on one head is tried again this many days after its last strike. */
+export const SET_ASIDE_DAYS = 7;
 
 /** A stored PR state, checked (PR #85 review, P11). */
 export function prStateOf(st: any): PrState {
   if (!st || typeof st.prs !== 'object' || Array.isArray(st.prs) || st.prs === null) throw new Error('bad pr state');
   for (const [k, v] of Object.entries<any>(st.prs)) {
     const count = (x: any) => x === undefined || (Number.isSafeInteger(x) && x > 0);
-    if (!/^\d+$/.test(k) || !v || !SHA.test(v.head) || typeof v.sig !== 'string' || !count(v.failed) || !count(v.errored)) throw new Error(`bad pr state entry ${k}`);
+    // A strike carries the date of the last one, so a set-aside PR is tried again later (PR #88 review, R2-2).
+    const dated = v && (v.errored === undefined ? v.erroredAt === undefined : typeof v.erroredAt === 'string' && DAY.test(v.erroredAt) && !Number.isNaN(Date.parse(v.erroredAt)));
+    if (!/^\d+$/.test(k) || !v || !SHA.test(v.head) || typeof v.sig !== 'string' || !count(v.failed) || !count(v.errored) || !dated) throw new Error(`bad pr state entry ${k}`);
   }
   return st;
 }
@@ -314,8 +319,9 @@ export function prSection(pr: number, changes: Change[], ctx: Ctx, allScored = t
 }
 
 /** The open PRs to check this run: head moved since the last check, in the given (newest-updated-first) order, capped. */
-export function prSelect(prs: Pr[], state: PrState, cap: number): Pr[] {
+export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Date().toISOString().slice(0, 10)): Pr[] {
   if (!(cap === Infinity || (Number.isSafeInteger(cap) && cap > 0))) throw new Error(`bad cap: ${cap}`);
+  if (!DAY.test(today) || Number.isNaN(Date.parse(today))) throw new Error(`bad date: ${today}`);
   if (!Array.isArray(prs)) throw new Error('bad pr list');
   for (const p of prs) if (!(Number.isSafeInteger(p?.number) && p.number > 0 && SHA.test(p.head) && SHA.test(p.base))) throw new Error(`bad pr: ${JSON.stringify(p)}`);
   const st = prStateOf(state);
@@ -324,15 +330,18 @@ export function prSelect(prs: Pr[], state: PrState, cap: number): Pr[] {
   return prs.filter((p) => !seen.has(p.number) && seen.add(p.number)).filter((p) => {
     const e = st.prs[String(p.number)];
     if (!e || e.head !== p.head) return true;
-    // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 runs (#87).
-    if ((e.errored ?? 0) >= 3) return false;
+    // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 runs (#87), and tried
+    // again SET_ASIDE_DAYS after the last strike: an outage that struck it costs a delay, never the PR (R2-2).
+    if ((e.errored ?? 0) >= 3) return (Date.parse(today) - Date.parse(e.erroredAt!)) / 86_400_000 >= SET_ASIDE_DAYS;
     return e.failed !== undefined ? e.failed < 2 : e.errored !== undefined;
   }).slice(0, cap);
 }
 
 /** The PR state after a run: checked PRs updated, PRs no longer open dropped. */
 export function prState(state: PrState, open: number[], checked: Array<{ number: number; head: string; sig: string }>,
-  failed: Array<{ number: number; head: string }> = [], errored: Array<{ number: number; head: string }> = []): PrState {
+  failed: Array<{ number: number; head: string }> = [], errored: Array<{ number: number; head: string }> = [],
+  date = new Date().toISOString().slice(0, 10)): PrState {
+  if (!DAY.test(date)) throw new Error(`bad date: ${date}`);
   const keep = new Set(open.map(String));
   const prs: PrState['prs'] = {};
   for (const [k, v] of Object.entries(prStateOf(state).prs)) if (keep.has(k)) prs[k] = v;
@@ -345,7 +354,7 @@ export function prState(state: PrState, open: number[], checked: Array<{ number:
   for (const f of errored) {
     const k = String(f.number); if (!keep.has(k)) continue;
     const old = prs[k];
-    prs[k] = { head: f.head, sig: old?.sig ?? '', ...(old?.head === f.head && old.failed ? { failed: old.failed } : {}), errored: old?.head === f.head && old.errored ? old.errored + 1 : 1 };
+    prs[k] = { head: f.head, sig: old?.sig ?? '', ...(old?.head === f.head && old.failed ? { failed: old.failed } : {}), errored: old?.head === f.head && old.errored ? old.errored + 1 : 1, erroredAt: date };
   }
   return { prs: Object.fromEntries(Object.entries(prs).sort(([a], [b]) => Number(a) - Number(b))) };
 }
@@ -392,7 +401,7 @@ function main(argv: string[]) {
     const cap = /^\d+$/.test(capArg) ? Number(capArg) : NaN;
     const prsFile = opt(args, '--prs'); if (!prsFile) throw new Error('pr-select needs --prs');
     const st = opt(args, '--state');
-    console.log(JSON.stringify(prSelect(read(prsFile), st ? prStateOf(read(st)) : { prs: {} }, cap)));
+    console.log(JSON.stringify(prSelect(read(prsFile), st ? prStateOf(read(st)) : { prs: {} }, cap, opt(args, '--date') ?? undefined)));
     return;
   }
   if (cmd === 'pr-issues' || cmd === 'pr-report') {
@@ -456,19 +465,10 @@ function main(argv: string[]) {
       errored.push(...er.map((x: any) => ({ number: x.number, head: x.head })));
     }
     const skippedFile = opt(args, '--skipped');
-    let skipped = 0;
     if (skippedFile) {
       const sk = read(skippedFile);
       if (!Array.isArray(sk) || !sk.every((x: any) => Number.isSafeInteger(x?.number) && x.number > 0 && SHA.test(x?.head))) throw new Error('bad --skipped list');
       for (const x of sk) failed.push({ number: x.number, head: x.head });
-      skipped = sk.length;
-    }
-    // An unclear error counts against its PR only when GitHub answered other lookups in the same select run (a
-    // merge base found, or a definite 404/422). When every lookup failed, it was an outage, a rate limit or a
-    // timeout on GitHub's side: no PR gets a strike, and each is tried again next run (PR #88 review, T1).
-    if (errored.length && !selected.length && !skipped) {
-      console.error(`pr-report: GitHub answered no lookup this run: no strike for ${errored.map((x) => `#${x.number}`).join(', ')}`);
-      errored.length = 0;
     }
     const head = (shown: number) => `### PR watch: ${quiet.length + reported.length} open PR(s) checked, ${reported.length} with a changed result${shown < reported.length ? ` (${shown} shown)` : ''}\n\nDrafts are candidates: re-check on the PR's current head, then post by hand after approval.\n`;
     const all = reported.length ? [head(reported.length), ...reported.map((x) => x.section)].join('\n') : '';
@@ -489,12 +489,14 @@ function main(argv: string[]) {
     const capped = reported.length ? [head(shown.length), ...shown.map((x) => x.section), ...tail].join('\n') : '';
     const recorded = [...shown, ...tooLarge].map((x) => x.entry);
     fs.writeFileSync(need('--report-out'), capped);
-    const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, all);
-    const next = prState(state, open, [...quiet, ...recorded], failed, errored);
-    const setAside = Object.entries(next.prs).filter(([, v]) => (v.errored ?? 0) >= 3).map(([k]) => `#${k}`);
+    const next = prState(state, open, [...quiet, ...recorded], failed, errored, date);
+    const setAside = Object.entries(next.prs).filter(([, v]) => (v.errored ?? 0) >= 3).map(([k]) => Number(k));
     fs.writeFileSync(need('--state-out'), JSON.stringify(next, null, 1) + '\n');
-    // Errored and set-aside PRs are named in the log too, so a PR the watch stopped trying is visible (PR #88 review, T8).
-    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${setAside.length ? `; set aside until their head moves: ${setAside.join(', ')}` : ''}`);
+    // Errored and set-aside PRs are named in the log and the job summary, so a PR the watch stopped trying is
+    // visible (PR #88 review, T8, R2-3).
+    const asideLine = setAside.length ? `Set aside after 3 unclear merge-base lookup errors (tried again ${SET_ASIDE_DAYS} days after the last): ${setAside.map(ref).join(', ')}.\n` : '';
+    const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, [all, asideLine].filter(Boolean).join('\n'));
+    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${setAside.length ? `; set aside, tried again ${SET_ASIDE_DAYS} days after the last strike: ${setAside.map((n) => `#${n}`).join(', ')}` : ''}`);
     return;
   }
   if (cmd === 'run') {

@@ -127,18 +127,19 @@ jobs:
               catch (e) {
                 const msg=String(e.stderr || e.message).split("\n")[0];
                 // Only a definite answer about this PR (404, 422: no such head, or no common history) counts as a
-                // failed check. A rate limit (403, 429) is about this run, not the PR: the lookups stop, no strike.
-                // Any other error (5xx, timeout) is left for a later run and listed as errored; pr-report counts it
-                // against the PR only when GitHub answered other lookups this run, so an outage strikes no PR. Several
-                // in a row mean an outage, so the lookups stop.
+                // failed check. A rate limit (429, or a 403 saying so) is about this run, not the PR: the lookups
+                // stop, no strike. Any other error (5xx, timeout, another 403) is listed as errored, a strike on that
+                // head: after 3 the PR is set aside, and tried again 7 days after the last. Several in a row mean an
+                // outage, so the lookups stop; and at most cap errored lookups are made per run.
                 if (/HTTP (404|422)/.test(msg)) {
                   if (skipped.length < cap) { console.error(`skipping #${p.number}: no merge base (${msg})`); skipped.push({ number: p.number, head: p.head }); }
                   else console.error(`skip limit reached: #${p.number} (${msg}) left for a later run`);
                   errs=0; continue; // a definite answer: GitHub is answering
                 }
-                if (/HTTP (403|429)|rate limit/i.test(msg)) { console.error(`stopping: rate limited at #${p.number} (${msg})`); break; }
+                if (/HTTP 429|rate limit/i.test(msg)) { console.error(`stopping: rate limited at #${p.number} (${msg})`); break; }
                 console.error(`GitHub API error on #${p.number} (${msg}): left for a later run`); errored.push({ number: p.number, head: p.head });
                 if (++errs >= 3) { console.error("stopping: GitHub API errors on 3 PRs in a row"); break; }
+                if (errored.length >= cap) { console.error(`stopping: ${cap} GitHub API errors this run`); break; }
               }
             }
             fs.writeFileSync("sel/picked.json", JSON.stringify(ok)); fs.writeFileSync("sel/skipped.json", JSON.stringify(skipped)); fs.writeFileSync("sel/errored.json", JSON.stringify(errored))'

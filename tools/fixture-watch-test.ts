@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { LIMIT, diff, draft, erroringOf, nextState, prSection, prSelect, prState, report, rerunNames, reviewDraft, rows, signature, withIssues, type Change } from './fixture-watch.ts';
+import { LIMIT, diff, draft, erroringOf, nextState, prSection, prSelect, prState, prStateOf, report, rerunNames, reviewDraft, rows, signature, withIssues, type Change } from './fixture-watch.ts';
 import { execFileSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -441,13 +441,17 @@ check('Q4/Q8/Q9: PRs skipped by select are recorded as failed; the header counts
 });
 // A node -e or sandbox script ends early when an apostrophe inside it closes the quote. Bash can still parse the
 // result when the apostrophes come in pairs (two scripts merge), so the check is on what follows the closing quote:
-// only shell arguments (plain words or double-quoted strings) may, never more script (PR #88 review, T2).
+// only shell arguments (plain words or double-quoted strings) and shell operators may, never more script (PR #88
+// review, T2, R2-7). Blind spot: an apostrophe followed by plain words to the end of its line, closed on a later
+// line, still passes; bash -n below catches it unless the apostrophes pair up.
 const earlyEnds = (wf: string) => [...wf.matchAll(/(?:node -e|sandbox(?: --offline)? (?:base|head)) '([^']*)'([^\n]*)/g)]
-  .filter((m) => !/^(\s+("[^"'`]*"|[\w./$-]+))*\s*$/.test(m[2])).map((m) => `...${m[1].slice(-60)}'${m[2].slice(0, 40)}`);
+  .filter((m) => !/^(\s*(2>&1|&&|\|\||>>?|[|;)])|\s+("[^"'`]*"|[\w./$-]+))*\s*$/.test(m[2])).map((m) => `...${m[1].slice(-60)}'${m[2].slice(0, 40)}`);
 check('every node -e and sandbox script in the workflows is one single-quoted shell word (an apostrophe inside would end it early)', () => {
   assert.equal(earlyEnds("sandbox --offline head 'echo the PRs' heads and the PRs' tails'\n").length, 1); // a pair: bash -n passes this
   assert.equal(earlyEnds("x=$(node -e 'a(); // don't\n b(); // won't\n')\n").length, 1);
   assert.equal(earlyEnds("node -e 'a()' rep/x.json \"$n\"\nsandbox base 'b' \"${flips[@]}\"\n").length, 0);
+  assert.equal(earlyEnds("x=$(node -e 'a()')\nnode -e 'b()' > out.json 2>&1 && echo ok\nnode -e 'c()' | sort; true\n").length, 0); // R2-7
+  assert.equal(earlyEnds("x=$(node -e 'a(); // don't')\n").length, 1);
   for (const name of ['fixture-watch', 'pr-watch']) {
     const wf = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8');
     assert.ok(wf.match(/node -e '/g)!.length >= 1);
@@ -477,13 +481,24 @@ check('#87: "the other fixtures read the same" only when every fixture was score
   assert.doesNotMatch(reviewDraft(1, ch, pctx, false), /The other fixtures read the same/);
   assert.match(reviewDraft(1, ch, pctx, false), /Not every fixture could be scored on both sides/);
 });
-check('#87: a PR whose merge-base lookup keeps failing with an unclear error is set aside after 3 runs on the same head', () => {
-  let st = prState({ prs: {} }, [4], [], [], [{ number: 4, head: B }]);
-  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 1 });
-  st = prState(st, [4], [], [], [{ number: 4, head: B }]); st = prState(st, [4], [], [], [{ number: 4, head: B }]);
-  assert.equal(st.prs['4'].errored, 3);
-  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6).length, 0);
-  assert.equal(prSelect([{ number: 4, head: C, base: A }], st, 6).length, 1); // a new head is tried again
+check('#87/R2-2: a PR whose merge-base lookup keeps failing with an unclear error is set aside after 3 runs on the same head, for 7 days after the last strike', () => {
+  const E = [{ number: 4, head: B }];
+  let st = prState({ prs: {} }, [4], [], [], E, '2026-11-01');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 1, erroredAt: '2026-11-01' });
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6, '2026-11-02').length, 1); // retried while under 3
+  st = prState(st, [4], [], [], E, '2026-11-02'); st = prState(st, [4], [], [], E, '2026-11-03');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 3, erroredAt: '2026-11-03' });
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6, '2026-11-09').length, 0); // set aside
+  assert.equal(prSelect([{ number: 4, head: C, base: A }], st, 6, '2026-11-09').length, 1); // a new head is tried again
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6, '2026-11-10').length, 1); // 7 days on: tried once more
+  st = prState(st, [4], [], [], E, '2026-11-10');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 4, erroredAt: '2026-11-10' });
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6, '2026-11-16').length, 0); // and set aside another 7 days
+  // A strike carries its date; a bad or missing one is refused.
+  assert.throws(() => prStateOf({ prs: { 4: { head: B, sig: '', errored: 1 } } }), /bad pr state entry 4/);
+  assert.throws(() => prStateOf({ prs: { 4: { head: B, sig: '', errored: 1, erroredAt: '11/03/2026' } } }), /bad pr state entry 4/);
+  assert.throws(() => prStateOf({ prs: { 4: { head: B, sig: '', erroredAt: '2026-11-03' } } }), /bad pr state entry 4/);
+  assert.throws(() => prSelect([], { prs: {} }, 6, 'today'), /bad date/);
 });
 check('#87: every run: block in both watch workflows parses as bash (bash -n)', () => {
   for (const name of ['fixture-watch', 'pr-watch']) {
@@ -518,16 +533,16 @@ check('T1/T3: pr-report: an unclear-error strike counts only when GitHub answere
     const o = (name: string) => path.join(tmp, name);
     const report = (prs: any[], ...extra: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'pr-report', '--prs', f('prs.json', prs), '--dir', o('artifact'),
       '--graph-assay', G, '--open', f('open.json', [4, 5, 11]), '--fixtures', fx, '--report-out', o('c.md'), '--state-out', o('s.json'), ...extra], { encoding: 'utf8' });
-    const prior = f('prior.json', { prs: { 4: { head: B, sig: '', errored: 2 } } });
+    const prior = f('prior.json', { prs: { 4: { head: B, sig: '', errored: 2, erroredAt: '2026-11-20' } } });
     const errored = f('errored.json', [{ number: 4, head: B }]);
-    // An outage: every lookup failed, nothing was picked or skipped. No strike: #4 keeps its count.
-    let p = report([], '--state', prior, '--errored', errored, '--skipped', f('none.json', []));
+    // R2-2 (design A): an unclear error always strikes, also when it was the run's only lookup; the strike is dated.
+    let p = report([], '--state', prior, '--errored', errored, '--skipped', f('none.json', []), '--date', '2026-11-24');
     assert.equal(p.status, 0, p.stderr);
-    assert.deepEqual(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'], { head: B, sig: '', errored: 2 });
-    // GitHub answered another PR (404/422): the strike counts.
-    p = report([], '--state', prior, '--errored', errored, '--skipped', f('sk.json', [{ number: 11, head: B }]));
+    assert.deepEqual(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'], { head: B, sig: '', errored: 3, erroredAt: '2026-11-24' });
+    // R2-3: a set-aside PR is named in the job summary too, not only the log.
+    p = report([], '--state', prior, '--errored', errored, '--date', '2026-11-24', '--summary-out', o('sum.md'));
     assert.equal(p.status, 0, p.stderr);
-    assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'].errored, 3);
+    assert.match(fs.readFileSync(o('sum.md'), 'utf8'), /Set aside after 3 unclear merge-base lookup errors \(tried again 7 days after the last\): `colbymchenry\/codegraph#4`/);
     // GitHub answered with a merge base: the strike counts, and the picked PR's rows are read.
     // The replay rows claim issue 999 (a forged head): the report names #1, from this checkout's expect.json.
     // issue-2 errors on both sides: the draft does not claim the other fixtures read the same.
@@ -567,10 +582,43 @@ check('T1/T3: pr-report: an unclear-error strike counts only when GitHub answere
     assert.match(fs.readFileSync(o('c.md'), 'utf8'), /Not every fixture could be scored on both sides/);
     // T5: a reverted result where not every fixture was scored says so; T8: the log names errored and set-aside PRs.
     f('artifact/pr-5/next.json', { results: [r('issue-1', 'BROKEN', 'w')] });
-    p = report([{ number: 5, head: C, base: A }], '--state', f('was.json', { prs: { 4: { head: B, sig: '', errored: 2 }, 5: { head: A, sig: 'issue-1:fixed:FIXED' } } }), '--errored', errored);
+    p = report([{ number: 5, head: C, base: A }], '--state', f('was.json', { prs: { 4: { head: B, sig: '', errored: 2, erroredAt: '2026-11-20' }, 5: { head: A, sig: 'issue-1:fixed:FIXED' } } }), '--errored', errored);
     assert.equal(p.status, 0, p.stderr);
     assert.match(fs.readFileSync(o('c.md'), 'utf8'), /no longer changes any fixture that could be scored on both sides \(some could not/);
-    assert.match(p.stdout, /1 errored; set aside until their head moves: #4/);
+    assert.match(p.stdout, /1 errored; set aside, tried again 7 days after the last strike: #4/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('R2-1/R2-6: the select job\'s merge-base lookups, run against a fake gh: only a rate limit stops a run without a strike; errored lookups are capped', () => {
+  const wf = fs.readFileSync(path.join(here, '..', '.github/workflows/pr-watch.yml'), 'utf8');
+  const m = /CAP_N="\$cap" node -e '([^']*)'\n/.exec(wf); assert.ok(m, 'select lookup script not found');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-select-'));
+  try {
+    const bin = path.join(tmp, 'bin'); fs.mkdirSync(bin); fs.mkdirSync(path.join(tmp, 'sel'));
+    // The fake answers by head sha: the behavior is the head's first character.
+    fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/sh
+h=\${2##*...}; case "\${h%%\\?*}" in
+  o*) echo ${A}; exit 0;;
+  n*) echo "gh: Not Found (HTTP 404)" >&2; exit 1;;
+  f*) echo "gh: Repository access blocked (HTTP 403)" >&2; exit 1;;
+  r*) echo "gh: API rate limit exceeded for user ID 1. (HTTP 403)" >&2; exit 1;;
+  t*) echo "gh: Too Many Requests (HTTP 429)" >&2; exit 1;;
+  *) echo "gh: Bad Gateway (HTTP 502)" >&2; exit 1;;
+esac
+`, { mode: 0o755 });
+    const run = (kinds: string, cap = 6) => {
+      const cands = [...kinds].map((k, i) => ({ number: i + 1, head: (k + String(i).padStart(2, '0')).padEnd(40, '0'), base: A }));
+      fs.writeFileSync(path.join(tmp, 'sel', 'candidates.json'), JSON.stringify(cands));
+      const q = spawnSync(process.execPath, ['-e', m[1]], { cwd: tmp, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, UPSTREAM: 'o/r', CAP_N: String(cap) } });
+      assert.equal(q.status, 0, q.stderr);
+      const out = (n: string) => JSON.parse(fs.readFileSync(path.join(tmp, 'sel', `${n}.json`), 'utf8')).map((x: any) => x.number);
+      return { ok: out('picked'), skipped: out('skipped'), errored: out('errored') };
+    };
+    assert.deepEqual(run('foo'), { ok: [2, 3], skipped: [], errored: [1] }); // a blocked PR's 403: errored, the queue goes on
+    assert.deepEqual(run('orxo'), { ok: [1], skipped: [], errored: [] }); // a rate limit: stop, no strike
+    assert.deepEqual(run('otxo'), { ok: [1], skipped: [], errored: [] }); // 429 the same
+    assert.deepEqual(run('xxxo'), { ok: [], skipped: [], errored: [1, 2, 3] }); // 3 in a row: stop
+    assert.deepEqual(run('xnxnxnxno', 3), { ok: [], skipped: [2, 4], errored: [1, 3, 5] }); // errored capped per run: 404s between them reset the in-a-row count, not this
+    assert.deepEqual(run('nxo'), { ok: [3], skipped: [1], errored: [2] });
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('#87: workflow: replay containers have no network; isolation fallback is explicit; dry runs have their own concurrency group; links pin the PR head; image by digest; compare has a timeout; errors reset on a definite answer', () => {
@@ -582,7 +630,6 @@ check('#87: workflow: replay containers have no network; isolation fallback is e
   assert.match(wf, /SANDBOX_IMAGE: node:22\.23\.2-bookworm@sha256:[0-9a-f]{64}/);
   assert.match(wf, /timeout: 60000/);
   assert.match(wf, /errs=0; continue;/);
-  assert.match(wf, /if \(\/HTTP \(403\|429\)\|rate limit\/i\.test\(msg\)\) \{[^\n]*rate limited[^\n]*break; \}\n/); // T1: a rate limit strikes no PR
   assert.match(wf, /--errored rep\/errored\.json/);
   assert.doesNotMatch(wf, /tried again next run/);
   assert.doesNotMatch(fs.readFileSync(path.join(here, 'fixture-watch.ts'), 'utf8'), /left unchecked, so the next run tries it again/);
