@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { LIMIT, diff, draft, erroringOf, needsConfirm, nextState, report, rows, type Change } from './fixture-watch.ts';
+import { LIMIT, diff, draft, erroringOf, nextState, report, rerunNames, rows, type Change } from './fixture-watch.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let n = 0;
@@ -22,9 +22,10 @@ const kinds = (cs: Change[]) => Object.fromEntries(cs.map((c) => [c.name, c.kind
  * confirming), never every row (round 3 found a test that confirmed everything hid a stall).
  */
 const step = (prev: any[], next: any[], sha: string, stored?: { erroring: string[] }, reruns?: { prev: any[]; next: any[] }) => {
-  const picked = new Set(diff(prev, next).filter(needsConfirm).map((c) => c.name));
-  const confirmPrev = reruns?.prev ?? prev.filter((r) => picked.has(r.name));
-  const confirmNext = reruns?.next ?? next.filter((r) => picked.has(r.name));
+  const picked = new Set(rerunNames(prev, next));
+  // As the workflow: no rerun files at all when nothing is picked (R4-5).
+  const confirmPrev = reruns?.prev ?? (picked.size ? prev.filter((r) => picked.has(r.name)) : undefined);
+  const confirmNext = reruns?.next ?? (picked.size ? next.filter((r) => picked.has(r.name)) : undefined);
   const changes = diff(prev, next, { erroring: stored ? erroringOf(stored) : undefined, confirmPrev, confirmNext });
   return { changes, state: nextState(next, { codegraph: sha, recordedAt: 'd', graphAssay: G }) };
 };
@@ -43,16 +44,12 @@ check('both confirming reruns must agree: either side disagreeing, or missing, m
   const confirmPrev = [r('a', 'BROKEN', 'x'), r('b', 'BROKEN', 'x'), r('c', 'BROKEN', 'x'), r('d', 'FIXED')]; // d's previous side flaky
   assert.deepEqual(kinds(diff(prev, next, { confirmPrev, confirmNext })), { a: 'fixed', b: 'unstable', c: 'unstable', d: 'unstable' });
 });
-check('F5/R2-1: a graph-assay change cannot pass for an upstream one: the diff reads only the two replays made now', () => {
-  // Whatever an older graph-assay recorded, both commits read BROKEN under today's code: no change.
-  assert.deepEqual(diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'x')], { erroring: new Set() }), []);
-});
 check('the stored state: the new commit, the fixtures erroring on it (sorted), and its verdicts as a record', () => {
   const next = [r('z', 'ERROR', 'boom'), r('f', 'FIXED'), r('a', 'ERROR', 'boom')];
   assert.deepEqual(nextState(next, { codegraph: B, recordedAt: 'd', graphAssay: G }),
     { codegraph: B, recordedAt: 'd', graphAssay: G, erroring: ['a', 'z'], results: next });
   assert.throws(() => erroringOf({ erroring: ['../x'] }), /bad erroring list/);
-  assert.deepEqual([...erroringOf({})], []);
+  assert.throws(() => erroringOf({ codegraph: A }), /bad erroring list/); // R4-6 (was: read as [])
 });
 check('F1: a fixture that keeps erroring is reported once, then quiet; R3-4: also when both commits error', () => {
   const s1 = step([r('a', 'BROKEN', 'w')], [r('a', 'ERROR', 'boom')], B, { erroring: [] });
@@ -63,12 +60,34 @@ check('F1: a fixture that keeps erroring is reported once, then quiet; R3-4: als
   assert.deepEqual(kinds(both.changes), { b: 'error' });
   assert.match(report(both.changes, ctx), /started erroring \(reported once\)/);
 });
-check('R3-1/F2/F9: recovery after errors is a first verdict (no draft), needs no rerun, and the run goes through', () => {
+check('R3-1/F2/R4-4: recovery after errors is reported as recovered (no draft), and the run goes through', () => {
   const s1 = step([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'ERROR', 'boom')], B, { erroring: [] });
   const s2 = step([r('issue-1', 'ERROR', 'boom')], [r('issue-1', 'FIXED')], C, s1.state);
-  assert.deepEqual(kinds(s2.changes), { 'issue-1': 'new' });
+  assert.deepEqual(kinds(s2.changes), { 'issue-1': 'recovered' });
   assert.equal(draft(s2.changes[0], { ...ctx, prev: B, next: C }), null);
-  assert.deepEqual(diff([r('issue-1', 'ERROR', 'boom')], [r('issue-1', 'FIXED')]).filter(needsConfirm), []);
+});
+check('R4-1: the previous commit erroring only on re-score is rerun: confirmed, the fix is a fix (with a draft); still erroring, it says check by hand', () => {
+  const prev = [r('issue-1', 'ERROR', 'timeout')]; const next = [r('issue-1', 'FIXED')];
+  assert.deepEqual(rerunNames(prev, next), ['issue-1']);
+  const ok = diff(prev, next, { erroring: new Set(), confirmPrev: [r('issue-1', 'BROKEN', 'w')], confirmNext: next });
+  assert.deepEqual(kinds(ok), { 'issue-1': 'fixed' });
+  assert.equal(ok[0].from?.verdict, 'BROKEN');
+  assert.match(draft(ok[0], ctx), /goes from BROKEN on aaaaaaaa to FIXED on bbbbbbbb/);
+  const still = diff(prev, next, { erroring: new Set(), confirmPrev: prev, confirmNext: next });
+  assert.deepEqual(kinds(still), { 'issue-1': 'prev-error' });
+  assert.equal(draft(still[0], ctx), null);
+  assert.match(report(still, ctx), /the previous commit errored when re-scored: check by hand \(no draft\)/);
+});
+check('R4-2: an ERROR on the new commit is reported when the previous commit has a verdict today, whatever the stored list says', () => {
+  assert.deepEqual(kinds(diff([r('x', 'BROKEN', 'w')], [r('x', 'ERROR', 'boom')], { erroring: new Set(['x']) })), { x: 'error' });
+  assert.deepEqual(kinds(diff([r('x', 'ERROR', 'boom')], [r('x', 'ERROR', 'boom')], { erroring: new Set(['x']) })), {});
+});
+check('R4-4: a listed fixture whose error cleared on both commits is reported as recovered', () => {
+  assert.deepEqual(kinds(diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'x')], { erroring: new Set(['a']) })), { a: 'recovered' });
+});
+check('R4-3: an unstable change says it will not be looked at again', () => {
+  const u = diff([r('a', 'BROKEN', 'x')], [r('a', 'FIXED')], { confirmPrev: [r('a', 'BROKEN', 'x')], confirmNext: [r('a', 'BROKEN', 'x')] });
+  assert.match(report(u, ctx), /unstable \(a rerun disagreed; not re-checked later: check by hand\)/);
 });
 check('F2: a draft names exactly the two commits both replays were made on', () => {
   const d = draft(diff([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'FIXED')])[0], ctx);
@@ -175,9 +194,12 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     p = cli('run', '--prev', r1, '--prev-sha', A, '--next', r3, '--sha', B, '--graph-assay', G, '--state', o('s1.json'), '--state-out', o('e1.json'), '--report-out', o('e1.md'));
     assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e1.md'), 'utf8'), /started erroring/);
     assert.deepEqual(JSON.parse(fs.readFileSync(o('e1.json'), 'utf8')).erroring, ['issue-1']);
-    assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, '');
-    p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
-    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| ERROR|first verdict/);
+    // The previous commit errors and the new one has a verdict: rerun on both sides (R4-1), as the workflow does.
+    assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, 'issue-1\n');
+    const pick = (file: string, name: string) => f(`pick-${name}-${path.basename(file)}`, { results: JSON.parse(fs.readFileSync(file, 'utf8')).results.filter((x: any) => x.name === name) });
+    p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'),
+      '--confirm-prev', pick(r3, 'issue-1'), '--confirm-next', pick(r2, 'issue-1'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
+    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| issue-1 \| [^|]+ \| - \| FIXED \| recovered from errors \(no draft\) \|/); // R4-5
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('the workflow: the previous commit is replayed with today\'s checkout; reruns are required; the report job takes only replay results and checks the state it diffs', () => {

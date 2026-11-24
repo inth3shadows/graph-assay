@@ -23,7 +23,9 @@
 // State: { codegraph, recordedAt, graphAssay, erroring: [fixture names], results }. Only `codegraph` (the commit to
 // compare against next time) and `erroring` (the fixtures erroring on it) are read back; `results` is a record
 // for people. A fixture that starts erroring, on either commit, is reported once and stays quiet while it is
-// on the list; when it gets a verdict again that is reported as its first verdict, with no draft.
+// on the list and the previous commit errors too; when it has a verdict again it is reported as recovered, with
+// no draft. A fixture that errors only on today's re-score of the previous commit is rerun there: the rerun's
+// verdict is compared, or, if it errors again, the change is reported for a person to check.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +40,7 @@ export const LIMIT = 60000; // GitHub refuses a comment over 65,536 characters
 
 export interface Row { name: string; issue: number | null; verdict: string; detail: string }
 export interface State { codegraph: string; recordedAt: string; graphAssay: string | null; erroring: string[]; results: Row[] }
-export type Kind = 'fixed' | 'regression' | 'edges' | 'changed' | 'new' | 'error' | 'unstable';
+export type Kind = 'fixed' | 'regression' | 'edges' | 'changed' | 'new' | 'error' | 'recovered' | 'prev-error' | 'unstable';
 export interface Change { kind: Kind; name: string; issue: number | null; from: Row | null; to: Row }
 
 /** The rows of a replay, checked: an unexpected shape is refused, never rendered. Other fields are dropped. */
@@ -59,7 +61,7 @@ export function rows(doc: any, opts: { fixtures?: Set<string> } = {}): Row[] {
 
 /** The stored state's list of erroring fixtures, checked. */
 export function erroringOf(state: any): Set<string> {
-  const e = state?.erroring ?? [];
+  const e = state?.erroring;
   if (!Array.isArray(e) || !e.every((n) => typeof n === 'string' && NAME.test(n))) throw new Error('stored state: bad erroring list');
   return new Set(e);
 }
@@ -68,11 +70,24 @@ const broken = (v: string) => v === 'BROKEN' || v === 'GUESSED';
 const same = (a: Row | undefined, b: Row) => !!a && a.verdict === b.verdict && a.detail === b.detail;
 
 /**
- * Every fixture whose verdict or wrong edges changed between the previous commit's replay and the new one,
- * that has its first verdict, or that started erroring. Which changes need confirming depends only on the two
- * replays, so `flips` (which picks the reruns) and `run` always agree. `erroring` is the stored list (without
- * one: the fixtures the previous replay has as ERROR); `confirmPrev` / `confirmNext` are the reruns of the
- * changed fixtures on each side, which must agree.
+ * The fixtures to rerun on both commits, from the two replays alone (so `flips`, which picks them, and `run`
+ * always agree): every fixture whose verdict or wrong edges changed, and every fixture the previous commit's
+ * replay has as ERROR while the new one has a verdict (an error only on re-score must not hide a fix).
+ */
+export function rerunNames(prev: Row[], next: Row[]): string[] {
+  const before = new Map(prev.map((r) => [r.name, r]));
+  return next.filter((to) => {
+    const p = before.get(to.name);
+    if (!p || to.verdict === 'ERROR') return false;
+    return p.verdict === 'ERROR' || p.verdict !== to.verdict || (broken(to.verdict) && p.detail !== to.detail);
+  }).map((r) => r.name);
+}
+
+/**
+ * Every fixture whose verdict or wrong edges changed between the previous commit's replay and the new one, that
+ * is new, that started erroring, or that recovered. `erroring` is the stored list of fixtures erroring on the
+ * previous commit (without one: those its replay has as ERROR); `confirmPrev` / `confirmNext` are the reruns of
+ * `rerunNames`, which must agree with the first replays.
  */
 export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; confirmPrev?: Row[]; confirmNext?: Row[] } = {}): Change[] {
   const before = new Map(prev.map((r) => [r.name, r]));
@@ -81,12 +96,25 @@ export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; c
   const againNext = opts.confirmNext && new Map(opts.confirmNext.map((r) => [r.name, r]));
   const out: Change[] = [];
   for (const to of next) {
-    const p = before.get(to.name);
-    const from: Row | null = p && p.verdict !== 'ERROR' ? p : null;
+    let p = before.get(to.name);
+    const listed = erroring.has(to.name);
     let kind: Kind | null;
-    if (to.verdict === 'ERROR') kind = erroring.has(to.name) ? null : 'error';
-    else if (!from) kind = 'new';
-    else if (from.verdict === to.verdict) kind = broken(to.verdict) && from.detail !== to.detail ? 'edges' : null;
+    if (to.verdict === 'ERROR') {
+      // Quiet only while it is already known to error and still errors on the previous commit too.
+      kind = listed && (!p || p.verdict === 'ERROR') ? null : 'error';
+      if (kind) out.push({ kind, name: to.name, issue: to.issue ?? p?.issue ?? null, from: p && p.verdict !== 'ERROR' ? p : null, to });
+      continue;
+    }
+    if (!p) { out.push({ kind: 'new', name: to.name, issue: to.issue, from: null, to }); continue; }
+    if (p.verdict === 'ERROR') {
+      if (listed) { out.push({ kind: 'recovered', name: to.name, issue: to.issue ?? p.issue, from: null, to }); continue; }
+      // Errored only on today's re-score: its rerun says what the previous commit really reads.
+      const again = againPrev?.get(to.name);
+      if (!again || again.verdict === 'ERROR') { out.push({ kind: 'prev-error', name: to.name, issue: to.issue ?? p.issue, from: null, to }); continue; }
+      p = again;
+    }
+    const from = p;
+    if (from.verdict === to.verdict) kind = broken(to.verdict) && from.detail !== to.detail ? 'edges' : listed ? 'recovered' : null;
     else if (to.verdict === 'FIXED') kind = 'fixed';
     else if (from.verdict === 'FIXED' && broken(to.verdict)) kind = 'regression';
     else kind = 'changed';
@@ -95,13 +123,13 @@ export function diff(prev: Row[], next: Row[], opts: { erroring?: Set<string>; c
       // Both sides' reruns must say the same thing again, or it is not reported as a change.
       if (!same(againNext.get(to.name), to) || !same(againPrev.get(to.name), from)) kind = 'unstable';
     }
-    out.push({ kind, name: to.name, issue: to.issue ?? p?.issue ?? null, from, to });
+    out.push({ kind, name: to.name, issue: to.issue ?? from.issue ?? null, from: kind === 'recovered' ? null : from, to });
   }
   return out;
 }
 
-/** Whether a change needs the confirming reruns before it can be reported. */
-export const needsConfirm = (c: Pick<Change, 'kind'>) => c.kind !== 'error' && c.kind !== 'new';
+/** Whether a change is one whose reruns must agree (the others need none, or were settled by one). */
+export const needsConfirm = (c: Pick<Change, 'kind'>) => ['fixed', 'regression', 'edges', 'changed'].includes(c.kind);
 
 /** The state to store for the new commit: the commit, the fixtures erroring on it, and its verdicts (a record). */
 export function nextState(next: Row[], meta: Omit<State, 'results' | 'erroring'>): State {
@@ -137,7 +165,9 @@ export function draft(c: Change, ctx: Ctx): string | null {
 
 const what = (c: Change): string => ({
   fixed: 'fixed', regression: 'REGRESSION', edges: 'wrong edges changed', changed: 'changed (look by hand)',
-  new: 'first verdict (no draft)', error: 'started erroring (reported once)', unstable: 'unstable (a rerun disagreed)',
+  new: 'first verdict (no draft)', error: 'started erroring (reported once)', recovered: 'recovered from errors (no draft)',
+  'prev-error': 'the previous commit errored when re-scored: check by hand (no draft)',
+  unstable: 'unstable (a rerun disagreed; not re-checked later: check by hand)',
 } as Record<Kind, string>)[c.kind];
 const ADVICE: Partial<Record<Kind, string>> = {
   fixed: 'a comment on the issue (closed: a confirmation; open: tells the maintainer it may be fixed)',
@@ -199,8 +229,10 @@ function main(argv: string[]) {
     const prev = opt(args, '--prev'); const next = opt(args, '--next');
     if (!prev || !next) throw new Error('flips needs --prev and --next');
     const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const changes = diff(rows(read(prev), { fixtures }), rows(read(next), { fixtures })).filter(needsConfirm);
-    const out = args.includes('--issues') ? [...new Set(changes.map((c) => c.issue).filter(Boolean))].map(String) : changes.map((c) => c.name);
+    const p = rows(read(prev), { fixtures }); const nx = rows(read(next), { fixtures });
+    const names = new Set(rerunNames(p, nx));
+    const picked = nx.filter((r) => names.has(r.name));
+    const out = args.includes('--issues') ? [...new Set(picked.map((r) => r.issue ?? p.find((x) => x.name === r.name)?.issue).filter(Boolean))].map(String) : picked.map((r) => r.name);
     if (out.length) console.log(out.join('\n'));
     return;
   }
@@ -230,7 +262,8 @@ function main(argv: string[]) {
     const states = statesFile ? read(statesFile) : {};
     for (const [k, v] of Object.entries(states)) if (!/^\d+$/.test(k) || !ISSUE_STATES.has(v as string)) throw new Error(`bad issue state ${k}: ${v}`);
     const changes = prevFile ? diff(prev, next, { erroring, confirmPrev, confirmNext }) : [];
-    if (!confirmNext && changes.some(needsConfirm)) throw new Error(`changes need --confirm-prev and --confirm-next (the reruns of: ${changes.filter(needsConfirm).map((c) => c.name).join(', ')})`);
+    const reruns = prevFile ? rerunNames(prev, next) : [];
+    if (!confirmNext && reruns.length) throw new Error(`changes need --confirm-prev and --confirm-next (the reruns of: ${reruns.join(', ')})`);
     const state = nextState(next, { codegraph: sha, recordedAt: date, graphAssay: ga });
     const ctx = { prev: prevSha ?? sha, next: sha, graphAssay: ga, date, states: states as Record<string, string> };
     const count = next.reduce((t, r) => ({ ...t, [r.verdict]: (t[r.verdict] ?? 0) + 1 }), {} as Record<string, number>);
