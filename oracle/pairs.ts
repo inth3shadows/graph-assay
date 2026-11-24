@@ -19,7 +19,7 @@ import { CTOR, defName, rangeOf, scipKind, unctor } from './symbols.ts';
 export interface Unit { file: string; line: number; sym: string; decorator?: boolean }
 
 export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
-  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch, compositeLiteral } = ctx;
+  const { on, index, defs, refsAt, scipFiles, fileText, lineOf, LANGS, PY, GO_LIKE, CALL_KINDS, excluded, allEdges, nameMismatch, compositeLiteral, slackHeldElsewhere } = ctx;
   const ALLSITES = ctx.opts.allSites;
   const name = (sym) => {
     let n = defName(sym);
@@ -69,7 +69,9 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
   const mapCaller = (e) => {
     if (!scipFiles.has(e.sfile)) return null;
     if (e.skind === 'file' || e.skind === 'module') return fileId(e.sfile);
-    const held = (containers.get(e.sfile) ?? []).filter((c) => c.line <= e.send && c.line >= e.sstart - 2 && nameOk(c.sym, e.ssimple));
+    // SPEC §2 as on the call-site track: DEF_SLACK, and not when another node holds the definition.
+    const held = (containers.get(e.sfile) ?? []).filter((c) => c.line <= e.send && c.line >= e.sstart - 2 && nameOk(c.sym, e.ssimple)
+      && (c.line >= e.sstart || !slackHeldElsewhere(e.sfile, e.ssimple, c.line, e.sstart, e.send)));
     return held.length ? nearest(held, e.sstart).sym : callerAt(e.sfile, e.sstart);
   };
   const defsIn = new Map();
@@ -79,7 +81,8 @@ export function pairTrack(ctx: Context, units: Unit[], skippedUnits: Unit[]) {
   }
   const mapTarget = (e) => {
     if (!scipFiles.has(e.tfile)) return null;
-    const held = (defsIn.get(e.tfile) ?? []).filter((x) => x.line <= e.tend && x.line >= e.tstart - 2 && nameOk(x.sym, e.tname));
+    const held = (defsIn.get(e.tfile) ?? []).filter((x) => x.line <= e.tend && x.line >= e.tstart - 2 && nameOk(x.sym, e.tname)
+      && (x.line >= e.tstart || !slackHeldElsewhere(e.tfile, e.tname, x.line, e.tstart, e.tend)));
     return held.length ? canon(nearest(held, e.tstart).sym) : null;
   };
   const key = (c, d) => `${c}\u0000${d}`;

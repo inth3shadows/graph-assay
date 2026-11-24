@@ -1,0 +1,15 @@
+{
+ "lang": "go",
+ "mode": "missing",
+ "inputs": "go-def-slack",
+ "note": "The function-pair track maps a subject node to a SCIP definition by the same §2 span rule, so def-slack-own-node (SPEC v6.0) applies there too (PR #79 round 1, F3). The patch moves Beta.Run's node to line 14, one line above its own definition (15), so the window [12, 14] holds only Alpha.Run (13), which is a node of its own: blankLine's edge to Beta.Run must not map to Alpha.Run and count as a matched pair, as the call site on line 33 is wrong-edge.",
+ "patch": [
+  { "op": "span", "node": { "name": "Run", "kind": "method", "start": 15 }, "start": 14, "end": 14 }
+ ],
+ "expect": [
+  { "at": "m.go:33", "name": "Run", "key": "missing|wrong-edge" }
+ ],
+ "pairs": {
+  "matched": ["!blankLine -> Run"]
+ }
+}

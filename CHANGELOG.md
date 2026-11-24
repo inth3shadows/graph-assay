@@ -104,14 +104,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 - SPEC v6.0 (#78): the `DEF_SLACK` exception (a node may start up to 2 lines below the definition, for
-  `const x =\n (…) =>`) no longer applies when the subject has its own node of the callee's name starting
-  there (rule `def-slack-own-node`). Before, a wrong edge to a one-line method declared right below a
-  same-named one scored `ok` forward and `found` missing, in any language. Self-tests `go-def-slack`,
-  `go-def-slack-missing` (both fail with the rule off) and `ts-def-slack-arrow` (the arrow case stays
-  `ok`). On the dev split it changes no verdict: no site flips in 46 comparisons (23 cached work dirs
-  across the four subjects, both directions; the two cached mux dirs predate the current oracle and
-  were skipped) nor in 12 on codegraph 461a5d87's runs of mux, ky, express, click, requests and
-  excalidraw.
+  `const x =\n (…) =>`) no longer applies when another subject node of the callee's name and a definition
+  kind holds the definition: it starts there, or spans it from a decorator above (rule
+  `def-slack-own-node`, on the call-site and function-pair tracks). Before, a wrong edge to a one-line
+  method declared right below a same-named one scored `ok` forward and `found` missing, in any language.
+  A value node (`const W = wrap(\n function W…)`, a class field holding an arrow) does not count, so those
+  stay `ok`. Self-tests `go-def-slack`, `go-def-slack-missing`, `go-def-slack-pairs` and
+  `py-def-slack-decorated` fail with the rule off; `ts-def-slack-arrow` and `ts-def-slack-wrapper` keep the
+  slack's cases `ok`. `oracle/test/run.ts` patches can pick a node by `start` and move a node with `span`. On the dev split it changes no verdict and no function pair: no site flips in 58 comparisons and
+  identical pair sets in all 29 runs (23 cached work dirs across the four subjects, plus codegraph
+  461a5d87's runs of mux, ky, express, click, requests and excalidraw; the two cached mux dirs predate
+  the current oracle and were skipped).
 - The reproduction measures current builds: codegraph `147fe290` (upstream `main` on 2026-11-17, was
   `f72c9d2e`) and code-graph-rag 0.7.1 (was 0.5.0), in `Dockerfile` and `tools/setup.sh`.
   `docker/requirements.lock` is re-resolved for 0.7.1 in the image's Python (wheels only, PyPI

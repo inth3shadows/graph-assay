@@ -19,9 +19,10 @@
 //   "inputs": "<case>" reuses that case's sources and frozen inputs (regen.ts skips such a case).
 //   "patch": edits applied to the frozen snapshot at test time, to give the oracle a subject error no
 //   real subject makes on the case: { "op": "drop", "at": "file:line", "kind" } removes call edges;
-//   { "op": "retarget", "at", "to": { "name", "kind" } } points them at another node; { "op": "add",
+//   { "op": "retarget", "at", "to": { "name", "kind", "start"? } } points them at another node ("start" picks one of several same-named nodes); { "op": "add",
 //   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
-//   one with "provenance").
+//   one with "provenance"); { "op": "span", "node": { "name", "kind", "start"? }, "start"?, "end"? } moves a node's
+//   span, as a subject that starts a decorated definition at its decorator does.
 // --dump: print every site's bucket per case (for writing expectations), then exit.
 // --mutate: re-run every case once per rule in the modules oracle.ts imports (each `on('<rule>')`, see rules.ts) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
@@ -55,12 +56,13 @@ function prepare(name) {
   let snapshot = path.join(dir, 'snapshot.json');
   if (spec.dropLines || spec.patch) {
     const snap = JSON.parse(fs.readFileSync(snapshot, 'utf8'));
-    const node = (q) => { const n = snap.nodes.find((x) => x.name === q.name && (!q.kind || x.kind === q.kind)); if (!n) throw new Error(`${name}: patch: no node ${JSON.stringify(q)}`); return n; };
+    const node = (q) => { const n = snap.nodes.find((x) => x.name === q.name && (!q.kind || x.kind === q.kind) && (q.start === undefined || x.start === q.start)); if (!n) throw new Error(`${name}: patch: no node ${JSON.stringify(q)}`); return n; };
     const at = (e, where) => { const src = snap.nodes.find((x) => x.id === e.src); return `${src.file}:${e.line}` === where; };
     const CALLS = new Set(['calls', 'instantiates']);
     for (const p of spec.patch ?? []) {
       if (p.op === 'drop') snap.edges = snap.edges.filter((e) => !(CALLS.has(e.kind) && at(e, p.at) && (!p.kind || e.kind === p.kind)));
       else if (p.op === 'retarget') for (const e of snap.edges) { if (CALLS.has(e.kind) && at(e, p.at)) e.dst = node(p.to).id; }
+      else if (p.op === 'span') { const n = node(p.node); n.start = p.start ?? n.start; n.end = p.end ?? n.end; }
       else if (p.op === 'add') snap.edges.push({ kind: 'calls', src: node(p.from).id, dst: node(p.to).id, line: p.line, col: null, provenance: p.provenance ?? null, ref: p.to.name, resolvedBy: null });
       else throw new Error(`${name}: unknown patch op ${p.op}`);
     }
