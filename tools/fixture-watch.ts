@@ -368,8 +368,10 @@ function main(argv: string[]) {
   if (cmd === 'flips') {
     const prev = opt(args, '--prev'); const next = opt(args, '--next');
     if (!prev || !next) throw new Error('flips needs --prev and --next');
-    const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const p = rows(read(prev), { fixtures }); const nx = rows(read(next), { fixtures });
+    const fxDir = opt(args, '--fixtures'); const fixtures = fixtureSet(fxDir);
+    // Issue numbers from this checkout's expect.json, as run and pr-report take them (PR #88 review, T4).
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
+    const p = iss(rows(read(prev), { fixtures })); const nx = iss(rows(read(next), { fixtures }));
     const names = new Set(rerunNames(p, nx));
     const picked = nx.filter((r) => names.has(r.name));
     const out = args.includes('--issues') ? [...new Set(picked.map((r) => r.issue ?? p.find((x) => x.name === r.name)?.issue).filter(Boolean))].map(String) : picked.map((r) => r.name);
@@ -379,8 +381,9 @@ function main(argv: string[]) {
   if (cmd === 'issues') {
     const prev = opt(args, '--prev'); const next = opt(args, '--next');
     if (!prev || !next) throw new Error('issues needs --prev and --next');
-    const fixtures = fixtureSet(opt(args, '--fixtures'));
-    const out = listableIssues(rows(read(prev), { fixtures }), rows(read(next), { fixtures }));
+    const fxDir = opt(args, '--fixtures'); const fixtures = fixtureSet(fxDir);
+    const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
+    const out = listableIssues(iss(rows(read(prev), { fixtures })), iss(rows(read(next), { fixtures })));
     if (out.length) console.log(out.join('\n'));
     return;
   }
@@ -411,7 +414,8 @@ function main(argv: string[]) {
         const confirm = reruns.length ? { confirmPrev: iss(rows(read(f('confirm-prev')), { fixtures })), confirmNext: iss(rows(read(f('confirm-next')), { fixtures })) } : {};
         // Every fixture scored on both sides: none errored, and both replays list the same fixtures (#87).
         const names = (rs: Row[]) => rs.map((r) => r.name).sort().join('\n');
-        const allScored = ![...prev, ...next].some((r) => r.verdict === 'ERROR') && names(prev) === names(next);
+        // With --fixtures, both must list every fixture this checkout has, not only the same ones (PR #88 review, T6).
+        const allScored = ![...prev, ...next].some((r) => r.verdict === 'ERROR') && names(prev) === names(next) && (!fixtures || names(next) === [...fixtures].sort().join('\n'));
         return { prev, next, changes: diff(prev, next, confirm), allScored };
       } catch (e) { console.error(`pr-report: #${pr.number}: ${(e as Error).message}`); return null; }
     };
@@ -439,7 +443,7 @@ function main(argv: string[]) {
       const entry = { number: pr.number, head: pr.head, sig };
       if (sig && sig !== before) reported.push({ entry, section: prSection(pr.number, l.changes, { prev: pr.base, next: pr.head, graphAssay: ga, date, states }, l.allScored) });
       // A PR reported before whose head now changes no fixture: say so once, so a stale draft is not the last word (P7).
-      else if (!sig && before) reported.push({ entry, section: `#### ${ref(pr.number)} at \`${short(pr.head)}\` (merge base \`${short(pr.base)}\`)\n\nThis head no longer changes any fixture: the earlier report on this PR no longer applies.\n` });
+      else if (!sig && before) reported.push({ entry, section: `#### ${ref(pr.number)} at \`${short(pr.head)}\` (merge base \`${short(pr.base)}\`)\n\nThis head no longer changes any fixture${l.allScored ? '' : ' that could be scored on both sides (some could not, so the others are unchecked)'}: the earlier report on this PR no longer applies.\n` });
       else quiet.push(entry);
     }
     // PRs select could not compare (no merge base) count as failed checks of their head (Q4).
@@ -452,10 +456,19 @@ function main(argv: string[]) {
       errored.push(...er.map((x: any) => ({ number: x.number, head: x.head })));
     }
     const skippedFile = opt(args, '--skipped');
+    let skipped = 0;
     if (skippedFile) {
       const sk = read(skippedFile);
       if (!Array.isArray(sk) || !sk.every((x: any) => Number.isSafeInteger(x?.number) && x.number > 0 && SHA.test(x?.head))) throw new Error('bad --skipped list');
       for (const x of sk) failed.push({ number: x.number, head: x.head });
+      skipped = sk.length;
+    }
+    // An unclear error counts against its PR only when GitHub answered other lookups in the same select run (a
+    // merge base found, or a definite 404/422). When every lookup failed, it was an outage, a rate limit or a
+    // timeout on GitHub's side: no PR gets a strike, and each is tried again next run (PR #88 review, T1).
+    if (errored.length && !selected.length && !skipped) {
+      console.error(`pr-report: GitHub answered no lookup this run: no strike for ${errored.map((x) => `#${x.number}`).join(', ')}`);
+      errored.length = 0;
     }
     const head = (shown: number) => `### PR watch: ${quiet.length + reported.length} open PR(s) checked, ${reported.length} with a changed result${shown < reported.length ? ` (${shown} shown)` : ''}\n\nDrafts are candidates: re-check on the PR's current head, then post by hand after approval.\n`;
     const all = reported.length ? [head(reported.length), ...reported.map((x) => x.section)].join('\n') : '';
@@ -477,8 +490,11 @@ function main(argv: string[]) {
     const recorded = [...shown, ...tooLarge].map((x) => x.entry);
     fs.writeFileSync(need('--report-out'), capped);
     const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, all);
-    fs.writeFileSync(need('--state-out'), JSON.stringify(prState(state, open, [...quiet, ...recorded], failed, errored), null, 1) + '\n');
-    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed`);
+    const next = prState(state, open, [...quiet, ...recorded], failed, errored);
+    const setAside = Object.entries(next.prs).filter(([, v]) => (v.errored ?? 0) >= 3).map(([k]) => `#${k}`);
+    fs.writeFileSync(need('--state-out'), JSON.stringify(next, null, 1) + '\n');
+    // Errored and set-aside PRs are named in the log too, so a PR the watch stopped trying is visible (PR #88 review, T8).
+    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${setAside.length ? `; set aside until their head moves: ${setAside.join(', ')}` : ''}`);
     return;
   }
   if (cmd === 'run') {

@@ -439,14 +439,21 @@ check('Q4/Q8/Q9: PRs skipped by select are recorded as failed; the header counts
     assert.deepEqual(st['11'], { head: B, sig: '', failed: 1 }); // Q4
   } finally { fs.rmSync(t3, { recursive: true, force: true }); }
 });
-check('every node -e script in the workflows is one single-quoted shell word (an apostrophe inside would end it early)', () => {
+// A node -e or sandbox script ends early when an apostrophe inside it closes the quote. Bash can still parse the
+// result when the apostrophes come in pairs (two scripts merge), so the check is on what follows the closing quote:
+// only shell arguments (plain words or double-quoted strings) may, never more script (PR #88 review, T2).
+const earlyEnds = (wf: string) => [...wf.matchAll(/(?:node -e|sandbox(?: --offline)? (?:base|head)) '([^']*)'([^\n]*)/g)]
+  .filter((m) => !/^(\s+("[^"'`]*"|[\w./$-]+))*\s*$/.test(m[2])).map((m) => `...${m[1].slice(-60)}'${m[2].slice(0, 40)}`);
+check('every node -e and sandbox script in the workflows is one single-quoted shell word (an apostrophe inside would end it early)', () => {
+  assert.equal(earlyEnds("sandbox --offline head 'echo the PRs' heads and the PRs' tails'\n").length, 1); // a pair: bash -n passes this
+  assert.equal(earlyEnds("x=$(node -e 'a(); // don't\n b(); // won't\n')\n").length, 1);
+  assert.equal(earlyEnds("node -e 'a()' rep/x.json \"$n\"\nsandbox base 'b' \"${flips[@]}\"\n").length, 0);
   for (const name of ['fixture-watch', 'pr-watch']) {
     const wf = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8');
-    for (const m of wf.matchAll(/node -e '([^']*)'/g)) {
-      const after = wf.slice(m.index + m[0].length, m.index + m[0].length + 1);
-      assert.ok(after === '' || /[\s;|)]/.test(after), `${name}.yml: a node -e script ends early (an apostrophe in it?): ...${m[1].slice(-60)}'${after}`);
-    }
+    assert.ok(wf.match(/node -e '/g)!.length >= 1);
+    assert.deepEqual(earlyEnds(wf), [], `${name}.yml: a script ends early (an apostrophe in it?)`);
   }
+  assert.equal(fs.readFileSync(path.join(here, '..', '.github/workflows/pr-watch.yml'), 'utf8').match(/sandbox(?: --offline)? (?:base|head) '/g)?.length, 6);
 });
 // ---- #87: follow-ups from the PR watch's last review round ----
 check('#87: issue numbers come from this checkout\'s expect.json, never from a replay row', () => {
@@ -481,18 +488,90 @@ check('#87: a PR whose merge-base lookup keeps failing with an unclear error is 
 check('#87: every run: block in both watch workflows parses as bash (bash -n)', () => {
   for (const name of ['fixture-watch', 'pr-watch']) {
     const lines = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8').split('\n');
+    let blocks = 0;
     for (let i = 0; i < lines.length; i++) {
-      const m = /^(\s*)run: \|\s*$/.exec(lines[i]); if (!m) continue;
+      // Every form of run: (block, chomped, after a list dash, one line) is checked; a folded one is refused (T2).
+      const m = /^\s*(?:- )?run:(.*)$/.exec(lines[i]); if (!m) continue;
+      const v = m[1].trim(); if (!v) continue; // defaults: run: (a mapping, not a script)
+      assert.doesNotMatch(v, /^>/, `${name}.yml line ${i + 1}: write run blocks with |, so this check reads them as bash`);
       const body: string[] = []; let indent = -1;
-      for (let k = i + 1; k < lines.length; k++) {
+      if (/^\|[-+]?$/.test(v)) for (let k = i + 1; k < lines.length; k++) {
         const l = lines[k]; if (!l.trim()) { body.push(''); continue; }
         const ind = l.length - l.trimStart().length; if (indent < 0) indent = ind; if (ind < indent) break; body.push(l.slice(indent));
       }
+      else body.push(v);
+      blocks++;
       const script = body.join('\n').replace(/\$\{\{[^}]*\}\}/g, 'X');
       try { execFileSync('bash', ['-n'], { input: script, stdio: ['pipe', 'pipe', 'pipe'] }); }
       catch (e: any) { assert.fail(`${name}.yml run block at line ${i + 1} does not parse: ${String(e.stderr)}`); }
     }
+    assert.ok(blocks >= 7, `${name}.yml: only ${blocks} run blocks found`);
   }
+});
+// ---- PR #88 review round 1 ----
+check('T1/T3: pr-report: an unclear-error strike counts only when GitHub answered other lookups that run; issues come from expect.json; scored-on-both-sides is wired', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-88-'));
+  try {
+    const fx = path.join(tmp, 'fixtures');
+    for (const name of ['issue-1', 'issue-2']) { fs.mkdirSync(path.join(fx, name), { recursive: true }); fs.writeFileSync(path.join(fx, name, 'expect.json'), expectFor(name)); }
+    const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(v)); return p; };
+    const o = (name: string) => path.join(tmp, name);
+    const report = (prs: any[], ...extra: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'pr-report', '--prs', f('prs.json', prs), '--dir', o('artifact'),
+      '--graph-assay', G, '--open', f('open.json', [4, 5, 11]), '--fixtures', fx, '--report-out', o('c.md'), '--state-out', o('s.json'), ...extra], { encoding: 'utf8' });
+    const prior = f('prior.json', { prs: { 4: { head: B, sig: '', errored: 2 } } });
+    const errored = f('errored.json', [{ number: 4, head: B }]);
+    // An outage: every lookup failed, nothing was picked or skipped. No strike: #4 keeps its count.
+    let p = report([], '--state', prior, '--errored', errored, '--skipped', f('none.json', []));
+    assert.equal(p.status, 0, p.stderr);
+    assert.deepEqual(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'], { head: B, sig: '', errored: 2 });
+    // GitHub answered another PR (404/422): the strike counts.
+    p = report([], '--state', prior, '--errored', errored, '--skipped', f('sk.json', [{ number: 11, head: B }]));
+    assert.equal(p.status, 0, p.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'].errored, 3);
+    // GitHub answered with a merge base: the strike counts, and the picked PR's rows are read.
+    // The replay rows claim issue 999 (a forged head): the report names #1, from this checkout's expect.json.
+    // issue-2 errors on both sides: the draft does not claim the other fixtures read the same.
+    f('artifact/pr-5/prev.json', { results: [r('issue-1', 'BROKEN', 'w', 999), r('issue-2', 'ERROR', 'boom', 2)] });
+    f('artifact/pr-5/next.json', { results: [r('issue-1', 'FIXED', '', 999), r('issue-2', 'ERROR', 'boom', 2)] });
+    f('artifact/pr-5/confirm-prev.json', { results: [r('issue-1', 'BROKEN', 'w', 999)] });
+    f('artifact/pr-5/confirm-next.json', { results: [r('issue-1', 'FIXED', '', 999)] });
+    p = report([{ number: 5, head: C, base: A }], '--state', prior, '--errored', errored);
+    assert.equal(p.status, 0, p.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'].errored, 3);
+    let c = fs.readFileSync(o('c.md'), 'utf8');
+    assert.match(c, /this PR fixes the issue-1 fixture \(#1\)/); assert.doesNotMatch(c, /999/);
+    assert.match(c, /Not every fixture could be scored on both sides/); assert.doesNotMatch(c, /The other fixtures read the same/);
+    // A fixture missing from one side: also not "the other fixtures read the same".
+    f('artifact/pr-5/prev.json', { results: [r('issue-1', 'BROKEN', 'w'), r('issue-2', 'FIXED', '', 2)] });
+    f('artifact/pr-5/next.json', { results: [r('issue-1', 'FIXED')] });
+    p = report([{ number: 5, head: C, base: A }]);
+    assert.equal(p.status, 0, p.stderr);
+    c = fs.readFileSync(o('c.md'), 'utf8');
+    assert.match(c, /Not every fixture could be scored on both sides/); assert.doesNotMatch(c, /The other fixtures read the same/);
+    // The fixture watch's run takes issue numbers from expect.json too, never from the rows.
+    const forged = (v: string, d = '') => f(`run-${v}.json`, { results: [r('issue-1', v, d, 999)] });
+    p = spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'run', '--prev', forged('BROKEN', 'w'), '--prev-sha', A, '--next', forged('FIXED'), '--sha', B, '--graph-assay', G,
+      '--confirm-prev', forged('BROKEN', 'w'), '--confirm-next', forged('FIXED'), '--fixtures', fx, '--state-out', o('rs.json'), '--report-out', o('rm.md')], { encoding: 'utf8' });
+    assert.equal(p.status, 0, p.stderr);
+    c = fs.readFileSync(o('rm.md'), 'utf8');
+    assert.match(c, /`colbymchenry\/codegraph#1`/); assert.doesNotMatch(c, /999/);
+    // T4: flips --issues and issues read expect.json as well.
+    const cli = (...a: string[]) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), ...a, '--fixtures', fx], { encoding: 'utf8' });
+    assert.equal(cli('flips', '--prev', forged('BROKEN', 'w'), '--next', forged('FIXED'), '--issues').stdout, '1\n');
+    assert.equal(cli('issues', '--prev', forged('BROKEN', 'w'), '--next', forged('FIXED')).stdout, '1\n');
+    // T6: a fixture of this checkout missing from both sides: not every fixture was scored.
+    for (const k of ['prev', 'confirm-prev']) f(`artifact/pr-5/${k}.json`, { results: [r('issue-1', 'BROKEN', 'w')] });
+    for (const k of ['next', 'confirm-next']) f(`artifact/pr-5/${k}.json`, { results: [r('issue-1', 'FIXED')] });
+    p = report([{ number: 5, head: C, base: A }]);
+    assert.equal(p.status, 0, p.stderr);
+    assert.match(fs.readFileSync(o('c.md'), 'utf8'), /Not every fixture could be scored on both sides/);
+    // T5: a reverted result where not every fixture was scored says so; T8: the log names errored and set-aside PRs.
+    f('artifact/pr-5/next.json', { results: [r('issue-1', 'BROKEN', 'w')] });
+    p = report([{ number: 5, head: C, base: A }], '--state', f('was.json', { prs: { 4: { head: B, sig: '', errored: 2 }, 5: { head: A, sig: 'issue-1:fixed:FIXED' } } }), '--errored', errored);
+    assert.equal(p.status, 0, p.stderr);
+    assert.match(fs.readFileSync(o('c.md'), 'utf8'), /no longer changes any fixture that could be scored on both sides \(some could not/);
+    assert.match(p.stdout, /1 errored; set aside until their head moves: #4/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('#87: workflow: replay containers have no network; isolation fallback is explicit; dry runs have their own concurrency group; links pin the PR head; image by digest; compare has a timeout; errors reset on a definite answer', () => {
   const wf = fs.readFileSync(path.join(here, '..', '.github/workflows/pr-watch.yml'), 'utf8');
@@ -503,6 +582,7 @@ check('#87: workflow: replay containers have no network; isolation fallback is e
   assert.match(wf, /SANDBOX_IMAGE: node:22\.23\.2-bookworm@sha256:[0-9a-f]{64}/);
   assert.match(wf, /timeout: 60000/);
   assert.match(wf, /errs=0; continue;/);
+  assert.match(wf, /if \(\/HTTP \(403\|429\)\|rate limit\/i\.test\(msg\)\) \{[^\n]*rate limited[^\n]*break; \}\n/); // T1: a rate limit strikes no PR
   assert.match(wf, /--errored rep\/errored\.json/);
   assert.doesNotMatch(wf, /tried again next run/);
   assert.doesNotMatch(fs.readFileSync(path.join(here, 'fixture-watch.ts'), 'utf8'), /left unchecked, so the next run tries it again/);
