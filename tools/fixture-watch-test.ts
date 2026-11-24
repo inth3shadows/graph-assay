@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // tools/fixture-watch.ts: every change kind, the confirming reruns, what the stored state keeps, input
 // validation, the report and its drafts, the command line end to end, and the workflow's hand-offs.
-// Findings from the PR #81 reviews (F1-F9, R2-1..R2-5) are named where a check pins one.
+// Findings from the PR #81 reviews (F1-F9, R2-x, R3-x) are named where a check pins one.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { LIMIT, diff, draft, nextState, report, rows, type Change } from './fixture-watch.ts';
+import { LIMIT, diff, draft, erroringOf, needsConfirm, nextState, report, rows, type Change } from './fixture-watch.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let n = 0;
@@ -17,10 +17,16 @@ const r = (name: string, verdict: string, detail = '', issue: number | null = 1)
 const A = 'a'.repeat(40); const B = 'b'.repeat(40); const C = 'd'.repeat(40); const G = 'c'.repeat(40);
 const ctx = { prev: A, next: B, graphAssay: G, date: '2026-11-24', states: { 1: 'closed', 2: 'open' } as Record<string, string> };
 const kinds = (cs: Change[]) => Object.fromEntries(cs.map((c) => [c.name, c.kind]));
-/** One run: previous commit's replay, new replay (confirmed by identical reruns unless given), stored state. */
-const step = (prev: any[], next: any[], prevSha: string, sha: string, stored: any[] = [], confirm?: { prev: any[]; next: any[] }) => {
-  const changes = diff(prev, next, { stored, confirmPrev: confirm?.prev ?? prev, confirmNext: confirm?.next ?? next });
-  return { changes, state: nextState(prev, next, changes, { codegraph: sha, recordedAt: 'd', graphAssay: G, prevSha }, stored).results };
+/**
+ * One run as the workflow does it: the reruns cover only the fixtures `flips` picks (the changes that need
+ * confirming), never every row (round 3 found a test that confirmed everything hid a stall).
+ */
+const step = (prev: any[], next: any[], sha: string, stored?: { erroring: string[] }, reruns?: { prev: any[]; next: any[] }) => {
+  const picked = new Set(diff(prev, next).filter(needsConfirm).map((c) => c.name));
+  const confirmPrev = reruns?.prev ?? prev.filter((r) => picked.has(r.name));
+  const confirmNext = reruns?.next ?? next.filter((r) => picked.has(r.name));
+  const changes = diff(prev, next, { erroring: stored ? erroringOf(stored) : undefined, confirmPrev, confirmNext });
+  return { changes, state: nextState(next, { codegraph: sha, recordedAt: 'd', graphAssay: G }) };
 };
 
 check('each verdict change gets its kind; an unchanged fixture is not reported', () => {
@@ -38,56 +44,53 @@ check('both confirming reruns must agree: either side disagreeing, or missing, m
   assert.deepEqual(kinds(diff(prev, next, { confirmPrev, confirmNext })), { a: 'fixed', b: 'unstable', c: 'unstable', d: 'unstable' });
 });
 check('F5/R2-1: a graph-assay change cannot pass for an upstream one: the diff reads only the two replays made now', () => {
-  // The stored state says FIXED (scored by an older graph-assay); both commits read BROKEN under today's code.
-  const out = diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'x')], { stored: [{ ...r('a', 'FIXED'), seenAt: A }] });
-  assert.deepEqual(out, []);
+  // Whatever an older graph-assay recorded, both commits read BROKEN under today's code: no change.
+  assert.deepEqual(diff([r('a', 'BROKEN', 'x')], [r('a', 'BROKEN', 'x')], { erroring: new Set() }), []);
 });
-check('the stored state: new verdicts stamped with the new commit, an erroring fixture keeps its last real verdict, an unstable one its previous', () => {
-  const prev = [r('e', 'BROKEN', 'x'), r('u', 'BROKEN', 'x'), r('f', 'BROKEN', 'x')];
-  const next = [r('e', 'ERROR', 'boom'), r('u', 'FIXED'), r('f', 'FIXED'), r('n', 'ERROR', 'boom')];
-  const { state } = step(prev, next, A, B, [], { prev, next: [r('u', 'BROKEN', 'x'), r('f', 'FIXED')] });
-  assert.deepEqual(state, [{ ...r('e', 'BROKEN', 'x'), seenAt: A, erroringSince: B }, { ...r('u', 'BROKEN', 'x'), seenAt: A },
-    { ...r('f', 'FIXED'), seenAt: B }, { ...r('n', 'ERROR', 'boom'), seenAt: B }]);
+check('the stored state: the new commit, the fixtures erroring on it (sorted), and its verdicts as a record', () => {
+  const next = [r('z', 'ERROR', 'boom'), r('f', 'FIXED'), r('a', 'ERROR', 'boom')];
+  assert.deepEqual(nextState(next, { codegraph: B, recordedAt: 'd', graphAssay: G }),
+    { codegraph: B, recordedAt: 'd', graphAssay: G, erroring: ['a', 'z'], results: next });
+  assert.throws(() => erroringOf({ erroring: ['../x'] }), /bad erroring list/);
+  assert.deepEqual([...erroringOf({})], []);
 });
-check('F1: a fixture that keeps erroring is reported once, then quiet until it recovers', () => {
-  const s1 = step([r('a', 'BROKEN', 'w')], [r('a', 'ERROR', 'boom')], A, B);
+check('F1: a fixture that keeps erroring is reported once, then quiet; R3-4: also when both commits error', () => {
+  const s1 = step([r('a', 'BROKEN', 'w')], [r('a', 'ERROR', 'boom')], B, { erroring: [] });
   assert.deepEqual(kinds(s1.changes), { a: 'error' });
-  const s2 = step([r('a', 'ERROR', 'boom')], [r('a', 'ERROR', 'boom')], B, C, s1.state);
-  assert.deepEqual(kinds(s2.changes), {});
+  assert.deepEqual(kinds(step([r('a', 'ERROR', 'boom')], [r('a', 'ERROR', 'boom')], C, s1.state).changes), {});
+  // Both commits error under today's graph-assay, and the stored list (from an older run) does not have it.
+  const both = step([r('b', 'ERROR', 'boom')], [r('b', 'ERROR', 'boom')], C, { erroring: [] });
+  assert.deepEqual(kinds(both.changes), { b: 'error' });
+  assert.match(report(both.changes, ctx), /started erroring \(reported once\)/);
 });
-check('F2: recovery after errors compares with the last real verdict, marked stale: reported, no draft', () => {
-  const s1 = step([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'ERROR', 'boom')], A, B);
-  const s2 = step([r('issue-1', 'ERROR', 'boom')], [r('issue-1', 'FIXED')], B, C, s1.state);
-  assert.deepEqual(kinds(s2.changes), { 'issue-1': 'fixed' });
-  assert.equal(s2.changes[0].stale, true);
+check('R3-1/F2/F9: recovery after errors is a first verdict (no draft), needs no rerun, and the run goes through', () => {
+  const s1 = step([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'ERROR', 'boom')], B, { erroring: [] });
+  const s2 = step([r('issue-1', 'ERROR', 'boom')], [r('issue-1', 'FIXED')], C, s1.state);
+  assert.deepEqual(kinds(s2.changes), { 'issue-1': 'new' });
   assert.equal(draft(s2.changes[0], { ...ctx, prev: B, next: C }), null);
-  assert.match(report(s2.changes, { ...ctx, prev: B, next: C }), /"was" is the last verdict recorded \(on aaaaaaaa\)/);
+  assert.deepEqual(diff([r('issue-1', 'ERROR', 'boom')], [r('issue-1', 'FIXED')]).filter(needsConfirm), []);
 });
 check('F2: a draft names exactly the two commits both replays were made on', () => {
   const d = draft(diff([r('issue-1', 'BROKEN', 'w')], [r('issue-1', 'FIXED')])[0], ctx);
   assert.match(d, /goes from BROKEN on aaaaaaaa to FIXED on bbbbbbbb/);
   assert.match(d, new RegExp(`compare/${A}\\.\\.\\.${B}`));
 });
-check('F9/R2-3: a fixture with no real verdict yet: quiet while it errors, "new" (no draft) when it gets one, labelled honestly', () => {
-  const s1 = step([], [r('a', 'ERROR', 'boom')], A, B);
+check('F9: a brand-new fixture: "started erroring" once while it errors, then "first verdict" with no draft', () => {
+  const s1 = step([], [r('a', 'ERROR', 'boom')], B, { erroring: [] });
   assert.deepEqual(kinds(s1.changes), { a: 'error' });
-  assert.match(report(s1.changes, ctx), /ERROR \(no verdict yet\)/);
-  assert.deepEqual(kinds(step([r('a', 'ERROR', 'boom')], [r('a', 'ERROR', 'boom')], B, C, s1.state).changes), {});
-  const s3 = step([r('a', 'ERROR', 'boom')], [r('a', 'FIXED')], B, C, s1.state);
-  assert.deepEqual(kinds(s3.changes), { a: 'new' });
-  assert.equal(draft(s3.changes[0], ctx), null);
+  assert.deepEqual(kinds(step([], [r('a', 'FIXED')], C, s1.state).changes), { a: 'new' });
 });
 check('F8: an ERROR row with no issue keeps the issue its previous row had', () => {
   assert.equal(diff([r('a', 'BROKEN', 'w', 5)], [r('a', 'ERROR', 'boom', null)])[0].issue, 5);
 });
-check('input is refused when its shape is wrong, never rendered; R2-4: a replay cannot carry state fields', () => {
+check('input is refused when its shape is wrong, never rendered; R2-4: a replay carries no other fields; R3-5: no unsafe issue numbers', () => {
   assert.throws(() => rows({}), /no results/);
   assert.throws(() => rows({ results: [r('a', 'MAYBE')] }), /bad verdict/);
   assert.throws(() => rows({ results: [r('../x', 'FIXED')] }), /bad fixture name/);
   assert.throws(() => rows({ results: [r('a', 'FIXED'), r('a', 'FIXED')] }), /duplicate/);
   assert.throws(() => rows({ results: [r('a', 'FIXED')] }, { fixtures: new Set(['b']) }), /unknown fixture/);
   assert.throws(() => rows({ results: [{ ...r('a', 'FIXED'), issue: '12' }] }), /bad issue/);
-  assert.throws(() => rows({ results: [{ ...r('a', 'FIXED'), seenAt: 'x' }] }, { state: true }), /bad seenAt/);
+  assert.throws(() => rows({ results: [{ ...r('a', 'FIXED'), issue: 1e21 }] }), /bad issue/); // R3-5
   assert.deepEqual(rows({ results: [{ ...r('a', 'BROKEN'), erroringSince: A, seenAt: A }] }), [r('a', 'BROKEN')]);
   assert.deepEqual(rows({ results: [{ name: 'a', issue: 0, verdict: 'FIXED' }] }), [r('a', 'FIXED', '', null)]);
 });
@@ -120,12 +123,12 @@ check('F7/R2-5: the comment stays under the limit (drafts first, then rows); the
     from: r(`issue-${i}`, 'BROKEN', 'x'.repeat(500)), to: r(`issue-${i}`, 'BROKEN', 'y'.repeat(500)) }));
   const capped = report(big, ctx);
   assert.ok(capped.length <= LIMIT, String(capped.length));
-  assert.match(capped, /left out to stay under GitHub's comment limit: the replay job's summary/);
+  assert.match(capped, /left out to stay under GitHub's comment limit: the report job's summary/);
   const full = report(big, ctx, { limit: Infinity });
   assert.equal(full.match(/^\| issue-/gm).length, 400);
   assert.equal(full.match(/<details>/g).length, 400);
 });
-check('the command line: baseline, a confirmed change, flips; F3: changes need both reruns; R2-2: a stored state for another commit is refused', () => {
+check('the command line: baseline, a confirmed change, flips; F3: changes need both reruns; R2-2/R3-3: a stored state for another commit, or any for a baseline, is refused', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-watch-'));
   try {
     const fx = path.join(tmp, 'fixtures');
@@ -157,6 +160,24 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     assert.equal(cli('run', '--next', r2, '--sha', 'abc', '--graph-assay', G, '--state-out', o('x'), '--report-out', o('y')).status, 2);
     assert.equal(cli('run', '--next', r2, '--prev', r1, '--sha', B, '--graph-assay', G, '--state-out', o('x'), '--report-out', o('y')).status, 2); // --prev without --prev-sha
     assert.equal(cli('run', '--next', r2, '--sha', A, '--graph-assay', G, '--issue-states', f('bs.json', { 1: 'merged' }), '--state-out', o('x'), '--report-out', o('y')).status, 2);
+    // R3-3: a baseline run (no --prev) refuses an existing stored state rather than overwrite it.
+    p = cli('run', '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('s2.json'), '--state-out', o('x'), '--report-out', o('y'));
+    assert.equal(p.status, 2); assert.match(p.stderr, /not a baseline/);
+    // R3-5: flips refuses a fixture the checkout does not have (job 2 looks up issues only for real fixtures).
+    assert.equal(cli('flips', '--prev', r1, '--next', f('fake.json', { results: [r('made-up', 'FIXED', '', 9)] })).status, 2);
+    // R3-6: --summary-out writes the uncapped report, with the issue states the comment has.
+    p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st2.json', { 1: 'closed' }), '--summary-out', o('full.md'));
+    assert.equal(p.status, 0, p.stderr);
+    assert.match(fs.readFileSync(o('full.md'), 'utf8'), /#1 \(closed\)[\s\S]*Confirmed fixed/);
+    // R3-1 end to end, reruns limited to what flips picks: baseline, error, recovery. Every run goes through.
+    const r3 = f('r3.json', { results: [r('issue-1', 'ERROR', 'boom'), r('issue-2', 'FIXED', '', 2)] });
+    assert.equal(cli('flips', '--prev', r1, '--next', r3).stdout, '');
+    p = cli('run', '--prev', r1, '--prev-sha', A, '--next', r3, '--sha', B, '--graph-assay', G, '--state', o('s1.json'), '--state-out', o('e1.json'), '--report-out', o('e1.md'));
+    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e1.md'), 'utf8'), /started erroring/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(o('e1.json'), 'utf8')).erroring, ['issue-1']);
+    assert.equal(cli('flips', '--prev', r3, '--next', r2).stdout, '');
+    p = cli('run', '--prev', r3, '--prev-sha', B, '--next', r2, '--sha', C, '--graph-assay', G, '--state', o('e1.json'), '--state-out', o('e2.json'), '--report-out', o('e2.md'));
+    assert.equal(p.status, 0, p.stderr); assert.match(fs.readFileSync(o('e2.md'), 'utf8'), /\| ERROR|first verdict/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('the workflow: the previous commit is replayed with today\'s checkout; reruns are required; the report job takes only replay results and checks the state it diffs', () => {
@@ -169,6 +190,10 @@ check('the workflow: the previous commit is replayed with today\'s checkout; rer
   for (const file of ['next', 'prev', 'confirm-prev', 'confirm-next']) assert.match(wf, new RegExp(`artifact/${file}\\.json`));
   assert.match(wf, /--state watch\/stored\.json/); // R2-2: run checks it is the previous commit's
   assert.match(wf, /\|\| s=unknown/); // F6
-  assert.match(wf, /--no-limit/); // R2-5
+  assert.match(wf, /--summary-out watch\/full\.md/); // R2-5/R3-6: the report job's own uncapped summary
+  assert.equal(wf.match(/key: codegraph-build-\$\{\{ steps\.shas\.outputs\.(new|prev) \}\}-node\$\{\{ env\.NODE_VERSION \}\}-\$\{\{ hashFiles\('tools\/build-codegraph\.sh'\) \}\}/g)?.length, 2); // R3-2
+  assert.equal(wf.match(/node-version: \$\{\{ env\.NODE_VERSION \}\}/g)?.length, 2);
+  assert.equal(wf.match(/flips --prev watch\/prev\.json --next watch\/next\.json [^\n]*--fixtures fixtures\/oracle-candidates/g)?.length, 2); // R3-5
+  assert.equal(wf.match(/if \[ -f watch\/stored\.json \]; then args\+=\(--state watch\/stored\.json\); fi/g)?.length, 2); // R3-3
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
