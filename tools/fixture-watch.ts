@@ -190,10 +190,15 @@ const ADVICE: Partial<Record<Kind, string>> = {
   edges: 'a dated Edit line in our issue body (no notification), not a comment',
 };
 
+// An upstream reference as code: GitHub would turn a bare owner/repo#N into a cross-reference on the upstream
+// issue's timeline, which is a post upstream nobody approved.
+const ref = (n: number) => `\`${UPSTREAM}#${n}\``;
+const refHtml = (n: number) => `<code>${UPSTREAM}#${n}</code>`;
+
 function issueCell(c: Change, ctx: Ctx): string {
   if (!c.issue) return 'unfiled';
   const s = ctx.states[String(c.issue)];
-  return `${UPSTREAM}#${c.issue}${s ? (s === 'unknown' ? ' (state unknown)' : ` (${s})`) : ''}`;
+  return `${ref(c.issue)}${s ? (s === 'unknown' ? ' (state unknown)' : ` (${s})`) : ''}`;
 }
 
 /** The tracking-issue comment, or '' when nothing changed. Kept under `limit` (drafts go first, then rows). */
@@ -209,7 +214,7 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
   const row = (c: Change) => `| ${c.name} | ${issueCell(c, ctx)} | ${c.from?.verdict ?? '-'} | ${c.to.verdict} | ${what(c)} |`;
   const drafts = changes.flatMap((c) => {
     const d = draft(c, ctx);
-    return d ? [['', `<details><summary>Draft for ${UPSTREAM}#${c.issue}: ${ADVICE[c.kind]}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>'].join('\n')] : [];
+    return d ? [['', `<details><summary>Draft for ${refHtml(c.issue)}: ${ADVICE[c.kind]}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>'].join('\n')] : [];
   });
   const foot = '\nDrafts are candidates: re-check on current upstream `main`, then post by hand after approval.\n';
   const build = (rowsShown: number, draftsShown: number) => {
