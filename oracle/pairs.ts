@@ -10,8 +10,8 @@
 // A subject edge (any site line or none; guessed edges only for the guess-only count) is mapped by
 // its endpoints: the caller node to the container it holds (by name, span as §2), else to the
 // container around the node's start, else the file; the target node to the definition it holds
-// (by name and span, nearest its start). A caller is left unmapped when every same-named definition
-// near it belongs to another subject node (def-slack-own-node); `unmappedEdges` counts it.
+// (by name and span, nearest its start). A caller or target is left unmapped when every same-named
+// definition near it belongs to another subject node (def-slack-own-node); `unmappedEdges` counts it.
 // A constructor stands for its class (§4) on both sides.
 import { braces } from './braces.ts';
 import type { Context } from './context.ts';

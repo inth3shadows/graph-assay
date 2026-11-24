@@ -194,12 +194,12 @@ lines below the definition (`const x =\n (…) =>`), unless another node of that
 the definition: it starts there, as with two one-line same-named methods on adjacent lines, or spans it
 from a decorator above (rule `def-slack-own-node`, SPEC v6.0, #78). A value node does not count
 (`const W = wrap(\n function W…)`), nor a type alias, nor a node that encloses the target. The pair
-track's node mapping applies the same rule to callers and targets, and leaves a caller unmapped when
+track's node mapping applies the same rule to callers and targets, and leaves either unmapped when
 every nearby same-named definition belongs to another node. Self-tests: `go-def-slack`,
 `go-def-slack-missing`, `go-def-slack-pairs`, `go-def-slack-caller`, `py-def-slack-decorated` (the
 rule's side); `ts-def-slack-arrow`, `ts-def-slack-wrapper`, `ts-def-slack-enclosing`,
-`ts-def-slack-value`, `ts-def-slack-type` (the slack's side). `oracle/test/run.ts` patches take `start`
-to pick one of several same-named nodes, and a validated `span` op moves a node's lines or changes its
+`ts-def-slack-value`, `ts-def-slack-type` (the slack's side). A node in an `oracle/test/run.ts` patch
+must match exactly one snapshot node (`kind`, `start` and `file` narrow a shared name), and a validated `span` op moves a node's lines or changes its
 kind or name. In missing-edge mode each edge carries at most one call site:
 same-line edges are assigned first in SCIP document order, then edges within 3 lines, nearest first
 (rule `one-edge-per-unit`, SPEC §6), so `r.name("a").name("b")` with one edge has one `found` site.
@@ -248,7 +248,8 @@ A unit is a (caller, callee) pair, counted once however many calls carry it.
   source node maps to the caller definition it holds (same name; span as SPEC §2), else to the one
   around its start, else the file. The target node maps to the definition it holds, the one nearest
   its start. An edge with an endpoint the oracle never indexed is counted in `unmappedEdges`, as is a
-  caller whose every nearby same-named definition belongs to another subject node (def-slack-own-node).
+  caller or target whose every nearby same-named definition belongs to another subject node
+  (def-slack-own-node).
 - **Scoring**: recall = matched ÷ oracle pairs. A subject pair the oracle lacks is judged only where
   the oracle answers for it: some SCIP reference named like the callee lies inside the caller (a
   project, library or defined local symbol). Otherwise the pair is `oracleSilent`, unaligned, like a

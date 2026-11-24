@@ -19,10 +19,12 @@
 //   "inputs": "<case>" reuses that case's sources and frozen inputs (regen.ts skips such a case).
 //   "patch": edits applied to the frozen snapshot at test time, to give the oracle a subject error no
 //   real subject makes on the case: { "op": "drop", "at": "file:line", "kind" } removes call edges;
-//   { "op": "retarget", "at", "to": { "name", "kind", "start"? } } points them at another node ("start" picks one of several same-named nodes); { "op": "add",
-//   "from": { "name" }, "to": { "name", "kind" }, "line", "provenance"? } adds a call edge (a guessed
-//   one with "provenance"); { "op": "span", "node": { "name", "kind", "start"? }, "start"?, "end"?, "kind"?, "name"? }
-//   moves a node's span or changes its kind or name, as a subject that starts a decorated definition at its decorator does.
+//   { "op": "retarget", "at", "to": NODE } points them at another node; { "op": "add", "from": NODE,
+//   "to": NODE, "line", "provenance"? } adds a call edge (a guessed one with "provenance");
+//   { "op": "span", "node": NODE, "start"?, "end"?, "kind"?, "name"? } moves a node's span or changes
+//   its kind or name, as a subject that starts a decorated definition at its decorator does.
+//   NODE is { "name", "kind"?, "start"?, "file"? } and must match exactly one snapshot node (as patched
+//   so far); "kind", "start" and "file" narrow a name several nodes share, and an ambiguous NODE fails.
 // --dump: print every site's bucket per case (for writing expectations), then exit.
 // --mutate: re-run every case once per rule in the modules oracle.ts imports (each `on('<rule>')`, see rules.ts) with that rule
 // disabled. A rule whose removal fails no expectation is untested; the run exits 1 if any is.
@@ -57,9 +59,10 @@ function prepare(name) {
   if (spec.dropLines || spec.patch) {
     const snap = JSON.parse(fs.readFileSync(snapshot, 'utf8'));
     const node = (q) => {
-      const ns = snap.nodes.filter((x) => x.name === q.name && (!q.kind || x.kind === q.kind) && (q.start === undefined || x.start === q.start));
+      const ns = snap.nodes.filter((x) => x.name === q.name && (!q.kind || x.kind === q.kind) && (q.start === undefined || x.start === q.start)
+        && (!q.file || x.file === q.file));
       if (!ns.length) throw new Error(`${name}: patch: no node ${JSON.stringify(q)}`);
-      if (ns.length > 1) throw new Error(`${name}: patch: ambiguous node ${JSON.stringify(q)} (${ns.length} match; give "start")`);
+      if (ns.length > 1) throw new Error(`${name}: patch: ambiguous node ${JSON.stringify(q)} (${ns.length} matches: ${ns.map((x) => `${x.kind} ${x.file}:${x.start}`).join(', ')}; narrow it with "kind", "start" or "file")`);
       return ns[0];
     };
     const at = (e, where) => { const src = snap.nodes.find((x) => x.id === e.src); return `${src.file}:${e.line}` === where; };
