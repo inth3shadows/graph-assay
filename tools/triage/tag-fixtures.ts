@@ -6,8 +6,8 @@
 //
 // Usage: node tools/triage/tag-fixtures.ts <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
 //   Named fixtures are updated in the existing file (same build only); with none, every fixture is re-tagged.
-// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures are listed as not tagged:
-// the oracle has no indexer wired for them here.
+// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures, and a fixture with no TS/JS,
+// Python or Go source (C#, Swift), are listed as not tagged: the oracle has no indexer wired for them here.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';

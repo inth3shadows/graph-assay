@@ -419,8 +419,8 @@
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
-  "pr-3427-declared-call-result": {
-   "issue": 3427,
+  "issue-3422": {
+   "issue": 3422,
    "lang": "ts",
    "shapes": {
     "missing|unresolved-ref|ts|method>method": 3
