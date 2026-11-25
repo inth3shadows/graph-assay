@@ -12,7 +12,8 @@ All notable changes to this project are recorded here. The format follows
   `issue-3422` (a TypeScript local set from an instance method's result gets no type; #3427),
   `issue-3429` (a value named like a class links its calls to that class's static method; #3438),
   `issue-3430` (a Python parameter named like an imported function links to it when read; #3435),
-  `issue-3470` (Python import roots from pyproject's pytest `pythonpath` are ignored; #3480), and two from
+  `issue-3470` (Python import roots declared in pyproject.toml, pytest `pythonpath` and pyright
+  `extraPaths`, are ignored; #3480), and two from
   PR tests with no issue: `pr-2754` (an import of a module that hands on an import or an expression
   default lands on a namesake or the first export; four of the test's cases, one directory each) and
   `pr-2800` (a default import of a barrel that `export *`s reaches the forwarded module's first function).
