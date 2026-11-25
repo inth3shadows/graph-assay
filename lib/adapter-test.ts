@@ -130,6 +130,42 @@ check('codebase-memory-mcp #49: Go: a method takes its one owner, also across fi
   assert.deepEqual(contains, ['Route > Route::Name', 'Router > Router::Use', 'middleware.go > Route::Name', 'middleware.go > Router::Use',
     'router.go > Match', 'router.go > Route', 'router.go > Router', 'router.go > helper']);
 });
+check('codebase-memory-mcp #49 (PR #96 review, C1): a Go function cbm folded with a same-named method stays a function: no owner name, no owner edge', () => {
+  // a.go: `func (t *T) M()` and `func M()` are one Function node (line 7) with T's DEFINES_METHOD; d.go `func P()`
+  // folds with e.go's `func (w W) P()` the same way. b.go's method U.N absorbs c.go's `func N()` as a Method: owner kept.
+  const { snap, names, contains } = fileOnly('go-fold');
+  assert.deepEqual(names('a.go'), ['M', 'T']);
+  assert.deepEqual(names('d.go'), ['P']);
+  assert.deepEqual(names('b.go'), ['U', 'U::N']);
+  assert.deepEqual(contains.filter((c) => !c.endsWith('.go') && !/\.go > /.test(c)), ['U > U::N']);
+  assert.equal(snap.nodes.find((n) => n.file === 'a.go' && n.name === 'M').kind, 'function');
+});
+check('codebase-memory-mcp #49 (PR #96 review, C2): a class cbm folded across same-stem files contains no method of the other file', () => {
+  const { snap, contains } = fileOnly('ts-fold');
+  const file = new Map(snap.nodes.map((n) => [n.qname + '@' + n.id, n.file]));
+  const byId = new Map(snap.nodes.map((n) => [n.id, n]));
+  const cross = snap.edges.filter((e) => e.kind === 'contains' && byId.get(e.src).file !== byId.get(e.dst).file);
+  assert.deepEqual(cross.map((e) => `${byId.get(e.src).qname}@${byId.get(e.src).file} > ${byId.get(e.dst).qname}@${byId.get(e.dst).file}`), []);
+  assert.ok(contains.includes('A > A::onlyJs') && contains.includes('C > C::go'), [...file.keys()].join(' '));
+});
+check('codebase-memory-mcp #49 (PR #96 review, C3): the same owner edge written twice is still one owner', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-dup-owner-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.graph-assay'));
+    const db = new DatabaseSync(path.join(tmp, '.graph-assay', 'cbm.db'));
+    db.exec(`CREATE TABLE nodes (id, label, name, qualified_name, file_path, start_line, end_line, properties);
+      CREATE TABLE edges (id, source_id, target_id, type, properties);`);
+    const node = db.prepare('INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const r of [[1, 'File', 'r.go', 'graph-assay.r.go.__file__', 'r.go', 0, 0], [2, 'Struct', 'R', 'graph-assay.R', 'r.go', 3, 3],
+      [3, 'Method', 'Use', 'graph-assay.Use', 'r.go', 5, 5]]) node.run(...r, '{}');
+    const edge = db.prepare('INSERT INTO edges VALUES (?, ?, ?, ?, ?)');
+    edge.run(1, 2, 3, 'DEFINES_METHOD', '{}'); edge.run(2, 2, 3, 'DEFINES_METHOD', '{}');
+    db.close();
+    const snap = cbm.snapshot(tmp);
+    assert.equal(snap.nodes.find((n) => n.id === '3').qname, 'R::Use');
+    assert.equal(snap.edges.filter((e) => e.kind === 'contains' && e.src === '2').length, 2);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
 check('codebase-memory-mcp #49: no prefix holds (a container cbm did not write): the file keeps bare names', () => {
   const rows = [{ id: 1, label: 'File', qname: 'graph-assay.pkg.m.py.__file__' }];
   const prefixes = cbm.filePrefixes(new Map([['pkg/m.py', rows[0]]]), [{ file: 'pkg/m.py', qname: 'graph-assay.pkg.m.Gone.run' }]);

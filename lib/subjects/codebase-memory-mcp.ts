@@ -168,26 +168,36 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     }
     // cbm's owners of each method (DEFINES_METHOD). Go: several when cbm folded same-named methods of
     // different receivers into one node (gorilla/mux's eight `Match` methods are one node), so none is its owner.
-    const owners = new Map<number, number[]>();
-    for (const e of er) if (e.type === 'DEFINES_METHOD') (owners.get(e.dst) ?? owners.set(e.dst, []).get(e.dst)).push(e.src);
-    const soleOwner = (id: number) => { const o = owners.get(id); return o?.length === 1 ? o[0] : null; };
+    // Distinct owners: the same edge written twice is one owner (PR #96 review, C3).
+    const owners = new Map<number, Set<number>>();
+    for (const e of er) if (e.type === 'DEFINES_METHOD') (owners.get(e.dst) ?? owners.set(e.dst, new Set()).get(e.dst)).add(e.src);
+    const soleOwner = (id: number) => { const o = owners.get(id); return o?.size === 1 ? [...o][0] : null; };
+    // cbm also folds a Go function with a same-named method: the node is a Function that still carries the
+    // method's owner edge. Only a Method has an owner (PR #96 review, C1).
+    const isMethod = new Set(rows.filter((n) => n.label === 'Method').map((n) => n.id));
     const defs = rows.filter((n) => n.file && moduleOf.has(n.file) && n.label !== 'Module' && moduleOf.get(n.file).id !== n.id
       && !SKIP.has(n.label) && !n.file.startsWith(`${OUT}/`));
     const prefixOf = filePrefixes(moduleOf, defs);
     const local = new Map<number, string>();
+    const stripped = new Set<number>(); // a local cbm's own qname gave, not the bare-name fallback
     // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the file's prefix
     // (filePrefixes). Without one, a definition keeps cbm's bare name.
     for (const n of defs) {
       const p = prefixOf.get(n.file);
-      local.set(n.id, p !== undefined && n.qname.startsWith(`${p}.`) ? n.qname.slice(p.length + 1) : n.name);
+      const ok = p !== undefined && n.qname.startsWith(`${p}.`);
+      local.set(n.id, ok ? n.qname.slice(p.length + 1) : n.name);
+      if (ok) stripped.add(n.id);
     }
     // Go writes a method flat (`graph-assay.Match`): its receiver is only in the ownership edge. A method
-    // with no container in its name and one owner is `<owner>.<name>` (only in File-only files: a Module
-    // file's names already nest).
+    // whose qname, under its file's prefix, has no container and that has one owner is `<owner>.<name>`
+    // (only in File-only files: a Module file's names already nest). A bare-name fallback is not flat: in
+    // `a.ts` beside `a.js`, cbm folded class A into a.js, so no prefix holds there (PR #96 review, C2).
+    const named = new Set<number>(); // methods named by their owner: the only containment that may cross files
     for (const n of defs) {
       const o = soleOwner(n.id);
-      if (moduleOf.get(n.file).label === 'Module' || local.get(n.id).includes('.') || o === null || !local.has(o)) continue;
+      if (!isMethod.has(n.id) || !stripped.has(n.id) || moduleOf.get(n.file).label === 'Module' || local.get(n.id).includes('.') || o === null || !local.has(o)) continue;
       local.set(n.id, `${local.get(o)}.${n.name}`);
+      named.add(n.id);
     }
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
@@ -212,12 +222,14 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       if (!keep.has(src) || !keep.has(dst)) continue;
       if (src === dst && (alias.has(e.src) || alias.has(e.dst))) continue; // File DEFINES its own Module
       if (KIND[e.type] === 'contains') {
-        // A folded method's owners are each claimed and at most one is right: none is kept.
-        if (e.type === 'DEFINES_METHOD' && soleOwner(e.dst) === null) continue;
-        // Containment crosses files only as a method's one owner (a Go receiver type declared in another
-        // file). cbm's DEFINES from a File node can cross files wrongly (same-stem `client.ts` "defines"
-        // `client.js` and its functions).
-        if (byId.get(src)?.file !== byId.get(dst)?.file && e.type !== 'DEFINES_METHOD') continue;
+        // A folded method's owners are each claimed and at most one is right, and a function has no
+        // owner: neither keeps an owner edge.
+        if (e.type === 'DEFINES_METHOD' && (soleOwner(e.dst) === null || !isMethod.has(e.dst))) continue;
+        // Containment crosses files only as the owner of a Go method named by it (a receiver type declared
+        // in another file). Anything else across files is one of cbm's folds: a File's DEFINES of a
+        // same-stem file (`client.ts` "defines" `client.js`'s functions), or a class folded across
+        // `a.js`/`a.ts` "defining" the other file's method (PR #96 review, C2).
+        if (byId.get(src)?.file !== byId.get(dst)?.file && !(e.type === 'DEFINES_METHOD' && named.has(e.dst))) continue;
       }
       let p: Record<string, any> = {};
       try { p = JSON.parse(e.properties || '{}'); } catch { /* malformed properties: no metadata */ }
