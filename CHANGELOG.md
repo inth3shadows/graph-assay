@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Four more fixtures from open colbymchenry/codegraph PRs with a wrong or missing edge, each BROKEN on main
+  73c6cff6 and FIXED on the PR's head: `issue-3473` (Express routes on a custom receiver name are not
+  indexed; #3479), `pr-3132` (a Kotlin call lands on an overload its argument count rules out), `pr-3206`
+  (a Swift static `Type.member()` call links another type's member) and `pr-3262` (C# member calls split
+  across lines are lost). `issue-3470` adds the PR test's `from helpers import check` case beside the
+  issue's attribute import. `known-shapes.json` adds the four at f72c9d2e; every other entry is unchanged.
 - Six fixtures for open colbymchenry/codegraph issues and PRs with a wrong or missing call edge and no
   fixture yet, each BROKEN on main 73c6cff6 and FIXED on the head of the PR that addresses it:
   `issue-3422` (a TypeScript local set from an instance method's result gets no type; #3427),
@@ -254,6 +260,8 @@ All notable changes to this project are recorded here. The format follows
   Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
 
 ### Fixed
+- `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
+  indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
   every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
   now `>=22.18.0 <23 || >=23.6.0 <25`: 23.0 to 23.5 had type stripping behind a flag. Every step and

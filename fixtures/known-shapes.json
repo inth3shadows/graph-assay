@@ -414,6 +414,29 @@
     "wrong-target|instantiates|import|function>type": 1,
     "missing|wrong-edge|ts|type>class": 1
    }
+  },
+  "issue-3473": {
+   "issue": 3473,
+   "lang": "ts",
+   "shapes": {}
+  },
+  "pr-3132": {
+   "issue": 3132,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "pr-3206": {
+   "issue": 3206,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
+  },
+  "pr-3262": {
+   "issue": 3262,
+   "lang": "other",
+   "shapes": null,
+   "note": "no oracle indexer for this language"
   }
  }
 }
