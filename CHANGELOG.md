@@ -7,6 +7,18 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Six fixtures for open colbymchenry/codegraph issues and PRs with a wrong or missing call edge and no
+  fixture yet, each BROKEN on main 73c6cff6 and FIXED on the head of the PR that addresses it:
+  `issue-3422` (a TypeScript local set from an instance method's result gets no type; #3427),
+  `issue-3429` (a value named like a class links its calls to that class's static method; #3438),
+  `issue-3430` (a Python parameter named like an imported function links to it when read; #3435),
+  `issue-3470` (Python import roots from pyproject's pytest `pythonpath` are ignored; #3480), and two from
+  PR tests with no issue: `pr-2754` (an import of a module that hands on an import or an expression
+  default lands on a namesake or the first export; four of the test's cases, one directory each) and
+  `pr-2800` (a default import of a barrel that `export *`s reaches the forwarded module's first function).
+  Issue fixtures are the issue's repro; PR fixtures are the files the PR's test writes. `pr-<n>` names a
+  fixture whose `issue` field is a PR number. `known-shapes.json` adds the six at f72c9d2e; every existing
+  entry is unchanged.
 - Six fixtures for colbymchenry/codegraph issues filed 2026-11-21, each the issue's own repro, all BROKEN
   on 461a5d87 (v1.6.4): `issue-3443` (a parameter typed only by its callback type links another class's
   method), `issue-3444` (a canvas context held in a local still takes the one-method guess), `issue-3445`

@@ -1,0 +1,1 @@
+{"issue": 3429, "note": "Sources as the issue writes them, with their // src/... path line. The issue's Expected names no single right target.", "wrong": [{"from": "selfImport", "kind": "calls", "to": "src/core.ts:Ky::create"}, {"from": "dynamicImport", "kind": "calls", "to": "src/core.ts:Ky::create"}], "right": []}

@@ -4,3 +4,4 @@ CanvasRenderingContext2D
 HTMLCanvasElement
 # JavaScript global value (tools/fixture-watch-test.ts: an uncapped report limit).
 Infinity
+createInstance
