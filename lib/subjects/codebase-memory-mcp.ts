@@ -199,6 +199,10 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     for (const n of defs) {
       const m = moduleOf.get(n.file); const o = ownerOf(n);
       if (m.label === 'Module' || o === null || !local.has(o.id)) continue;
+      // A Go receiver type lives in its method's package directory. An owner elsewhere, or in another
+      // language, is a type cbm folded into a same-qname one (`models/user.go`'s User into `models.py`'s
+      // class User): the method keeps its bare name (PR #96 review, round 3 N1).
+      if (path.posix.dirname(o.file) !== path.posix.dirname(n.file) || lang(o.file) !== lang(n.file)) continue;
       const base = path.posix.basename(n.file); const tail = `.${base}.__file__`;
       if (!m.qname.endsWith(tail) || n.qname !== `${m.qname.slice(0, -tail.length)}.${n.name}`) continue;
       local.set(n.id, `${local.get(o.id)}.${n.name}`);
@@ -228,7 +232,9 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       if (src === dst && (alias.has(e.src) || alias.has(e.dst))) continue; // File DEFINES its own Module
       if (KIND[e.type] === 'contains') {
         // An owner edge is kept only from the type `parent_class` names: a folded method's edges from the
-        // methods it absorbed, and a folded function's, are dropped (V1, C1). Duplicates of it are one owner (C3).
+        // methods it absorbed, and a folded function's, are dropped (V1, C1). The edges cbm wrote are filtered,
+        // never added: a folded method whose only edge came from the absorbed type gets none, though its name
+        // comes from `parent_class`; and a duplicated edge passes through twice (its owner still counts once, C3).
         if (e.type === 'DEFINES_METHOD' && ownerOf(rowById.get(e.dst))?.id !== e.src) continue;
         // Containment crosses files only as the owner of a Go method named by it (a receiver type declared
         // in another file). Anything else across files is one of cbm's folds: a File's DEFINES of a

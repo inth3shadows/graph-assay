@@ -189,6 +189,17 @@ check('codebase-memory-mcp #49 (PR #96 review, V2): a Go file whose prefix does 
   assert.ok(contains.includes('T > T::Handle'));
   assert.deepEqual(names('s.go'), ['S', 'S::Run']);
 });
+check('codebase-memory-mcp #49 (PR #96 review, round 3 N1): a Go method is never named for a type in another directory or language', () => {
+  // models/user.go's `type User` has the same qname as models.py's `class User`; cbm folds the struct into the
+  // Python class, so Go's Save and Name have parent_class `models.User` (in models.py).
+  const { snap, names } = fileOnly('poly-fold');
+  assert.deepEqual(names('models/user.go'), ['ID', 'Name', 'Save']); // the struct itself was folded away
+  const byId = new Map(snap.nodes.map((n) => [n.id, n]));
+  assert.deepEqual(snap.edges.filter((e) => e.kind === 'contains' && byId.get(e.src).file !== byId.get(e.dst).file), []);
+  // models.py's Module is `graph-assay.models#py` (cbm steps around the `models/` directory), which prefixes none of
+  // its definitions: bare names, as on main (a Module file; not this change).
+  assert.deepEqual(names('models.py'), ['Name', 'User', 'save']);
+});
 check('codebase-memory-mcp #49: no prefix holds (a container cbm did not write): the file keeps bare names', () => {
   const rows = [{ id: 1, label: 'File', qname: 'graph-assay.pkg.m.py.__file__' }];
   const prefixes = cbm.filePrefixes(new Map([['pkg/m.py', rows[0]]]), [{ file: 'pkg/m.py', qname: 'graph-assay.pkg.m.Gone.run' }]);
