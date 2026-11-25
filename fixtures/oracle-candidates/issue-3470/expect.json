@@ -1,0 +1,1 @@
+{"issue": 3470, "note": "The files the issue's repro script writes. server/ is an import root only through pyproject.toml.", "wrong": [], "right": [{"from": "test_attr", "kind": "calls", "to": "server/helpers.py:check"}]}

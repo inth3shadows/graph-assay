@@ -4,3 +4,5 @@ CanvasRenderingContext2D
 HTMLCanvasElement
 # JavaScript global value (tools/fixture-watch-test.ts: an uncapped report limit).
 Infinity
+# A function issue-3429's repro only declares (fixtures/oracle-candidates/issue-3429/src/index.ts).
+createInstance

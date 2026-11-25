@@ -1,6 +1,6 @@
 {
  "build": "f72c9d2efb14454ff4f9fd7b8460abd82f19a287",
- "generated": "2026-11-21",
+ "generated": "2026-11-25",
  "fixtures": {
   "a": {
    "issue": 3034,
@@ -367,6 +367,52 @@
     "wrong-target|calls|instance-method|method>method": 1,
     "missing|wrong-edge|go|method>method": 1,
     "missing|unresolved-ref|go|method>method": 1
+   }
+  },
+  "issue-3422": {
+   "issue": 3422,
+   "lang": "ts",
+   "shapes": {
+    "missing|unresolved-ref|ts|method@decl>method": 3
+   }
+  },
+  "issue-3429": {
+   "issue": 3429,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|instance-method|method>term": 2,
+    "missing|wrong-edge|ts|term@decl>method": 2
+   }
+  },
+  "issue-3430": {
+   "issue": 3430,
+   "lang": "python",
+   "shapes": {}
+  },
+  "issue-3470": {
+   "issue": 3470,
+   "lang": "python",
+   "shapes": {}
+  },
+  "pr-2754": {
+   "issue": 2754,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|exact-match|function>method": 2,
+    "wrong-target|calls|qualified-name|method>method": 2,
+    "wrong-target|calls|import|function>method": 1,
+    "missing|wrong-edge|ts|method>function": 2,
+    "missing|target-not-a-node|ts|method": 2,
+    "missing|wrong-edge|ts|method>method": 2,
+    "missing|wrong-edge|ts|method": 1
+   }
+  },
+  "pr-2800": {
+   "issue": 2800,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|instantiates|import|function>type": 1,
+    "missing|wrong-edge|ts|type>class": 1
    }
   }
  }

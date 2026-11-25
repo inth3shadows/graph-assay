@@ -1,0 +1,1 @@
+{"issue": 3430, "note": "Sources as the issue writes them, with their # pkg/... path line, so the wrong read is line 10 here (line 9 in the issue's numbering).", "wrong": [{"from": "Option::__init__", "kind": "references", "to": "pkg/termui.py:prompt"}], "right": [{"from": "Option::prompt_for_value", "kind": "calls", "to": "pkg/termui.py:prompt"}]}
