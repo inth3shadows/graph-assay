@@ -109,15 +109,51 @@ const GUESSED = new Set(['unique_name', 'suffix_match', 'field_type_hint', 'fuzz
 // for a file that has no Module (snapshot()).
 const SKIP = new Set(['File', 'Folder', 'Project', 'Branch', 'Route']);
 
+type FileRow = { id: number; label: string; qname: string };
+
+/**
+ * The qname prefix of each file's definitions. A Module node's own qname. A file with only a File node
+ * (`<project>.<path with / as .>.__file__`) has none, and cbm 0.12.1 names its definitions from the
+ * directory (Java `src.A.Inner.run`, Go `Match`) or from the directory and the file's stem (Python
+ * `pkg.aliases.Config.read_config` beside an `aliases.ini` that took the Module). The shorter candidate
+ * is taken when it holds: every definition is under it and every container its local names leaves
+ * (`A`, `A.Inner` for `A.Inner.run`) is a definition of the file, as lib/expect.ts reads containers.
+ * Otherwise the longer one; neither holds: no prefix (bare names). #47 tried the stem first and stripped
+ * a class named like its file (`Svc.java`: `Svc.run` became `run`).
+ */
+export function filePrefixes(moduleOf: Map<string, FileRow>, defs: { file: string; qname: string }[]): Map<string, string> {
+  const byFile = new Map<string, string[]>();
+  for (const d of defs) (byFile.get(d.file) ?? byFile.set(d.file, []).get(d.file)).push(d.qname);
+  const out = new Map<string, string>();
+  for (const [file, m] of moduleOf) {
+    if (m.label === 'Module') { out.set(file, m.qname); continue; }
+    const base = path.posix.basename(file); const tail = `.${base}.__file__`;
+    if (!m.qname.endsWith(tail)) continue;
+    const dir = m.qname.slice(0, -tail.length);
+    const qs = byFile.get(file) ?? [];
+    const holds = (p: string) => {
+      if (!qs.every((q) => q.startsWith(`${p}.`))) return false;
+      const locals = new Set(qs.map((q) => q.slice(p.length + 1)));
+      return [...locals].every((l) => { const s = l.split('.'); return s.slice(0, -1).every((_, i) => locals.has(s.slice(0, i + 1).join('.'))); });
+    };
+    const ext = path.posix.extname(base);
+    const p = [dir, `${dir}.${ext ? base.slice(0, -ext.length) : base}`].find(holds);
+    if (p !== undefined) out.set(file, p);
+  }
+  return out;
+}
+
 /** Map `dir`/.graph-assay/cbm.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
   const bad = sandbox.vet(path.join(dir, OUT)); if (bad) throw new Error(bad);
   const db = new DatabaseSync(sandbox.confined(dir, path.join(dir, OUT, DB)), { readOnly: true });
   try {
-    type Row = { id: number; label: string; name: string; qname: string; file: string; start: number; end: number };
+    type Row = { id: number; label: string; name: string; qname: string; file: string; start: number; end: number; parent: unknown };
+    // `parent_class`: the qname of the type cbm says a method belongs to.
     const rows = db.prepare(`SELECT id, label, name, qualified_name AS qname, file_path AS file, start_line AS start,
-                                    end_line AS "end" FROM nodes ORDER BY id`).all() as unknown as Row[];
+                                    end_line AS "end", CASE WHEN json_valid(properties) THEN json_extract(properties, '$.parent_class') END AS parent
+                             FROM nodes ORDER BY id`).all() as unknown as Row[];
     const er = db.prepare('SELECT source_id AS src, target_id AS dst, type, properties FROM edges ORDER BY id').all() as unknown as
       { src: number; dst: number; type: string; properties: string }[];
     // A file is its Module node; File nodes (the same file) are folded into it. cbm 0.12.1 writes no
@@ -132,6 +168,46 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
       else if (lang(n.file)) moduleOf.set(n.file, n);
     }
+    // A method's owner is the type its `parent_class` names, not cbm's DEFINES_METHOD edges. Go: cbm folds
+    // same-named methods of different receivers into one node (gorilla/mux's eight `Match` methods are one)
+    // whose span and `parent_class` are one method's, while its owner edges come from all of them, or only
+    // from one it folded away (PR #96 review, V1). It also folds a function with a same-named method into a
+    // Function node that keeps the method's owner edge (C1): a Function has no owner.
+    const byQname = new Map<string, Row[]>();
+    for (const n of rows) if (n.qname) (byQname.get(n.qname) ?? byQname.set(n.qname, []).get(n.qname)).push(n);
+    const ownerOf = (n: Row): Row | null => {
+      if (n.label !== 'Method' || typeof n.parent !== 'string') return null;
+      const c = (byQname.get(n.parent) ?? []).filter((o) => !['Method', 'Function', 'Module', 'File', 'Folder', 'Project'].includes(o.label));
+      return c.length === 1 ? c[0] : null;
+    };
+    const rowById = new Map(rows.map((n) => [n.id, n]));
+    const defs = rows.filter((n) => n.file && moduleOf.has(n.file) && n.label !== 'Module' && moduleOf.get(n.file).id !== n.id
+      && !SKIP.has(n.label) && !n.file.startsWith(`${OUT}/`));
+    const prefixOf = filePrefixes(moduleOf, defs);
+    const local = new Map<number, string>();
+    // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the file's prefix
+    // (filePrefixes). Without one, a definition keeps cbm's bare name.
+    for (const n of defs) {
+      const p = prefixOf.get(n.file);
+      local.set(n.id, p !== undefined && n.qname.startsWith(`${p}.`) ? n.qname.slice(p.length + 1) : n.name);
+    }
+    // Go writes a method flat, `<dir>.<name>` (`graph-assay.Match`): its receiver is only in `parent_class`.
+    // Such a method in a File-only file is `<owner>.<name>`. Flatness is read from cbm's own qname, not from
+    // the local: a bare-name fallback is not flat (`onlyTs` in `a.ts` beside `a.js`, where cbm folded class A
+    // into a.js: C2), and a Go file whose prefix does not hold still has flat methods (V2).
+    const named = new Set<number>(); // methods named by their owner: the only containment that may cross files
+    for (const n of defs) {
+      const m = moduleOf.get(n.file); const o = ownerOf(n);
+      if (m.label === 'Module' || o === null || !local.has(o.id)) continue;
+      // A Go receiver type lives in its method's package directory. An owner elsewhere, or in another
+      // language, is a type cbm folded into a same-qname one (`models/user.go`'s User into `models.py`'s
+      // class User): the method keeps its bare name (PR #96 review, round 3 N1).
+      if (path.posix.dirname(o.file) !== path.posix.dirname(n.file) || lang(o.file) !== lang(n.file)) continue;
+      const base = path.posix.basename(n.file); const tail = `.${base}.__file__`;
+      if (!m.qname.endsWith(tail) || n.qname !== `${m.qname.slice(0, -tail.length)}.${n.name}`) continue;
+      local.set(n.id, `${local.get(o.id)}.${n.name}`);
+      named.add(n.id);
+    }
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
       // no file: injected builtins (`builtins.len`), routes, the project and branch nodes
@@ -143,11 +219,7 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
         nodes.push({ id: String(n.id), kind: 'file', name: n.file, qname: n.file, file: n.file, language: lang(n.file), start: 1, end: Math.max(1, n.end) });
         continue;
       }
-      // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the module's own qname.
-      // A file with only a File node has no module qname to strip, so its definitions keep their bare
-      // names (containers from cbm's ownership edges are a separate change).
-      const local = n.qname.startsWith(`${mod.qname}.`) ? n.qname.slice(mod.qname.length + 1) : n.name;
-      nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.split('.').join('::'), file: n.file,
+      nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.get(n.id).split('.').join('::'), file: n.file,
         language: lang(n.file), start: n.start, end: Math.max(n.start, n.end) });
     }
     const keep = new Set(nodes.map((n) => n.id));
@@ -158,9 +230,18 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       // An edge to a node the snapshot does not hold (a route, a builtin) is dropped with it.
       if (!keep.has(src) || !keep.has(dst)) continue;
       if (src === dst && (alias.has(e.src) || alias.has(e.dst))) continue; // File DEFINES its own Module
-      // cbm's DEFINES from a File node can cross files (same-stem `client.ts` "defines" `client.js` and its
-      // functions): containment never leaves a file.
-      if (e.type.startsWith('DEFINES') && byId.get(src)?.file !== byId.get(dst)?.file) continue;
+      if (KIND[e.type] === 'contains') {
+        // An owner edge is kept only from the type `parent_class` names: a folded method's edges from the
+        // methods it absorbed, and a folded function's, are dropped (V1, C1). The edges cbm wrote are filtered,
+        // never added: a folded method whose only edge came from the absorbed type gets none, though its name
+        // comes from `parent_class`; and a duplicated edge passes through twice (its owner still counts once, C3).
+        if (e.type === 'DEFINES_METHOD' && ownerOf(rowById.get(e.dst))?.id !== e.src) continue;
+        // Containment crosses files only as the owner of a Go method named by it (a receiver type declared
+        // in another file). Anything else across files is one of cbm's folds: a File's DEFINES of a
+        // same-stem file (`client.ts` "defines" `client.js`'s functions), or a class folded across
+        // `a.js`/`a.ts` "defining" the other file's method (PR #96 review, C2).
+        if (byId.get(src)?.file !== byId.get(dst)?.file && !(e.type === 'DEFINES_METHOD' && named.has(e.dst))) continue;
+      }
       let p: Record<string, any> = {};
       try { p = JSON.parse(e.properties || '{}'); } catch { /* malformed properties: no metadata */ }
       const strategy = typeof p.strategy === 'string' ? p.strategy : null;

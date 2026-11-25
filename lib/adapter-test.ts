@@ -65,7 +65,7 @@ fs.writeFileSync(process.env.HOME + '/seen.json', JSON.stringify({ keys: Object.
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-check('codebase-memory-mcp: a code file with only a File node is a file; containment never crosses files', () => {
+check('codebase-memory-mcp: a code file with only a File node is a file; a File never contains another file\'s definitions', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-file-only-'));
   try {
     fs.mkdirSync(path.join(tmp, '.graph-assay'));
@@ -96,6 +96,116 @@ check('codebase-memory-mcp: a code file with only a File node is a file; contain
       ['file main.go', 'function main', 'function helper', 'file client.ts', 'function encode']);
     assert.deepEqual(snap.edges.map((e) => [e.kind, e.src, e.dst, e.line]), [['contains', '2', '3', null], ['calls', '3', '4', 4], ['contains', '13', '14', null], ['calls', '12', '14', 2]]);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// #49: stores cbm 0.12.1 wrote for lib/test/adapters/codebase-memory-mcp-file-only/{go,java,py} (frozen, so a
+// change in cbm's naming fails here). Every file but plain.py has only a File node.
+const fileOnly = (lang: string) => {
+  const snap = cbm.snapshot(path.join(here, 'test', 'adapters', 'codebase-memory-mcp-file-only', lang));
+  assert.deepEqual(validateSnapshot(snap), []);
+  const q = new Map(snap.nodes.map((n) => [n.id, n.qname]));
+  const names = (file: string) => snap.nodes.filter((n) => n.file === file && n.kind !== 'file').map((n) => n.qname).sort();
+  const contains = snap.edges.filter((e) => e.kind === 'contains').map((e) => `${q.get(e.src)} > ${q.get(e.dst)}`).sort();
+  return { snap, names, contains };
+};
+check('codebase-memory-mcp #49: Java in File-only files: containers from the directory prefix; a class named like its file keeps its members', () => {
+  const { names } = fileOnly('java');
+  assert.deepEqual(names('src/A.java'), ['A', 'A::Inner', 'A::Inner::run', 'A::run', 'B', 'B::other', 'B::run']);
+  assert.deepEqual(names('src/Svc.java'), ['Svc', 'Svc::Api', 'Svc::Api::call', 'Svc::Mode', 'Svc::Mode::ON', 'Svc::Mode::flip', 'Svc::run']);
+  // Svc.kt beside Svc.java: Kotlin names it from the stem (`src.Svc.Kt.run`), so the stem is stripped there.
+  assert.deepEqual(names('src/Svc.kt'), ['Kt', 'Kt::run']);
+});
+check('codebase-memory-mcp #49: Python beside a same-stem file that took the Module: containers from the stem prefix; a Module file unchanged', () => {
+  const { snap, names } = fileOnly('py');
+  assert.deepEqual(names('pkg/aliases.py'), ['Config', 'Config::Nested', 'Config::Nested::read_config', 'Config::read_config', 'read_config']);
+  assert.deepEqual(names('pkg/plain.py'), ['Plain', 'Plain::go', 'go']);
+  // aliases.ini's Module (an extension the adapter does not know) still makes it a file of its own.
+  assert.deepEqual(snap.files.find((f) => f.path === 'pkg/aliases.ini'), { path: 'pkg/aliases.ini', language: null });
+  assert.deepEqual(names('pkg/aliases.ini'), ['x', 'y']);
+});
+check('codebase-memory-mcp #49: Go: a method takes the type its parent_class names, also across files; a node cbm folded from two receivers is the method its span is', () => {
+  const { names, contains } = fileOnly('go');
+  // router.go:7 is `func (r *Route) Match`; cbm folded Router.Match (line 6) into it (PR #96 review, V1 redesign).
+  assert.deepEqual(names('router.go'), ['Route', 'Route::Match', 'Router', 'helper']);
+  assert.deepEqual(names('middleware.go'), ['Route::Name', 'Router::Use']);
+  assert.deepEqual(contains, ['Route > Route::Match', 'Route > Route::Name', 'Router > Router::Use', 'middleware.go > Route::Name', 'middleware.go > Router::Use',
+    'router.go > Route', 'router.go > Route::Match', 'router.go > Router', 'router.go > helper']);
+});
+check('codebase-memory-mcp #49 (PR #96 review, C1): a Go function cbm folded with a same-named method stays a function: no owner name, no owner edge', () => {
+  // a.go: `func (t *T) M()` and `func M()` are one Function node (line 7) with T's DEFINES_METHOD; d.go `func P()`
+  // folds with e.go's `func (w W) P()` the same way. b.go's method U.N absorbs c.go's `func N()` as a Method: owner kept.
+  const { snap, names, contains } = fileOnly('go-fold');
+  assert.deepEqual(names('a.go'), ['M', 'T']);
+  assert.deepEqual(names('d.go'), ['P']);
+  assert.deepEqual(names('b.go'), ['U', 'U::N']);
+  assert.deepEqual(contains.filter((c) => !c.endsWith('.go') && !/\.go > /.test(c)), ['U > U::N']);
+  assert.equal(snap.nodes.find((n) => n.file === 'a.go' && n.name === 'M').kind, 'function');
+});
+check('codebase-memory-mcp #49 (PR #96 review, C2): a class cbm folded across same-stem files contains no method of the other file', () => {
+  const { snap, names, contains } = fileOnly('ts-fold');
+  const byId = new Map(snap.nodes.map((n) => [n.id, n]));
+  const cross = snap.edges.filter((e) => e.kind === 'contains' && byId.get(e.src).file !== byId.get(e.dst).file);
+  assert.deepEqual(cross.map((e) => `${byId.get(e.src).qname}@${byId.get(e.src).file} > ${byId.get(e.dst).qname}@${byId.get(e.dst).file}`), []);
+  assert.ok(contains.includes('A > A::onlyJs') && contains.includes('C > C::go'));
+  // pkg/m.py beside m.pyi: cbm 0.12.1 writes no node for the stub, so m.py is an ordinary Module file.
+  assert.deepEqual(names('pkg/m.py'), ['P', 'P::impl_only', 'P::run']);
+  assert.equal(snap.files.some((f) => f.path === 'pkg/m.pyi'), false);
+});
+check('codebase-memory-mcp #49 (PR #96 review, C3, C1): the same owner edge written twice is still one owner; a Function takes none', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-dup-owner-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.graph-assay'));
+    const db = new DatabaseSync(path.join(tmp, '.graph-assay', 'cbm.db'));
+    db.exec(`CREATE TABLE nodes (id, label, name, qualified_name, file_path, start_line, end_line, properties);
+      CREATE TABLE edges (id, source_id, target_id, type, properties);`);
+    const node = db.prepare('INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const r of [[1, 'File', 'r.go', 'graph-assay.r.go.__file__', 'r.go', 0, 0], [2, 'Struct', 'R', 'graph-assay.R', 'r.go', 3, 3],
+      [3, 'Method', 'Use', 'graph-assay.Use', 'r.go', 5, 5], [4, 'Function', 'Open', 'graph-assay.Open', 'r.go', 7, 7]])
+      node.run(...r, Number(r[0]) >= 3 ? JSON.stringify({ parent_class: 'graph-assay.R' }) : '{}');
+    const edge = db.prepare('INSERT INTO edges VALUES (?, ?, ?, ?, ?)');
+    edge.run(1, 2, 3, 'DEFINES_METHOD', '{}'); edge.run(2, 2, 3, 'DEFINES_METHOD', '{}'); edge.run(3, 2, 4, 'DEFINES_METHOD', '{}');
+    db.close();
+    const snap = cbm.snapshot(tmp);
+    assert.equal(snap.nodes.find((n) => n.id === '3').qname, 'R::Use');
+    assert.ok(snap.edges.some((e) => e.kind === 'contains' && e.src === '2' && e.dst === '3'));
+    // A Function never takes an owner, even one a parent_class and an owner edge would give it (C1).
+    assert.equal(snap.nodes.find((n) => n.id === '4').qname, 'Open');
+    assert.ok(!snap.edges.some((e) => e.kind === 'contains' && e.dst === '4' && e.src === '2'));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('codebase-memory-mcp #49 (PR #96 review, V1): a folded Go method whose only owner edge is the absorbed method\'s takes its parent_class', () => {
+  // u.go `func (t T) Close` and v.go `func (w V) Close` are one node at u.go:3 (parent_class T) whose only
+  // DEFINES_METHOD comes from V.
+  const { names, contains } = fileOnly('go-parent');
+  assert.deepEqual(names('u.go'), ['T::Close']);
+  // cbm wrote no edge from T, and V's edge is the absorbed method's: no owner edge (the adapter invents none).
+  assert.deepEqual(contains.filter((c) => !/\.go > /.test(c)), []);
+});
+check('codebase-memory-mcp #49 (PR #96 review, V2): a Go file whose prefix does not hold still names its flat methods by their owner', () => {
+  // t_linux.go and t_windows.go both declare T (build tags); cbm keeps t_linux.go's, so t_windows.go's field
+  // `T.h` has no container in its file and no prefix holds there.
+  const { names, contains } = fileOnly('go-buildtags');
+  assert.ok(names('t_windows.go').includes('T::Handle'), names('t_windows.go').join(', '));
+  assert.ok(contains.includes('T > T::Handle'));
+  assert.deepEqual(names('s.go'), ['S', 'S::Run']);
+});
+check('codebase-memory-mcp #49 (PR #96 review, round 3 N1): a Go method is never named for a type in another directory or language', () => {
+  // models/user.go's `type User` has the same qname as models.py's `class User`; cbm folds the struct into the
+  // Python class, so Go's Save and Name have parent_class `models.User` (in models.py).
+  const { snap, names } = fileOnly('poly-fold');
+  assert.deepEqual(names('models/user.go'), ['ID', 'Name', 'Save']); // the struct itself was folded away
+  const byId = new Map(snap.nodes.map((n) => [n.id, n]));
+  assert.deepEqual(snap.edges.filter((e) => e.kind === 'contains' && byId.get(e.src).file !== byId.get(e.dst).file), []);
+  // models.py's Module is `graph-assay.models#py` (cbm steps around the `models/` directory), which prefixes none of
+  // its definitions: bare names, as on main (a Module file; not this change).
+  assert.deepEqual(names('models.py'), ['Name', 'User', 'save']);
+});
+check('codebase-memory-mcp #49: no prefix holds (a container cbm did not write): the file keeps bare names', () => {
+  const rows = [{ id: 1, label: 'File', qname: 'graph-assay.pkg.m.py.__file__' }];
+  const prefixes = cbm.filePrefixes(new Map([['pkg/m.py', rows[0]]]), [{ file: 'pkg/m.py', qname: 'graph-assay.pkg.m.Gone.run' }]);
+  assert.equal(prefixes.has('pkg/m.py'), false);
+  // A File qname of another shape (cbm's .html test resources): no prefix either.
+  assert.equal(cbm.filePrefixes(new Map([['a/b.py', { id: 2, label: 'File', qname: 'a/b.py' }]]), [{ file: 'a/b.py', qname: 'graph-assay.a.b.f' }]).has('a/b.py'), false);
 });
 
 check('codebase-memory-mcp sandbox: allowlisted env, private HOME and cache, root confined, no network where unshare works', () => {
