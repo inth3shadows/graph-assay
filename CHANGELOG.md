@@ -260,6 +260,10 @@ All notable changes to this project are recorded here. The format follows
   Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
 
 ### Fixed
+- `tag-fixtures` (#95): a fixture with a source in a language the oracle can't index (C#, Swift, Rust, ...)
+  stays untagged even when it also ships a `.js`, `.ts` or `.py` file, instead of being tagged from that one
+  file; naming fixtures no longer restamps `known-shapes.json`'s `generated` date (back to 2026-11-21, the
+  full run at f72c9d2e); `pr-3262` also checks the test's three one-line calls, which must stay linked.
 - `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
   indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of

@@ -5,9 +5,11 @@
 // oracle runs both directions on it; a fixture's shapes are its strict non-match bucket keys.
 //
 // Usage: node tools/triage/tag-fixtures.ts <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
-//   Named fixtures are updated in the existing file (same build only); with none, every fixture is re-tagged.
-// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures, and a fixture with no TS/JS,
-// Python or Go source (C#, Swift), are listed as not tagged: the oracle has no indexer wired for them here.
+//   Named fixtures are updated in the existing file (same build only, and its `generated` date, the full run's,
+//   is kept); with none, every fixture is re-tagged.
+// Needs the SCIP tools (lib/config.ts `tools`). A fixture with any source the oracle has no indexer wired for
+// here (Java, Kotlin, PHP, C#, Swift, ...: tools/triage/lang.ts), or with no TS/JS, Python or Go source, is
+// listed as not tagged.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -17,6 +19,7 @@ import { config } from '../../lib/config.ts';
 import { copySeed } from '../../lib/fixture-install.ts';
 import * as codegraph from '../../lib/subjects/codegraph.ts';
 import { coverPath, coverTsconfig } from '../../oracle/ts-cover.ts';
+import { langOf } from './lang.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const root = path.join(qa, 'fixtures', 'oracle-candidates');
@@ -33,11 +36,11 @@ const run = (cmd, argv, opts = {}) => {
   return r;
 };
 const files = (dir) => fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile());
-const langOf = (fs_) => (fs_.some((f) => /\.(java|kt|php)$/.test(f)) ? null : fs_.some((f) => f.endsWith('.go')) ? 'go' : fs_.some((f) => f.endsWith('.py')) ? 'python' : fs_.some((f) => /\.[cm]?[jt]sx?$/.test(f)) ? 'ts' : null); // no TS/JS (C#, Swift, ...): no oracle indexer
 
-// Naming fixtures updates just those entries; the build must then match the file's.
+// Naming fixtures updates just those entries; the build must then match the file's, and the file keeps the
+// date of the full run that tagged the rest (#95).
 const prior = only.length && fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : null;
-const result = { build: codegraph.version(build), generated: new Date().toISOString().slice(0, 10), fixtures: { ...prior?.fixtures } };
+const result = { build: codegraph.version(build), generated: prior?.generated ?? new Date().toISOString().slice(0, 10), fixtures: { ...prior?.fixtures } };
 if (prior && prior.build !== result.build) { console.error(`${path.relative(process.cwd(), out)} was tagged at ${prior.build}; re-tag every fixture with that build, or name none`); process.exit(2); }
 const unknown = only.filter((n) => n.includes('/') || !fs.existsSync(path.join(root, n, 'expect.json')));
 if (unknown.length) { console.error(`no such fixture: ${unknown.join(', ')}`); process.exit(2); }
