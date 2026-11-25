@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Nine fixtures for open colbymchenry/codegraph PRs that fix a wrong or missing edge, so the PR watch reports
+  them: each is the PR's own test case (or its issue's repro), BROKEN on upstream main 73c6cff6 and FIXED on
+  the PR's head. With an issue: `issue-3429` (#3438, a value call linked to a class's static method),
+  `issue-3430` (#3435, a locally shadowed Python function value linked to an import), `issue-3470` (#3480,
+  import roots declared in `pyproject.toml`) and `issue-3473` (#3479, Express routes on a custom receiver
+  name). Named by PR: `pr-2754-import-forwarded-namesake`, `pr-3132-kotlin-overload-arity`,
+  `pr-3206-swift-static-type-call`, `pr-3262-csharp-multiline-member-call` and
+  `pr-3427-declared-call-result`. `known-shapes.json` adds the nine at f72c9d2e; every existing entry is
+  unchanged.
 - Six fixtures for colbymchenry/codegraph issues filed 2026-11-21, each the issue's own repro, all BROKEN
   on 461a5d87 (v1.6.4): `issue-3443` (a parameter typed only by its callback type links another class's
   method), `issue-3444` (a canvas context held in a local still takes the one-method guess), `issue-3445`
@@ -237,6 +246,8 @@ All notable changes to this project are recorded here. The format follows
   identical apart from the hash.
 
 ### Fixed
+- `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
+  indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
   every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
   now `>=22.18.0 <23 || >=23.6.0 <25`: 23.0 to 23.5 had type stripping behind a flag. Every step and

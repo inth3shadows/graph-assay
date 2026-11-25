@@ -33,7 +33,7 @@ const run = (cmd, argv, opts = {}) => {
   return r;
 };
 const files = (dir) => fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile());
-const langOf = (fs_) => (fs_.some((f) => /\.(java|kt|php)$/.test(f)) ? null : fs_.some((f) => f.endsWith('.go')) ? 'go' : fs_.some((f) => f.endsWith('.py')) ? 'python' : 'ts');
+const langOf = (fs_) => (fs_.some((f) => /\.(java|kt|php)$/.test(f)) ? null : fs_.some((f) => f.endsWith('.go')) ? 'go' : fs_.some((f) => f.endsWith('.py')) ? 'python' : fs_.some((f) => /\.[cm]?[jt]sx?$/.test(f)) ? 'ts' : null); // no TS/JS (C#, Swift, ...): no oracle indexer
 
 // Naming fixtures updates just those entries; the build must then match the file's.
 const prior = only.length && fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : null;
