@@ -262,6 +262,16 @@ All notable changes to this project are recorded here. The format follows
 ### Fixed
 - `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
   indexer, which failed it; such a fixture is listed untagged, like a Java one.
+- Fixture and PR watch (#91): a fixture whose `issue` is an upstream PR number is looked up as a PR. Its row
+  says `PR, open`, `PR, merged` or `PR, closed unmerged` instead of `closed` (which an abandoned PR also
+  reads as), and it gets no "Confirmed fixed" draft, which is meant for an issue thread. A number whose
+  lookup failed (`state unknown`) gets no draft either, since it may be a PR.
+- PR watch (#89): a strike counts at most once a day, so three runs in one outage day no longer set a PR
+  aside; one date check (a real calendar day) for every stored and given date, `run --date` included; the
+  set-aside list drops PRs whose 7 days have passed and gives the day each listed one is tried again; a
+  `changed` result whose edges move is reported again (a PR whose stored result is `changed` is reported
+  once more after this change; no PR state has been stored yet); a test title, a duplicate import, and a
+  test for a date `Date.parse` accepts but no calendar has.
 - codebase-memory-mcp adapter (#49): definitions in a file with only a File node (Go and Java files, and a
   file beside a same-stem file that took the Module) get their containers: `A::Inner::run`, not `run`;
   `Config::read_config` beside a top-level `read_config`; Go methods take the type their `parent_class`

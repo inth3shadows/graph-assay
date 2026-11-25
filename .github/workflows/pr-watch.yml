@@ -291,7 +291,7 @@ jobs:
           # Written to a file first: a failing pr-issues must fail the step, not look like "no issues".
           node tools/fixture-watch.ts pr-issues --prs rep/prs.json --dir artifact --fixtures fixtures/oracle-candidates > rep/issues.txt
           for n in $(cat rep/issues.txt); do
-            s=$(gh api "repos/$UPSTREAM/issues/$n" --jq .state) || s=unknown # deleted, moved or rate-limited
+            s=$(gh api "repos/$UPSTREAM/issues/$n" --jq 'if .pull_request then (if .pull_request.merged_at then "pr-merged" elif .state == "open" then "pr-open" else "pr-closed" end) else .state end') || s=unknown # a fixture may name a PR (#91); deleted, moved or rate-limited: unknown
             node -e 'const f=process.argv[1],s=JSON.parse(require("fs").readFileSync(f));s[process.argv[2]]=process.argv[3];require("fs").writeFileSync(f,JSON.stringify(s))' rep/issue-states.json "$n" "$s"
           done
       - name: Write the report

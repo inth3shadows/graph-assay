@@ -49,7 +49,8 @@ export const REPO = 'inth3shadows/graph-assay';
 const VERDICTS = new Set(['BROKEN', 'GUESSED', 'FIXED', 'CHANGED', 'ERROR']);
 const SHA = /^[0-9a-f]{40}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const ISSUE_STATES = new Set(['open', 'closed', 'unknown']);
+// An issue is open or closed; a PR number (a fixture may name one, #91) is pr-open, pr-merged or pr-closed (unmerged).
+const ISSUE_STATES = new Set(['open', 'closed', 'unknown', 'pr-open', 'pr-merged', 'pr-closed']);
 export const LIMIT = 60000; // GitHub refuses a comment over 65,536 characters
 
 export interface Row { name: string; issue: number | null; verdict: string; detail: string }
@@ -185,10 +186,14 @@ const intro = (c: Change, ctx: Ctx) => `The ${fixtureLink(c, ctx)} in [graph-ass
 
 /** A ready-to-paste upstream draft for one change, or null when the change needs a person first. */
 export function draft(c: Change, ctx: Ctx): string | null {
-  if (!c.issue || !c.from) return null;
+  // A draft is a comment for an issue thread. A PR (#91), or a number whose lookup failed (`unknown`: it may be a
+  // PR), gets none; the row stays for a person (PR #93 review, W1). No state at all means no lookup was asked for
+  // (a run by hand without --issue-states; the workflows look up every number they list): drafted as an issue.
+  const s = ctx.states[String(c.issue)];
+  if (!c.issue || !c.from || s === 'unknown' || s?.startsWith('pr-')) return null;
   const range = `${short(ctx.prev)}..${short(ctx.next)} (https://github.com/${UPSTREAM}/compare/${ctx.prev}...${ctx.next})`;
   if (c.kind === 'fixed') {
-    const lead = ctx.states[String(c.issue)] === 'closed' ? `Confirmed fixed on \`main\` at ${short(ctx.next)}, thanks.` : `This looks fixed on \`main\` at ${short(ctx.next)}.`;
+    const lead = s === 'closed' ? `Confirmed fixed on \`main\` at ${short(ctx.next)}, thanks.` : `This looks fixed on \`main\` at ${short(ctx.next)}.`;
     return `${lead}\n\n${intro(c, ctx)} goes from ${c.from.verdict} on ${short(ctx.prev)} to FIXED on ${short(ctx.next)}: none of its wrong edges remain and every right edge is there. The change is in ${range}.\n\n${rerun(c)}\n`;
   }
   if (c.kind === 'regression') {
@@ -220,7 +225,8 @@ const refHtml = (n: number) => `<code>${UPSTREAM}#${n}</code>`;
 function issueCell(c: Change, ctx: Ctx): string {
   if (!c.issue) return 'unfiled';
   const s = ctx.states[String(c.issue)];
-  return `${ref(c.issue)}${s ? (s === 'unknown' ? ' (state unknown)' : ` (${s})`) : ''}`;
+  const label: Record<string, string> = { unknown: 'state unknown', 'pr-open': 'PR, open', 'pr-merged': 'PR, merged', 'pr-closed': 'PR, closed unmerged' };
+  return `${ref(c.issue)}${s ? ` (${label[s] ?? s})` : ''}`;
 }
 
 /** The tracking-issue comment, or '' when nothing changed. Kept under `limit` (drafts go first, then rows). */
@@ -259,6 +265,8 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
 export interface Pr { number: number; head: string; base: string }
 export interface PrState { prs: Record<string, { head: string; sig: string; failed?: number; errored?: number; erroredAt?: string }> }
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A calendar day as YYYY-MM-DD: the pattern, and a real date (Date.parse alone takes 2026-02-30; #89). */
+const validDay = (d: unknown): d is string => typeof d === 'string' && DAY.test(d) && !Number.isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
 /** A PR set aside after 3 unclear merge-base errors on one head is tried again this many days after its last strike. */
 export const SET_ASIDE_DAYS = 7;
 
@@ -268,15 +276,15 @@ export function prStateOf(st: any): PrState {
   for (const [k, v] of Object.entries<any>(st.prs)) {
     const count = (x: any) => x === undefined || (Number.isSafeInteger(x) && x > 0);
     // A strike carries the date of the last one, so a set-aside PR is tried again later (PR #88 review, R2-2).
-    const dated = v && (v.errored === undefined ? v.erroredAt === undefined : typeof v.erroredAt === 'string' && DAY.test(v.erroredAt) && !Number.isNaN(Date.parse(v.erroredAt)));
+    const dated = v && (v.errored === undefined ? v.erroredAt === undefined : validDay(v.erroredAt));
     if (!/^\d+$/.test(k) || !v || !SHA.test(v.head) || typeof v.sig !== 'string' || !count(v.failed) || !count(v.errored) || !dated) throw new Error(`bad pr state entry ${k}`);
   }
   return st;
 }
 
 /** A stable summary of a PR's confirmed result, so a PR is re-reported only when its result changes. */
-// Detail text only where it is the result (wrong edges); error text can hold temp paths and would churn (#87).
-export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}${c.kind === 'edges' || c.kind === 'regression' ? `:${c.to.detail}` : ''}`).sort().join('\n');
+// Detail text only where it is the result (wrong or missing edges; `changed` too, #89); error text can hold temp paths and would churn (#87).
+export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}${c.kind === 'edges' || c.kind === 'regression' || c.kind === 'changed' ? `:${c.to.detail}` : ''}`).sort().join('\n');
 
 const DRAFTABLE = new Set<Kind>(['fixed', 'regression', 'edges']);
 const drafted = (c: Change) => DRAFTABLE.has(c.kind) && !!c.issue && !!c.from;
@@ -318,10 +326,17 @@ export function prSection(pr: number, changes: Change[], ctx: Ctx, allScored = t
   return lines.join('\n') + '\n';
 }
 
+/** Whether a PR's entry is set aside on `day`: 3 or more unclear errors, the last under SET_ASIDE_DAYS ago. */
+export const setAside = (e: PrState['prs'][string], day: string) =>
+  (e.errored ?? 0) >= 3 && (Date.parse(day) - Date.parse(e.erroredAt!)) / 86_400_000 < SET_ASIDE_DAYS;
+
+/** The day a set-aside entry is tried again on the same head. */
+const retryDay = (erroredAt: string) => new Date(Date.parse(erroredAt) + SET_ASIDE_DAYS * 86_400_000).toISOString().slice(0, 10);
+
 /** The open PRs to check this run: head moved since the last check, in the given (newest-updated-first) order, capped. */
 export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Date().toISOString().slice(0, 10)): Pr[] {
   if (!(cap === Infinity || (Number.isSafeInteger(cap) && cap > 0))) throw new Error(`bad cap: ${cap}`);
-  if (!DAY.test(today) || Number.isNaN(Date.parse(today))) throw new Error(`bad date: ${today}`);
+  if (!validDay(today)) throw new Error(`bad date: ${today}`);
   if (!Array.isArray(prs)) throw new Error('bad pr list');
   for (const p of prs) if (!(Number.isSafeInteger(p?.number) && p.number > 0 && SHA.test(p.head) && SHA.test(p.base))) throw new Error(`bad pr: ${JSON.stringify(p)}`);
   const st = prStateOf(state);
@@ -330,9 +345,9 @@ export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Dat
   return prs.filter((p) => !seen.has(p.number) && seen.add(p.number)).filter((p) => {
     const e = st.prs[String(p.number)];
     if (!e || e.head !== p.head) return true;
-    // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 runs (#87), and tried
+    // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 strikes, one a day (#87, #89), and tried
     // again SET_ASIDE_DAYS after the last strike: an outage that struck it costs a delay, never the PR (R2-2).
-    if ((e.errored ?? 0) >= 3) return (Date.parse(today) - Date.parse(e.erroredAt!)) / 86_400_000 >= SET_ASIDE_DAYS;
+    if ((e.errored ?? 0) >= 3) return !setAside(e, today);
     return e.failed !== undefined ? e.failed < 2 : e.errored !== undefined;
   }).slice(0, cap);
 }
@@ -341,7 +356,7 @@ export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Dat
 export function prState(state: PrState, open: number[], checked: Array<{ number: number; head: string; sig: string }>,
   failed: Array<{ number: number; head: string }> = [], errored: Array<{ number: number; head: string }> = [],
   date = new Date().toISOString().slice(0, 10)): PrState {
-  if (!DAY.test(date)) throw new Error(`bad date: ${date}`);
+  if (!validDay(date)) throw new Error(`bad date: ${date}`);
   const keep = new Set(open.map(String));
   const prs: PrState['prs'] = {};
   for (const [k, v] of Object.entries(prStateOf(state).prs)) if (keep.has(k)) prs[k] = v;
@@ -351,10 +366,11 @@ export function prState(state: PrState, open: number[], checked: Array<{ number:
     const old = prs[k];
     prs[k] = { head: f.head, sig: old?.sig ?? '', failed: old?.head === f.head && old.failed ? old.failed + 1 : 1 };
   }
+  // A strike counts once per day: several runs during one outage day are one strike (#89).
   for (const f of errored) {
     const k = String(f.number); if (!keep.has(k)) continue;
     const old = prs[k];
-    prs[k] = { head: f.head, sig: old?.sig ?? '', ...(old?.head === f.head && old.failed ? { failed: old.failed } : {}), errored: old?.head === f.head && old.errored ? old.errored + 1 : 1, erroredAt: date };
+    prs[k] = { head: f.head, sig: old?.sig ?? '', ...(old?.head === f.head && old.failed ? { failed: old.failed } : {}), errored: old?.head === f.head && old.errored ? old.errored + (old.erroredAt === date ? 0 : 1) : 1, erroredAt: date };
   }
   return { prs: Object.fromEntries(Object.entries(prs).sort(([a], [b]) => Number(a) - Number(b))) };
 }
@@ -441,6 +457,7 @@ function main(argv: string[]) {
     const statesFile = opt(args, '--issue-states'); const states = statesFile ? read(statesFile) : {};
     for (const [k, v] of Object.entries(states)) if (!/^\d+$/.test(k) || !ISSUE_STATES.has(v as string)) throw new Error(`bad issue state ${k}: ${v}`);
     const date = opt(args, '--date') ?? new Date().toISOString().slice(0, 10);
+    if (!validDay(date)) throw new Error(`bad date: ${date}`);
     const quiet: Array<{ number: number; head: string; sig: string }> = []; // checked, nothing to report
     const reported: Array<{ entry: { number: number; head: string; sig: string }; section: string }> = [];
     const failed: Array<{ number: number; head: string }> = [];
@@ -490,13 +507,15 @@ function main(argv: string[]) {
     const recorded = [...shown, ...tooLarge].map((x) => x.entry);
     fs.writeFileSync(need('--report-out'), capped);
     const next = prState(state, open, [...quiet, ...recorded], failed, errored, date);
-    const setAside = Object.entries(next.prs).filter(([, v]) => (v.errored ?? 0) >= 3).map(([k]) => Number(k));
+    // Set aside on their last checked head as of `date`, each with the day it is tried again; a new head is tried at
+    // once, which this job cannot see for a PR it did not select (#89; PR #93 review, W2/W3).
+    const asideNow = Object.entries(next.prs).filter(([, v]) => setAside(v, date)).map(([k, v]) => ({ n: Number(k), until: retryDay(v.erroredAt!) }));
     fs.writeFileSync(need('--state-out'), JSON.stringify(next, null, 1) + '\n');
     // Errored and set-aside PRs are named in the log and the job summary, so a PR the watch stopped trying is
     // visible (PR #88 review, T8, R2-3).
-    const asideLine = setAside.length ? `Set aside after 3 unclear merge-base lookup errors (tried again ${SET_ASIDE_DAYS} days after the last): ${setAside.map(ref).join(', ')}.\n` : '';
+    const asideLine = asideNow.length ? `Set aside after 3 unclear merge-base lookup errors, one a day, on the same head; each is tried again on the day shown, or as soon as its head moves: ${asideNow.map((a) => `${ref(a.n)} (${a.until})`).join(', ')}.\n` : '';
     const summary = opt(args, '--summary-out'); if (summary) fs.writeFileSync(summary, [all, asideLine].filter(Boolean).join('\n'));
-    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${setAside.length ? `; set aside, tried again ${SET_ASIDE_DAYS} days after the last strike: ${setAside.map((n) => `#${n}`).join(', ')}` : ''}`);
+    console.log(`${quiet.length + reported.length} PR(s) checked, ${shown.length} shown, ${tooLarge.length} too large, ${deferred} deferred, ${failed.length} failed, ${errored.length} errored${asideNow.length ? `; set aside until a new head or the day shown: ${asideNow.map((a) => `#${a.n} (${a.until})`).join(', ')}` : ''}`);
     return;
   }
   if (cmd === 'run') {
@@ -504,6 +523,7 @@ function main(argv: string[]) {
     const sha = need('--sha'); const ga = need('--graph-assay');
     if (!SHA.test(sha) || !SHA.test(ga)) throw new Error('--sha and --graph-assay must be full shas');
     const date = opt(args, '--date') ?? new Date().toISOString().slice(0, 10);
+    if (!validDay(date)) throw new Error(`bad date: ${date}`); // it is stored and dates a draft (PR #93 review, W4)
     const fixtures = fixtureSet(opt(args, '--fixtures'));
     const fxDir = opt(args, '--fixtures');
     const iss = (rs: Row[]) => (fxDir ? withIssues(rs, fxDir) : rs);
