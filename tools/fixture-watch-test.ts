@@ -173,7 +173,8 @@ check('the command line: baseline, a confirmed change, flips; F3: changes need b
     p = run2('--state', o('s1.json'), '--confirm-prev', r1, '--confirm-next', r2, '--issue-states', f('st.json', { 1: 'unknown' }));
     assert.equal(p.status, 0, p.stderr);
     const m = fs.readFileSync(o('m2.md'), 'utf8');
-    assert.match(m, /#1` \(state unknown\) \| BROKEN \| FIXED/); assert.match(m, /This looks fixed/); // F6
+    assert.match(m, /#1` \(state unknown\) \| BROKEN \| FIXED/); // F6: an unreadable state never stops the run
+    assert.doesNotMatch(m, /This looks fixed/); // ...and gets no issue draft, since it may be a PR (PR #93 review, W1)
     assert.equal(JSON.parse(fs.readFileSync(o('s2.json'), 'utf8')).codegraph, B);
     p = run2('--state', o('s2.json'), '--confirm-prev', r1, '--confirm-next', r2); // s2 is B's state, not A's
     assert.equal(p.status, 2); assert.match(p.stderr, /stored state is for bbbbbbbb, not the previous commit aaaaaaaa/);
@@ -523,7 +524,7 @@ check('#87: every run: block in both watch workflows parses as bash (bash -n)', 
   }
 });
 // ---- PR #88 review round 1 ----
-check('T1/T3: pr-report: an unclear-error strike always counts and is dated; issues come from expect.json; scored-on-both-sides is wired', () => {
+check('T1/T3: pr-report: an unclear-error strike counts once a day and is dated; issues come from expect.json; scored-on-both-sides is wired', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-88-'));
   try {
     const fx = path.join(tmp, 'fixtures');
@@ -541,7 +542,7 @@ check('T1/T3: pr-report: an unclear-error strike always counts and is dated; iss
     // R2-3: a set-aside PR is named in the job summary too, not only the log.
     p = report([], '--state', prior, '--errored', errored, '--date', '2026-11-24', '--summary-out', o('sum.md'));
     assert.equal(p.status, 0, p.stderr);
-    assert.match(fs.readFileSync(o('sum.md'), 'utf8'), /Set aside after 3 unclear merge-base lookup errors \(tried again 7 days after the last\): `colbymchenry\/codegraph#4`/);
+    assert.match(fs.readFileSync(o('sum.md'), 'utf8'), /Set aside after 3 unclear merge-base lookup errors, one a day, on the same head; each is tried again on the day shown, or as soon as its head moves: `colbymchenry\/codegraph#4` \(2026-12-01\)/);
     // GitHub answered with a merge base: the strike counts, and the picked PR's rows are read.
     // The replay rows claim issue 999 (a forged head): the report names #1, from this checkout's expect.json.
     // issue-2 errors on both sides: the draft does not claim the other fixtures read the same.
@@ -549,7 +550,7 @@ check('T1/T3: pr-report: an unclear-error strike always counts and is dated; iss
     f('artifact/pr-5/next.json', { results: [r('issue-1', 'FIXED', '', 999), r('issue-2', 'ERROR', 'boom', 2)] });
     f('artifact/pr-5/confirm-prev.json', { results: [r('issue-1', 'BROKEN', 'w', 999)] });
     f('artifact/pr-5/confirm-next.json', { results: [r('issue-1', 'FIXED', '', 999)] });
-    p = report([{ number: 5, head: C, base: A }], '--state', prior, '--errored', errored);
+    p = report([{ number: 5, head: C, base: A }], '--state', prior, '--errored', errored, '--date', '2026-11-24');
     assert.equal(p.status, 0, p.stderr);
     assert.equal(JSON.parse(fs.readFileSync(o('s.json'), 'utf8')).prs['4'].errored, 3);
     let c = fs.readFileSync(o('c.md'), 'utf8');
@@ -558,7 +559,7 @@ check('T1/T3: pr-report: an unclear-error strike always counts and is dated; iss
     // A fixture missing from one side: also not "the other fixtures read the same".
     f('artifact/pr-5/prev.json', { results: [r('issue-1', 'BROKEN', 'w'), r('issue-2', 'FIXED', '', 2)] });
     f('artifact/pr-5/next.json', { results: [r('issue-1', 'FIXED')] });
-    p = report([{ number: 5, head: C, base: A }]);
+    p = report([{ number: 5, head: C, base: A }], '--date', '2026-11-24');
     assert.equal(p.status, 0, p.stderr);
     c = fs.readFileSync(o('c.md'), 'utf8');
     assert.match(c, /Not every fixture could be scored on both sides/); assert.doesNotMatch(c, /The other fixtures read the same/);
@@ -576,15 +577,15 @@ check('T1/T3: pr-report: an unclear-error strike always counts and is dated; iss
     // T6: a fixture of this checkout missing from both sides: not every fixture was scored.
     for (const k of ['prev', 'confirm-prev']) f(`artifact/pr-5/${k}.json`, { results: [r('issue-1', 'BROKEN', 'w')] });
     for (const k of ['next', 'confirm-next']) f(`artifact/pr-5/${k}.json`, { results: [r('issue-1', 'FIXED')] });
-    p = report([{ number: 5, head: C, base: A }]);
+    p = report([{ number: 5, head: C, base: A }], '--date', '2026-11-24');
     assert.equal(p.status, 0, p.stderr);
     assert.match(fs.readFileSync(o('c.md'), 'utf8'), /Not every fixture could be scored on both sides/);
     // T5: a reverted result where not every fixture was scored says so; T8: the log names errored and set-aside PRs.
     f('artifact/pr-5/next.json', { results: [r('issue-1', 'BROKEN', 'w')] });
-    p = report([{ number: 5, head: C, base: A }], '--state', f('was.json', { prs: { 4: { head: B, sig: '', errored: 2, erroredAt: '2026-11-20' }, 5: { head: A, sig: 'issue-1:fixed:FIXED' } } }), '--errored', errored);
+    p = report([{ number: 5, head: C, base: A }], '--state', f('was.json', { prs: { 4: { head: B, sig: '', errored: 2, erroredAt: '2026-11-20' }, 5: { head: A, sig: 'issue-1:fixed:FIXED' } } }), '--errored', errored, '--date', '2026-11-24');
     assert.equal(p.status, 0, p.stderr);
     assert.match(fs.readFileSync(o('c.md'), 'utf8'), /no longer changes any fixture that could be scored on both sides \(some could not/);
-    assert.match(p.stdout, /1 errored; set aside, tried again 7 days after the last strike: #4/);
+    assert.match(p.stdout, /1 errored; set aside until a new head or the day shown: #4 \(2026-12-01\)/);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 check('R2-1/R2-6: the select job\'s merge-base lookups, run against a fake gh: only a rate limit stops a run without a strike; errored lookups are capped', () => {
@@ -650,7 +651,7 @@ check('#89 N1/N6: one date check everywhere: a date matching the pattern but not
     assert.throws(() => prSelect([], { prs: {} }, 6, d), /bad date/, d);
   }
 });
-check('#89 N2: the set-aside list names only PRs the next run skips, not ones whose 7 days have passed', () => {
+check('#89 N2: the set-aside list gives the day each PR is tried again, and drops one whose 7 days have passed', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-89-'));
   try {
     const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
@@ -659,7 +660,7 @@ check('#89 N2: the set-aside list names only PRs the next run skips, not ones wh
       '--date', date, '--report-out', path.join(tmp, 'c.md'), '--state-out', path.join(tmp, 's.json'), '--summary-out', path.join(tmp, 'sum.md')], { encoding: 'utf8' });
     let p = run('2026-11-07');
     assert.equal(p.status, 0, p.stderr);
-    assert.match(fs.readFileSync(path.join(tmp, 'sum.md'), 'utf8'), /Set aside/);
+    assert.match(fs.readFileSync(path.join(tmp, 'sum.md'), 'utf8'), /`colbymchenry\/codegraph#4` \(2026-11-08\)/); // W3: the day it is tried again
     p = run('2026-11-08'); // 7 days on: the next run tries it again
     assert.equal(p.status, 0, p.stderr);
     assert.doesNotMatch(fs.readFileSync(path.join(tmp, 'sum.md'), 'utf8'), /Set aside/);
@@ -698,5 +699,24 @@ check('#91: a PR-numbered fixture is shown as a PR with its merge state, and get
     assert.doesNotMatch(wf, /--jq \.state\)/, name);
     assert.match(wf, /if \.pull_request then \(if \.pull_request\.merged_at then "pr-merged" elif \.state == "open" then "pr-open" else "pr-closed" end\) else \.state end/, name);
   }
+});
+// ---- PR #93 review round 1 (.review/pr-93.md) ----
+check('W1: no issue draft for a number whose lookup failed (it may be a PR); open, closed and not looked up keep theirs', () => {
+  const ch = (issue: number): Change => ({ kind: 'fixed', name: `issue-${issue}`, issue, from: r('x', 'BROKEN', 'w', issue), to: r('x', 'FIXED', '', issue) });
+  const reg = (issue: number): Change => ({ kind: 'regression', name: `issue-${issue}`, issue, from: r('x', 'FIXED', '', issue), to: r('x', 'BROKEN', 'w', issue) });
+  const c1 = { ...ctx, states: { 7: 'unknown', 1: 'closed', 2: 'open' } as Record<string, string> };
+  for (const make of [ch, reg]) { assert.equal(draft(make(7), c1), null); assert.notEqual(draft(make(8), c1), null); }
+  assert.match(draft(ch(1), c1), /^Confirmed fixed/); assert.match(draft(ch(2), c1), /^This looks fixed/);
+  assert.match(report([ch(7)], c1), /`colbymchenry\/codegraph#7` \(state unknown\)/);
+});
+check('W4: run refuses a --date that is not a calendar day (it is stored and dates a draft)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-w4-'));
+  try {
+    const nx = path.join(tmp, 'n.json'); fs.writeFileSync(nx, JSON.stringify({ results: [r('issue-1', 'FIXED')] }));
+    const run = (d: string) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'run', '--next', nx, '--sha', B, '--graph-assay', G, '--date', d,
+      '--state-out', path.join(tmp, 's.json'), '--report-out', path.join(tmp, 'r.md')], { encoding: 'utf8' });
+    assert.equal(run('2026-11-24').status, 0);
+    for (const d of ['2026-02-30', 'garbage']) { const p = run(d); assert.equal(p.status, 2, d); assert.match(p.stderr, /bad date/); }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 console.log(`fixture-watch: ${n}/${n} checks`);

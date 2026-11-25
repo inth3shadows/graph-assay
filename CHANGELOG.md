@@ -252,11 +252,14 @@ All notable changes to this project are recorded here. The format follows
 ### Fixed
 - Fixture and PR watch (#91): a fixture whose `issue` is an upstream PR number is looked up as a PR. Its row
   says `PR, open`, `PR, merged` or `PR, closed unmerged` instead of `closed` (which an abandoned PR also
-  reads as), and it gets no "Confirmed fixed" draft, which is meant for an issue thread.
+  reads as), and it gets no "Confirmed fixed" draft, which is meant for an issue thread. A number whose
+  lookup failed (`state unknown`) gets no draft either, since it may be a PR.
 - PR watch (#89): a strike counts at most once a day, so three runs in one outage day no longer set a PR
-  aside; one date check (a real calendar day) for every stored and given date; the set-aside list names only
-  PRs the next run skips; a `changed` result whose edges move is reported again; a test title, a duplicate
-  import, and a test for a date `Date.parse` accepts but no calendar has.
+  aside; one date check (a real calendar day) for every stored and given date, `run --date` included; the
+  set-aside list drops PRs whose 7 days have passed and gives the day each listed one is tried again; a
+  `changed` result whose edges move is reported again (a PR whose stored result is `changed` is reported
+  once more after this change; no PR state has been stored yet); a test title, a duplicate import, and a
+  test for a date `Date.parse` accepts but no calendar has.
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
   every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
   now `>=22.18.0 <23 || >=23.6.0 <25`: 23.0 to 23.5 had type stripping behind a flag. Every step and
