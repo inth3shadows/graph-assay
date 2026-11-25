@@ -1,0 +1,20 @@
+{"issue": 2754, "note": "PR #2754's test __tests__/import-forwarding.test.ts: each directory holds one case's files as the test writes them (forwarded-import, forwarded-default, new-instance, wrapper = cases 1, 2, 4, 5). The test indexes each case alone; here they share one index, so each sees the others' namesakes. At 73c6cff6 and the PR head the combined diff equals the union of the per-case diffs. Left out: case 3 (a sync, which replay does not do) and case 6 (on main, client.send links Client::send, which the code does reach through configure's return).", "wrong": [
+ {"from": "show", "kind": "calls", "to": "forwarded-import/a-decoy/lib.ts:presentUser"},
+ {"from": "start", "fromFile": "forwarded-default/main.ts", "kind": "calls", "to": "forwarded-default/a-decoy/lib.ts:makeAvatar"},
+ {"from": "work", "kind": "calls", "to": "new-instance/app/logger.ts:Logger::info"},
+ {"from": "work", "kind": "calls", "to": "new-instance/app/logger.ts:Logger::warn"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/provisioner.ts:helperFirst"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/job.ts:helperFirst"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/svc.ts:first"}
+], "right": [
+ {"from": "show", "kind": "calls", "to": "forwarded-import/presenters/user.ts:presentUser"},
+ {"from": "show", "kind": "calls", "to": "forwarded-import/presenters/team.ts:presentTeam"},
+ {"from": "list", "kind": "calls", "to": "forwarded-import/presenters/user.ts:presentUser"},
+ {"from": "start", "fromFile": "forwarded-default/main.ts", "kind": "calls", "to": "forwarded-default/lib/avatar/makeAvatar.ts:makeAvatar"},
+ {"from": "start", "fromFile": "forwarded-default/main.ts", "kind": "calls", "to": "forwarded-default/lib/map/marker.ts:Marker"},
+ {"from": "work", "kind": "calls", "to": "new-instance/server/logger.ts:Logger::info"},
+ {"from": "work", "kind": "calls", "to": "new-instance/server/logger.ts:Logger::warn"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/provisioner.ts:accountProvisioner"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/job.ts:SyncJob"},
+ {"from": "start", "fromFile": "wrapper/main.ts", "kind": "calls", "to": "wrapper/svc.ts:createThing"}
+]}

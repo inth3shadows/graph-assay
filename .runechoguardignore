@@ -4,6 +4,5 @@ CanvasRenderingContext2D
 HTMLCanvasElement
 # JavaScript global value (tools/fixture-watch-test.ts: an uncapped report limit).
 Infinity
-# Fixture symbols the guard misreads: an ambient `declare function` (issue-3429) and a class method declaration (issue-3422).
+# A function issue-3429's repro only declares (fixtures/oracle-candidates/issue-3429/src/index.ts).
 createInstance
-area

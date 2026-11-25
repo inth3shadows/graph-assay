@@ -14,8 +14,8 @@ built on it confidently wrong, and these defects rarely show up in the tool's ow
 **Status.** SPEC v6.0 is in force. Two tools are measured:
 [codegraph](https://github.com/colbymchenry/codegraph) and
 [code-graph-rag](https://github.com/vitali87/code-graph-rag). The compiler oracle covers
-TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 60 codegraph
-repros (59 name the upstream issue or PR they reproduce, 57 distinct), plus 4 for code-graph-rag. Adapters for
+TypeScript/JavaScript, Python, Go and the JVM (Java and Kotlin). The fixture corpus holds 61 codegraph
+repros (60 name the upstream issue or PR they reproduce, 58 distinct), plus 4 for code-graph-rag. Adapters for
 [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) and
 [code-review-graph](https://github.com/tirth8205/code-review-graph) replay the fixtures
 (codebase-memory-mcp also has 2 repros of its own; code-review-graph none yet) but have not had an

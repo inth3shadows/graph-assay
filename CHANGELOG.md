@@ -7,14 +7,25 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-- Nine fixtures for open colbymchenry/codegraph PRs that fix a wrong or missing edge, so the PR watch reports
-  them: each is the PR's own test case (or its issue's repro), BROKEN on upstream main 73c6cff6 and FIXED on
-  the PR's head. With an issue: `issue-3429` (#3438, a value call linked to a class's static method),
-  `issue-3430` (#3435, a locally shadowed Python function value linked to an import), `issue-3470` (#3480,
-  import roots declared in `pyproject.toml`), `issue-3473` (#3479, Express routes on a custom receiver
-  name) and `issue-3422` (#3427, a partial fix: a call on a local set from an instance method's result). Named by PR: `pr-2754-import-forwarded-namesake`, `pr-3132-kotlin-overload-arity`,
-  `pr-3206-swift-static-type-call` and `pr-3262-csharp-multiline-member-call`. `known-shapes.json` adds the nine at f72c9d2e; every existing entry is
-  unchanged.
+- Four more fixtures from open colbymchenry/codegraph PRs with a wrong or missing edge, each BROKEN on main
+  73c6cff6 and FIXED on the PR's head: `issue-3473` (Express routes on a custom receiver name are not
+  indexed; #3479), `pr-3132` (a Kotlin call lands on an overload its argument count rules out), `pr-3206`
+  (a Swift static `Type.member()` call links another type's member) and `pr-3262` (C# member calls split
+  across lines are lost). `issue-3470` adds the PR test's `from helpers import check` case beside the
+  issue's attribute import. `known-shapes.json` adds the four at f72c9d2e; every other entry is unchanged.
+- Six fixtures for open colbymchenry/codegraph issues and PRs with a wrong or missing call edge and no
+  fixture yet, each BROKEN on main 73c6cff6 and FIXED on the head of the PR that addresses it:
+  `issue-3422` (a TypeScript local set from an instance method's result gets no type; #3427),
+  `issue-3429` (a value named like a class links its calls to that class's static method; #3438),
+  `issue-3430` (a Python parameter named like an imported function links to it when read; #3435),
+  `issue-3470` (Python import roots declared in pyproject.toml, pytest `pythonpath` and pyright
+  `extraPaths`, are ignored; #3480), and two from
+  PR tests with no issue: `pr-2754` (an import of a module that hands on an import or an expression
+  default lands on a namesake or the first export; four of the test's cases, one directory each) and
+  `pr-2800` (a default import of a barrel that `export *`s reaches the forwarded module's first function).
+  Issue fixtures are the issue's repro; PR fixtures are the files the PR's test writes. `pr-<n>` names a
+  fixture whose `issue` field is a PR number. `known-shapes.json` adds the six at f72c9d2e; every existing
+  entry is unchanged.
 - Six fixtures for colbymchenry/codegraph issues filed 2026-11-21, each the issue's own repro, all BROKEN
   on 461a5d87 (v1.6.4): `issue-3443` (a parameter typed only by its callback type links another class's
   method), `issue-3444` (a canvas context held in a local still takes the one-method guess), `issue-3445`
@@ -243,6 +254,10 @@ All notable changes to this project are recorded here. The format follows
 - `adapterSha256` for the codegraph adapter changes: a JSDoc annotation in
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.
+
+### Security
+- The oracle self-test case `oracle/test/ts-forward` names Next.js 15.5.29, not 15.5.28, which three
+  Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
 
 ### Fixed
 - `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript

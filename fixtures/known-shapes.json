@@ -369,6 +369,13 @@
     "missing|unresolved-ref|go|method>method": 1
    }
   },
+  "issue-3422": {
+   "issue": 3422,
+   "lang": "ts",
+   "shapes": {
+    "missing|unresolved-ref|ts|method@decl>method": 3
+   }
+  },
   "issue-3429": {
    "issue": 3429,
    "lang": "ts",
@@ -387,44 +394,49 @@
    "lang": "python",
    "shapes": {}
   },
+  "pr-2754": {
+   "issue": 2754,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|calls|exact-match|function>method": 2,
+    "wrong-target|calls|qualified-name|method>method": 2,
+    "wrong-target|calls|import|function>method": 1,
+    "missing|wrong-edge|ts|method>function": 2,
+    "missing|target-not-a-node|ts|method": 2,
+    "missing|wrong-edge|ts|method>method": 2,
+    "missing|wrong-edge|ts|method": 1
+   }
+  },
+  "pr-2800": {
+   "issue": 2800,
+   "lang": "ts",
+   "shapes": {
+    "wrong-target|instantiates|import|function>type": 1,
+    "missing|wrong-edge|ts|type>class": 1
+   }
+  },
   "issue-3473": {
    "issue": 3473,
    "lang": "ts",
    "shapes": {}
   },
-  "pr-2754-import-forwarded-namesake": {
-   "issue": 2754,
-   "lang": "ts",
-   "shapes": {
-    "wrong-target|calls|exact-match|function>method": 1,
-    "missing|wrong-edge|ts|method>function": 1,
-    "missing|target-not-a-node|ts|method": 1
-   }
-  },
-  "pr-3132-kotlin-overload-arity": {
+  "pr-3132": {
    "issue": 3132,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
-  "pr-3206-swift-static-type-call": {
+  "pr-3206": {
    "issue": 3206,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
   },
-  "pr-3262-csharp-multiline-member-call": {
+  "pr-3262": {
    "issue": 3262,
    "lang": "other",
    "shapes": null,
    "note": "no oracle indexer for this language"
-  },
-  "issue-3422": {
-   "issue": 3422,
-   "lang": "ts",
-   "shapes": {
-    "missing|unresolved-ref|ts|method>method": 3
-   }
   }
  }
 }
