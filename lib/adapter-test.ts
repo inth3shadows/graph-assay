@@ -65,7 +65,7 @@ fs.writeFileSync(process.env.HOME + '/seen.json', JSON.stringify({ keys: Object.
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-check('codebase-memory-mcp: a code file with only a File node is a file; containment never crosses files', () => {
+check('codebase-memory-mcp: a code file with only a File node is a file; a File never contains another file\'s definitions', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-file-only-'));
   try {
     fs.mkdirSync(path.join(tmp, '.graph-assay'));
@@ -96,6 +96,46 @@ check('codebase-memory-mcp: a code file with only a File node is a file; contain
       ['file main.go', 'function main', 'function helper', 'file client.ts', 'function encode']);
     assert.deepEqual(snap.edges.map((e) => [e.kind, e.src, e.dst, e.line]), [['contains', '2', '3', null], ['calls', '3', '4', 4], ['contains', '13', '14', null], ['calls', '12', '14', 2]]);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// #49: stores cbm 0.12.1 wrote for lib/test/adapters/codebase-memory-mcp-file-only/{go,java,py} (frozen, so a
+// change in cbm's naming fails here). Every file but plain.py has only a File node.
+const fileOnly = (lang: string) => {
+  const snap = cbm.snapshot(path.join(here, 'test', 'adapters', 'codebase-memory-mcp-file-only', lang));
+  assert.deepEqual(validateSnapshot(snap), []);
+  const q = new Map(snap.nodes.map((n) => [n.id, n.qname]));
+  const names = (file: string) => snap.nodes.filter((n) => n.file === file && n.kind !== 'file').map((n) => n.qname).sort();
+  const contains = snap.edges.filter((e) => e.kind === 'contains').map((e) => `${q.get(e.src)} > ${q.get(e.dst)}`).sort();
+  return { snap, names, contains };
+};
+check('codebase-memory-mcp #49: Java in File-only files: containers from the directory prefix; a class named like its file keeps its members', () => {
+  const { names } = fileOnly('java');
+  assert.deepEqual(names('src/A.java'), ['A', 'A::Inner', 'A::Inner::run', 'A::run', 'B', 'B::other', 'B::run']);
+  assert.deepEqual(names('src/Svc.java'), ['Svc', 'Svc::Api', 'Svc::Api::call', 'Svc::Mode', 'Svc::Mode::ON', 'Svc::Mode::flip', 'Svc::run']);
+  // Svc.kt beside Svc.java: Kotlin names it from the stem (`src.Svc.Kt.run`), so the stem is stripped there.
+  assert.deepEqual(names('src/Svc.kt'), ['Kt', 'Kt::run']);
+});
+check('codebase-memory-mcp #49: Python beside a same-stem file that took the Module: containers from the stem prefix; a Module file unchanged', () => {
+  const { snap, names } = fileOnly('py');
+  assert.deepEqual(names('pkg/aliases.py'), ['Config', 'Config::Nested', 'Config::Nested::read_config', 'Config::read_config', 'read_config']);
+  assert.deepEqual(names('pkg/plain.py'), ['Plain', 'Plain::go', 'go']);
+  // aliases.ini's Module (an extension the adapter does not know) still makes it a file of its own.
+  assert.deepEqual(snap.files.find((f) => f.path === 'pkg/aliases.ini'), { path: 'pkg/aliases.ini', language: null });
+  assert.deepEqual(names('pkg/aliases.ini'), ['x', 'y']);
+});
+check('codebase-memory-mcp #49: Go: a method takes its one owner, also across files; a method cbm folded from two receivers keeps its bare name and no owner', () => {
+  const { names, contains } = fileOnly('go');
+  assert.deepEqual(names('router.go'), ['Match', 'Route', 'Router', 'helper']);
+  assert.deepEqual(names('middleware.go'), ['Route::Name', 'Router::Use']);
+  assert.deepEqual(contains, ['Route > Route::Name', 'Router > Router::Use', 'middleware.go > Route::Name', 'middleware.go > Router::Use',
+    'router.go > Match', 'router.go > Route', 'router.go > Router', 'router.go > helper']);
+});
+check('codebase-memory-mcp #49: no prefix holds (a container cbm did not write): the file keeps bare names', () => {
+  const rows = [{ id: 1, label: 'File', qname: 'graph-assay.pkg.m.py.__file__' }];
+  const prefixes = cbm.filePrefixes(new Map([['pkg/m.py', rows[0]]]), [{ file: 'pkg/m.py', qname: 'graph-assay.pkg.m.Gone.run' }]);
+  assert.equal(prefixes.has('pkg/m.py'), false);
+  // A File qname of another shape (cbm's .html test resources): no prefix either.
+  assert.equal(cbm.filePrefixes(new Map([['a/b.py', { id: 2, label: 'File', qname: 'a/b.py' }]]), [{ file: 'a/b.py', qname: 'graph-assay.a.b.f' }]).has('a/b.py'), false);
 });
 
 check('codebase-memory-mcp sandbox: allowlisted env, private HOME and cache, root confined, no network where unshare works', () => {

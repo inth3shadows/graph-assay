@@ -109,6 +109,40 @@ const GUESSED = new Set(['unique_name', 'suffix_match', 'field_type_hint', 'fuzz
 // for a file that has no Module (snapshot()).
 const SKIP = new Set(['File', 'Folder', 'Project', 'Branch', 'Route']);
 
+type FileRow = { id: number; label: string; qname: string };
+
+/**
+ * The qname prefix of each file's definitions. A Module node's own qname. A file with only a File node
+ * (`<project>.<path with / as .>.__file__`) has none, and cbm 0.12.1 names its definitions from the
+ * directory (Java `src.A.Inner.run`, Go `Match`) or from the directory and the file's stem (Python
+ * `pkg.aliases.Config.read_config` beside an `aliases.ini` that took the Module). The shorter candidate
+ * is taken when it holds: every definition is under it and every container its local names leaves
+ * (`A`, `A.Inner` for `A.Inner.run`) is a definition of the file, as lib/expect.ts reads containers.
+ * Otherwise the longer one; neither holds: no prefix (bare names). #47 tried the stem first and stripped
+ * a class named like its file (`Svc.java`: `Svc.run` became `run`).
+ */
+export function filePrefixes(moduleOf: Map<string, FileRow>, defs: { file: string; qname: string }[]): Map<string, string> {
+  const byFile = new Map<string, string[]>();
+  for (const d of defs) (byFile.get(d.file) ?? byFile.set(d.file, []).get(d.file)).push(d.qname);
+  const out = new Map<string, string>();
+  for (const [file, m] of moduleOf) {
+    if (m.label === 'Module') { out.set(file, m.qname); continue; }
+    const base = path.posix.basename(file); const tail = `.${base}.__file__`;
+    if (!m.qname.endsWith(tail)) continue;
+    const dir = m.qname.slice(0, -tail.length);
+    const qs = byFile.get(file) ?? [];
+    const holds = (p: string) => {
+      if (!qs.every((q) => q.startsWith(`${p}.`))) return false;
+      const locals = new Set(qs.map((q) => q.slice(p.length + 1)));
+      return [...locals].every((l) => { const s = l.split('.'); return s.slice(0, -1).every((_, i) => locals.has(s.slice(0, i + 1).join('.'))); });
+    };
+    const ext = path.posix.extname(base);
+    const p = [dir, `${dir}.${ext ? base.slice(0, -ext.length) : base}`].find(holds);
+    if (p !== undefined) out.set(file, p);
+  }
+  return out;
+}
+
 /** Map `dir`/.graph-assay/cbm.db (left there by index()) to a snapshot v1. */
 export function snapshot(dir: string, { build = null as string | null } = {}): Snapshot {
   dir = path.resolve(dir); // relative dirs would resolve twice once the tool runs with cwd = dir
@@ -132,6 +166,29 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
       else if (lang(n.file)) moduleOf.set(n.file, n);
     }
+    // cbm's owners of each method (DEFINES_METHOD). Go: several when cbm folded same-named methods of
+    // different receivers into one node (gorilla/mux's eight `Match` methods are one node), so none is its owner.
+    const owners = new Map<number, number[]>();
+    for (const e of er) if (e.type === 'DEFINES_METHOD') (owners.get(e.dst) ?? owners.set(e.dst, []).get(e.dst)).push(e.src);
+    const soleOwner = (id: number) => { const o = owners.get(id); return o?.length === 1 ? o[0] : null; };
+    const defs = rows.filter((n) => n.file && moduleOf.has(n.file) && n.label !== 'Module' && moduleOf.get(n.file).id !== n.id
+      && !SKIP.has(n.label) && !n.file.startsWith(`${OUT}/`));
+    const prefixOf = filePrefixes(moduleOf, defs);
+    const local = new Map<number, string>();
+    // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the file's prefix
+    // (filePrefixes). Without one, a definition keeps cbm's bare name.
+    for (const n of defs) {
+      const p = prefixOf.get(n.file);
+      local.set(n.id, p !== undefined && n.qname.startsWith(`${p}.`) ? n.qname.slice(p.length + 1) : n.name);
+    }
+    // Go writes a method flat (`graph-assay.Match`): its receiver is only in the ownership edge. A method
+    // with no container in its name and one owner is `<owner>.<name>` (only in File-only files: a Module
+    // file's names already nest).
+    for (const n of defs) {
+      const o = soleOwner(n.id);
+      if (moduleOf.get(n.file).label === 'Module' || local.get(n.id).includes('.') || o === null || !local.has(o)) continue;
+      local.set(n.id, `${local.get(o)}.${n.name}`);
+    }
     const nodes: SnapshotNode[] = [];
     for (const n of rows) {
       // no file: injected builtins (`builtins.len`), routes, the project and branch nodes
@@ -143,11 +200,7 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
         nodes.push({ id: String(n.id), kind: 'file', name: n.file, qname: n.file, file: n.file, language: lang(n.file), start: 1, end: Math.max(1, n.end) });
         continue;
       }
-      // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the module's own qname.
-      // A file with only a File node has no module qname to strip, so its definitions keep their bare
-      // names (containers from cbm's ownership edges are a separate change).
-      const local = n.qname.startsWith(`${mod.qname}.`) ? n.qname.slice(mod.qname.length + 1) : n.name;
-      nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.split('.').join('::'), file: n.file,
+      nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.get(n.id).split('.').join('::'), file: n.file,
         language: lang(n.file), start: n.start, end: Math.max(n.start, n.end) });
     }
     const keep = new Set(nodes.map((n) => n.id));
@@ -158,9 +211,14 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       // An edge to a node the snapshot does not hold (a route, a builtin) is dropped with it.
       if (!keep.has(src) || !keep.has(dst)) continue;
       if (src === dst && (alias.has(e.src) || alias.has(e.dst))) continue; // File DEFINES its own Module
-      // cbm's DEFINES from a File node can cross files (same-stem `client.ts` "defines" `client.js` and its
-      // functions): containment never leaves a file.
-      if (e.type.startsWith('DEFINES') && byId.get(src)?.file !== byId.get(dst)?.file) continue;
+      if (KIND[e.type] === 'contains') {
+        // A folded method's owners are each claimed and at most one is right: none is kept.
+        if (e.type === 'DEFINES_METHOD' && soleOwner(e.dst) === null) continue;
+        // Containment crosses files only as a method's one owner (a Go receiver type declared in another
+        // file). cbm's DEFINES from a File node can cross files wrongly (same-stem `client.ts` "defines"
+        // `client.js` and its functions).
+        if (byId.get(src)?.file !== byId.get(dst)?.file && e.type !== 'DEFINES_METHOD') continue;
+      }
       let p: Record<string, any> = {};
       try { p = JSON.parse(e.properties || '{}'); } catch { /* malformed properties: no metadata */ }
       const strategy = typeof p.strategy === 'string' ? p.strategy : null;
