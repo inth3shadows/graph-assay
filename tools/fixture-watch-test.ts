@@ -6,10 +6,9 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { LIMIT, diff, draft, erroringOf, nextState, prSection, prSelect, prState, prStateOf, report, rerunNames, reviewDraft, rows, signature, withIssues, type Change } from './fixture-watch.ts';
-import { execFileSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // A test fixture's expect.json carries the issue its rows claim (issue-N -> N; f-k -> 100 + k), as a real one does.
@@ -524,7 +523,7 @@ check('#87: every run: block in both watch workflows parses as bash (bash -n)', 
   }
 });
 // ---- PR #88 review round 1 ----
-check('T1/T3: pr-report: an unclear-error strike counts only when GitHub answered other lookups that run; issues come from expect.json; scored-on-both-sides is wired', () => {
+check('T1/T3: pr-report: an unclear-error strike always counts and is dated; issues come from expect.json; scored-on-both-sides is wired', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-88-'));
   try {
     const fx = path.join(tmp, 'fixtures');
@@ -633,5 +632,71 @@ check('#87: workflow: replay containers have no network; isolation fallback is e
   assert.match(wf, /--errored rep\/errored\.json/);
   assert.doesNotMatch(wf, /tried again next run/);
   assert.doesNotMatch(fs.readFileSync(path.join(here, 'fixture-watch.ts'), 'utf8'), /left unchecked, so the next run tries it again/);
+});
+// ---- #89: follow-ups from PR #88's third review round ----
+check('#89 L1: strikes count per day: a second strike on the same day keeps the count', () => {
+  const E = [{ number: 4, head: B }];
+  let st = prState({ prs: {} }, [4], [], [], E, '2026-11-01');
+  st = prState(st, [4], [], [], E, '2026-11-01'); st = prState(st, [4], [], [], E, '2026-11-01');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 1, erroredAt: '2026-11-01' });
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], st, 6, '2026-11-01').length, 1); // one outage day is not three strikes
+  st = prState(st, [4], [], [], E, '2026-11-02');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', errored: 2, erroredAt: '2026-11-02' });
+});
+check('#89 N1/N6: one date check everywhere: a date matching the pattern but not on the calendar is refused', () => {
+  for (const d of ['2026-13-45', '2026-02-30']) {
+    assert.throws(() => prState({ prs: {} }, [4], [], [], [{ number: 4, head: B }], d), /bad date/, d);
+    assert.throws(() => prStateOf({ prs: { 4: { head: B, sig: '', errored: 1, erroredAt: d } } }), /bad pr state entry 4/, d);
+    assert.throws(() => prSelect([], { prs: {} }, 6, d), /bad date/, d);
+  }
+});
+check('#89 N2: the set-aside list names only PRs the next run skips, not ones whose 7 days have passed', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-89-'));
+  try {
+    const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
+    const run = (date: string) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'pr-report', '--prs', f('prs.json', []), '--dir', tmp,
+      '--graph-assay', G, '--open', f('open.json', [4]), '--state', f('st.json', { prs: { 4: { head: B, sig: '', errored: 3, erroredAt: '2026-11-01' } } }),
+      '--date', date, '--report-out', path.join(tmp, 'c.md'), '--state-out', path.join(tmp, 's.json'), '--summary-out', path.join(tmp, 'sum.md')], { encoding: 'utf8' });
+    let p = run('2026-11-07');
+    assert.equal(p.status, 0, p.stderr);
+    assert.match(fs.readFileSync(path.join(tmp, 'sum.md'), 'utf8'), /Set aside/);
+    p = run('2026-11-08'); // 7 days on: the next run tries it again
+    assert.equal(p.status, 0, p.stderr);
+    assert.doesNotMatch(fs.readFileSync(path.join(tmp, 'sum.md'), 'utf8'), /Set aside/);
+    assert.doesNotMatch(p.stdout, /set aside/);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+check('#89 N3: a `changed` result whose wrong edges move gets a new signature', () => {
+  const c1 = diff([r('a', 'BROKEN', 'x')], [r('a', 'GUESSED', 'y')]); const c2 = diff([r('a', 'BROKEN', 'x')], [r('a', 'GUESSED', 'z')]);
+  assert.equal(c1[0].kind, 'changed');
+  assert.notEqual(signature(c1), signature(c2));
+});
+// ---- #91: a fixture's `issue` may be an upstream PR ----
+check('#91: a PR-numbered fixture is shown as a PR with its merge state, and gets no upstream draft', () => {
+  const pctx91 = { ...ctx, states: { 1: 'pr-merged', 2: 'pr-closed', 3: 'pr-open', 4: 'closed' } as Record<string, string> };
+  const ch = (issue: number): Change => ({ kind: 'fixed', name: `issue-${issue}`, issue, from: r('x', 'BROKEN', 'w', issue), to: r('x', 'FIXED', '', issue) });
+  for (const i of [1, 2, 3]) assert.equal(draft(ch(i), pctx91), null, `PR ${i}`);
+  assert.match(draft(ch(4), pctx91), /^Confirmed fixed/); // an issue keeps its draft
+  const out = report([ch(1), ch(2), ch(3), ch(4)], pctx91);
+  assert.match(out, /`colbymchenry\/codegraph#1` \(PR, merged\)/);
+  assert.match(out, /`colbymchenry\/codegraph#2` \(PR, closed unmerged\)/);
+  assert.match(out, /`colbymchenry\/codegraph#3` \(PR, open\)/);
+  assert.match(out, /`colbymchenry\/codegraph#4` \(closed\)/);
+  assert.equal((out.match(/<details>/g) ?? []).length, 1);
+  // The command line accepts the PR states and still refuses anything else.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-91-'));
+  try {
+    const f = (name: string, v: any) => { const p = path.join(tmp, name); fs.writeFileSync(p, JSON.stringify(v)); return p; };
+    const run = (states: any) => spawnSync(process.execPath, [path.join(here, 'fixture-watch.ts'), 'run', '--next', f('n.json', { results: [r('issue-1', 'FIXED')] }), '--sha', B,
+      '--graph-assay', G, '--issue-states', f('is.json', states), '--state-out', path.join(tmp, 's.json'), '--report-out', path.join(tmp, 'r.md')], { encoding: 'utf8' });
+    assert.equal(run({ 1: 'pr-merged', 2: 'pr-closed', 3: 'pr-open', 4: 'open', 5: 'unknown' }).status, 0);
+    assert.equal(run({ 1: 'merged' }).status, 2);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  // Both workflows look the number up once and tell a PR (and whether it merged) from an issue.
+  for (const name of ['fixture-watch', 'pr-watch']) {
+    const wf = fs.readFileSync(path.join(here, '..', `.github/workflows/${name}.yml`), 'utf8');
+    assert.doesNotMatch(wf, /--jq \.state\)/, name);
+    assert.match(wf, /if \.pull_request then \(if \.pull_request\.merged_at then "pr-merged" elif \.state == "open" then "pr-open" else "pr-closed" end\) else \.state end/, name);
+  }
 });
 console.log(`fixture-watch: ${n}/${n} checks`);
