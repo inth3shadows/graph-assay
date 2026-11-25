@@ -264,10 +264,12 @@ All notable changes to this project are recorded here. The format follows
   indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - codebase-memory-mcp adapter (#49): definitions in a file with only a File node (Go and Java files, and a
   file beside a same-stem file that took the Module) get their containers: `A::Inner::run`, not `run`;
-  `Config::read_config` beside a top-level `read_config`. Go methods take their one owner (`Router::Use`),
-  also across files; a method cbm folded from several receivers keeps its bare name. On the codegraph
-  fixture set, `java-fq-static-receiver` and `kmp-22` go from CHANGED to FIXED for cbm, and two more find
-  their edges as guesses. `cbm1-js-ts-same-stem` now names its wrong edge. No published number moves
+  `Config::read_config` beside a top-level `read_config`; Go methods take the type their `parent_class`
+  names (`Router::Match`, `Router::Use`), also across files, while a function cbm folded with a method
+  keeps its bare name. Replaying the codegraph fixtures with cbm: `java-fq-static-receiver` and `kmp-22`
+  go from CHANGED to FIXED; `issue-3448` (FIXED), `issue-3447` and `g1-go-new-receiver` (CHANGED) now read
+  BROKEN, because cbm folds `Router.Path` and `Route.Path` into one node and the bare names had hidden
+  the call that lands on it. `cbm1-js-ts-same-stem` now names its wrong edge. No published number moves
   (cbm has had no oracle run).
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
   every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
