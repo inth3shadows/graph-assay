@@ -7,9 +7,9 @@
 // Usage: node tools/triage/tag-fixtures.ts <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
 //   Named fixtures are updated in the existing file (same build only, and its `generated` date, the full run's,
 //   is kept); with none, every fixture is re-tagged.
-// Needs the SCIP tools (lib/config.ts `tools`). A fixture with any source the oracle has no indexer wired for
-// here (Java, Kotlin, PHP, C#, Swift, ...: tools/triage/lang.ts), or with no TS/JS, Python or Go source, is
-// listed as not tagged.
+// Needs the SCIP tools (lib/config.ts `tools`). A fixture is listed as not tagged unless all its sources are in
+// one of TS/JS, Python or Go (tools/triage/lang.ts: manifests, docs and scripts don't count; any other source,
+// Java, PHP, C#, a .vue, ..., or two of those languages, untags it).
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -19,7 +19,7 @@ import { config } from '../../lib/config.ts';
 import { copySeed } from '../../lib/fixture-install.ts';
 import * as codegraph from '../../lib/subjects/codegraph.ts';
 import { coverPath, coverTsconfig } from '../../oracle/ts-cover.ts';
-import { langOf } from './lang.ts';
+import { IGNORED_DIRS, langOf } from './lang.ts';
 
 const qa = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const root = path.join(qa, 'fixtures', 'oracle-candidates');
@@ -35,7 +35,9 @@ const run = (cmd, argv, opts = {}) => {
   if (r.status !== 0) throw new Error(`${path.basename(cmd)} failed: ${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' | ')}`);
   return r;
 };
-const files = (dir) => fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile());
+// A fixture's own files: installed packages and codegraph data are not walked (they don't decide the language).
+const files = (dir) => fs.readdirSync(dir, { recursive: true }).map(String)
+  .filter((f) => !f.split(path.sep).some((p) => IGNORED_DIRS.has(p)) && fs.statSync(path.join(dir, f)).isFile());
 
 // Naming fixtures updates just those entries; the build must then match the file's, and the file keeps the
 // date of the full run that tagged the rest (#95).
