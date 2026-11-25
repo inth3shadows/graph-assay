@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Four more fixtures from open colbymchenry/codegraph PRs with a wrong or missing edge, each BROKEN on main
+  73c6cff6 and FIXED on the PR's head: `issue-3473` (Express routes on a custom receiver name are not
+  indexed; #3479), `pr-3132` (a Kotlin call lands on an overload its argument count rules out), `pr-3206`
+  (a Swift static `Type.member()` call links another type's member) and `pr-3262` (C# member calls split
+  across lines are lost). `issue-3470` adds the PR test's `from helpers import check` case beside the
+  issue's attribute import. `known-shapes.json` adds the four at f72c9d2e; every other entry is unchanged.
 - Six fixtures for open colbymchenry/codegraph issues and PRs with a wrong or missing call edge and no
   fixture yet, each BROKEN on main 73c6cff6 and FIXED on the head of the PR that addresses it:
   `issue-3422` (a TypeScript local set from an instance method's result gets no type; #3427),
@@ -249,7 +255,13 @@ All notable changes to this project are recorded here. The format follows
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.
 
+### Security
+- The oracle self-test case `oracle/test/ts-forward` names Next.js 15.5.29, not 15.5.28, which three
+  Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
+
 ### Fixed
+- `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
+  indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - Fixture and PR watch (#91): a fixture whose `issue` is an upstream PR number is looked up as a PR. Its row
   says `PR, open`, `PR, merged` or `PR, closed unmerged` instead of `closed` (which an abandoned PR also
   reads as), and it gets no "Confirmed fixed" draft, which is meant for an issue thread. A number whose

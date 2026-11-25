@@ -6,8 +6,8 @@
 //
 // Usage: node tools/triage/tag-fixtures.ts <codegraph.js> [--out fixtures/known-shapes.json] [fixture ...]
 //   Named fixtures are updated in the existing file (same build only); with none, every fixture is re-tagged.
-// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures are listed as not tagged:
-// the oracle has no indexer wired for them here.
+// Needs the SCIP tools (lib/config.ts `tools`). Java, Kotlin and PHP fixtures, and a fixture with no TS/JS,
+// Python or Go source (C#, Swift), are listed as not tagged: the oracle has no indexer wired for them here.
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -33,7 +33,7 @@ const run = (cmd, argv, opts = {}) => {
   return r;
 };
 const files = (dir) => fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => fs.statSync(path.join(dir, f)).isFile());
-const langOf = (fs_) => (fs_.some((f) => /\.(java|kt|php)$/.test(f)) ? null : fs_.some((f) => f.endsWith('.go')) ? 'go' : fs_.some((f) => f.endsWith('.py')) ? 'python' : 'ts');
+const langOf = (fs_) => (fs_.some((f) => /\.(java|kt|php)$/.test(f)) ? null : fs_.some((f) => f.endsWith('.go')) ? 'go' : fs_.some((f) => f.endsWith('.py')) ? 'python' : fs_.some((f) => /\.[cm]?[jt]sx?$/.test(f)) ? 'ts' : null); // no TS/JS (C#, Swift, ...): no oracle indexer
 
 // Naming fixtures updates just those entries; the build must then match the file's.
 const prior = only.length && fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : null;
