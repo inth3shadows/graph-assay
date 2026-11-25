@@ -249,6 +249,10 @@ All notable changes to this project are recorded here. The format follows
   `lib/subjects/codegraph.mjs` changes the hashed bytes, not the behaviour. Fixture replay output is
   identical apart from the hash.
 
+### Security
+- The oracle self-test case `oracle/test/ts-forward` names Next.js 15.5.29, not 15.5.28, which three
+  Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
+
 ### Fixed
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
   every TypeScript script failing with `ERR_UNKNOWN_FILE_EXTENSION` (#28). The range, also `engines`, is
