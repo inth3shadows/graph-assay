@@ -1,7 +1,14 @@
 {
  "issue": null,
  "note": "codebase-memory-mcp 0.12.1: client.js and client.ts in one directory get the same qualified names (the extension is dropped), so the function send defined in both becomes one node, client.js's, and client.ts's call to encode is recorded on client.js's send.",
- "wrong": [],
+ "wrong": [
+  {
+   "from": "send",
+   "fromFile": "client.js",
+   "kind": "calls",
+   "to": "client.ts:encode"
+  }
+ ],
  "right": [
   {
    "from": "send",

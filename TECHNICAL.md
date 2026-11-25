@@ -36,7 +36,23 @@ Design decisions:
   function-pair track (SPEC §3).
   A file is its `Module` node. cbm 0.12.1 writes only a `File` node for Go and Java files and for a
   file whose extensionless path another file's Module took; for such a code file the `File` node is
-  the file, and its definitions keep cbm's bare names. A DEFINES edge that crosses files is dropped.
+  the file. Its definitions' qnames are named from the directory (Java, and Go types, fields and
+  functions) or from the directory and the file's stem (Python, Kotlin beside a same-stem file), and
+  are complete except for Go methods, which cbm writes flat (below): the adapter strips the
+  shorter of the two under which every definition sits and every container left names a definition
+  of the file, else none (bare names) (#49). A method's owner is the type its `parent_class` names,
+  not cbm's DEFINES_METHOD edges: cbm folds same-named Go methods of different receivers into one
+  node (gorilla/mux's eight `Match` are one), whose span and `parent_class` are one method's while its
+  owner edges come from all of them, or only from one it absorbed. Go writes a method flat
+  (`<dir>.<name>` in cbm's own qname): in a File-only file it becomes `<owner>::<name>`
+  (`Router::Match`). A `Function` has no owner (cbm also folds a function with a same-named method
+  into a Function node that keeps the method's owner edge). An owner edge is kept only from the
+  `parent_class` type, and crosses files only for such a flat method (a Go receiver type in another
+  file); a File's DEFINES of another file, and a class folded across `a.js`/`a.ts` "defining" the
+  other file's method, are dropped. An owner in another directory or language is a type cbm folded
+  into a same-qname one: the method stays bare. Edges are filtered, never added, so a method named
+  from `parent_class` can lack an owner edge when cbm wrote it only from an absorbed type; and in a Go
+  file where no prefix holds, a struct field keeps its bare name (only methods are named by owner).
   `lib/subjects/code-review-graph.ts` does the same for code-review-graph 2.4.0 (`build`, core
   install, Jedi enrichment forced off, HOME, `CRG_HOME` and `CRG_DATA_DIR` in a temp dir, network
   isolated by `lib/sandbox.ts`; `nodes` and `edges` copied to `.graph-assay/crg.db` with every absolute
@@ -109,7 +125,7 @@ entry in `lib/conformance.ts`; codegraph and code-graph-rag have one.
 | `lib/types.ts`, `lib/package.json` | The snapshot and expectation contracts (`schema/snapshot.v1.json`, `schema/expect.v1.json`) as TypeScript types, written once; `lib/snapshot.ts`, `lib/expect.ts` and both adapters import them, and the validators check the same shapes at runtime. `lib/package.json` marks `lib/` as ES modules for Node and tsc, scoped to `lib/` so `.js` test sources elsewhere keep their module type. |
 | `lib/typecheck.ts`, `lib/typecheck-test.ts` | The type check `check` runs last: takes only strictness options and `--pretty false` as extra tsc flags (case-insensitive, enforced in `runTsc`), refuses a missing or stale install (versions against `package-lock.json`), runs `tsc -p . --noEmit` and prints every diagnostic, then one verdict line (type and config errors counted apart; a failure with no diagnostics, or a run cut short, says so). `npm run typecheck` runs it alone, guards included. |
 | `lib/main.ts` | `isMain(import.meta.url)`: the main-module check every CLI uses, robust to spaces, `%` and symlinks in the checkout path. |
-| `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB, a code-graph-rag export and codebase-memory-mcp and code-review-graph nodes-and-edges extracts of one small Python file) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus sandbox probes for codegraph, codebase-memory-mcp and code-review-graph: an index process sees no caller variables, a private HOME (and, for cbm, a private cache and a root confined to the repo) and, where `unshare` works, no network interface. |
+| `lib/adapter-test.ts`, `lib/test/adapters/` | Adapter mapping against frozen indexes (a codegraph DB, a code-graph-rag export and codebase-memory-mcp and code-review-graph nodes-and-edges extracts of one small Python file; for codebase-memory-mcp also `codebase-memory-mcp-file-only/{go,java,py}`, stores cbm 0.12.1 wrote for files with only a File node, `go-fold` (a Go function folded with a method), `go-parent` (a folded method whose only owner edge is the absorbed one's), `go-buildtags` (a type declared in two build-tagged files), `poly-fold` (a Go struct cbm folded into a same-qname Python class) and `ts-fold` (a class folded across same-stem `.js`/`.ts` and `.ts`/`.tsx`)) and committed golden snapshots (`--update` rewrites them after a deliberate change), plus sandbox probes for codegraph, codebase-memory-mcp and code-review-graph: an index process sees no caller variables, a private HOME (and, for cbm, a private cache and a root confined to the repo) and, where `unshare` works, no network interface. |
 | `lib/snapshot-test.ts`, `benchmarks/pycg-test.ts` | The validator enforces every field the snapshot schema requires (mutation: delete each, expect a problem); the PyCG scorer against fabricated snippets and a stub subject (hits, guess-only, extras, failed index). |
 | `lib/cli-test.ts`, `metamorphic/relations-test.ts`, `labels/data-scan-test.ts` | CLI regressions (spaced paths, exit codes on bad input, empty-graph verdicts, the gate's `incomplete` flag, the labelling gate); the relations' source transforms; and the leak scan of committed labelling files. `check` runs every tracked `*-test.mjs` and every `*-test.ts` among the TypeScript scripts (`tsconfig.json`'s `include`: `lib/`, oracle/'s own, `bench/`, `metamorphic/`, `benchmarks/`, `differential/`, `labels/`, `tools/` with `tools/triage/`; elsewhere a `.ts` is an indexed test source, not a script). |
 | `oracle/baseline.ts` | `save` collects one build's results (oracle forward + missing buckets and group signatures per repo, fixture verdicts, PyCG, metamorphic) into `baseline.json`; `diff` prints every change and an effect-size verdict (SPEC §9). `--fail-on-regression` exits 1 for regression, 2 on diff errors; `--fail-on-incomplete` also exits 1 when something measured on the old build errored or is missing on the new one (`incomplete` in the gate result); `--json gate.json` saves the gate result. |
