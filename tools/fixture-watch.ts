@@ -16,13 +16,14 @@
 //   node tools/fixture-watch.ts issues --prev prev.json --next next.json [--fixtures dir]
 //       print the upstream issue numbers (deduplicated) of every fixture the report can list: new, changed,
 //       or erroring on either commit; the report job looks up their open/closed state
-//   node tools/fixture-watch.ts pr-select --prs prs.json [--state pr-state.json] --cap N
+//   node tools/fixture-watch.ts pr-select --prs prs.json [--state pr-state.json] [--date YYYY-MM-DD] --cap N
 //       print (JSON) the open PRs [{number, head, base}] whose head moved since the last check, capped
 //   node tools/fixture-watch.ts pr-issues --prs selected.json --dir artifact [--fixtures dir]
 //       print the upstream issues every selected PR's report can list (for their open/closed state)
 //   node tools/fixture-watch.ts pr-report --prs selected.json --dir artifact --graph-assay <sha> --open open.json
 //       [--state pr-state.json] [--skipped skipped.json] [--errored errored.json] [--issue-states states.json] [--fixtures dir] --report-out comment.md
-//       --state-out pr-state.json [--summary-out full.md]
+//       --state-out pr-state.json [--summary-out full.md] [--date YYYY-MM-DD]
+//       (--date: the day strikes and set-aside are judged by, default today in UTC; the workflow passes select's day)
 //       one section per PR whose confirmed result changed since it was last reported (artifact/pr-N/ holds
 //       prev.json, next.json and, when reruns were needed, confirm-prev.json / confirm-next.json); a PR whose
 //       results are missing or invalid is a failed check: retried once on the same head, then it waits for a new head
@@ -248,7 +249,7 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
     const d = draft(c, ctx);
     return d ? [['', `<details><summary>Draft for ${refHtml(c.issue)}: ${ADVICE[c.kind]}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>'].join('\n')] : [];
   });
-  const foot = drafts.length ? '\nDrafts are candidates: re-check on current upstream `main`, then post by hand after approval.\n' : '';
+  const foot = '\nDrafts are candidates: re-check on current upstream `main`, then post by hand after approval.\n';
   // A change that would be drafted but for a failed issue lookup: the baseline moves on, so no later run drafts
   // it, and the row alone does not say why it has none (#101, V1).
   const lost = changes.filter((c) => drafted(c) && ctx.states[String(c.issue)] === 'unknown').map((c) => c.name);
@@ -259,7 +260,8 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
     if (lostLine.length) lines.push('', ...lostLine);
     lines.push(...drafts.slice(0, draftsShown));
     if (draftsShown < drafts.length) lines.push('', `${drafts.length - draftsShown} draft(s) left out to stay under GitHub's comment limit: the report job's summary has them.`);
-    return lines.join('\n') + '\n' + foot;
+    // The note on drafts only under a draft this comment shows (#101; PR #105 review, F1).
+    return lines.join('\n') + '\n' + (draftsShown ? foot : '');
   };
   let d = drafts.length; let rs = changes.length; let out = build(rs, d);
   while (out.length > limit && d > 0) out = build(rs, --d);

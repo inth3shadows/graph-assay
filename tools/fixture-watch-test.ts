@@ -735,6 +735,9 @@ check('#101 V1: a draftable change whose issue lookup failed is named as having 
 check('#101 footer: "Drafts are candidates" only when the report has a draft', () => {
   assert.doesNotMatch(report([{ kind: 'new', name: 'n', issue: 1, from: null, to: r('n', 'BROKEN') }], ctx), /Drafts are candidates/);
   assert.match(report([{ kind: 'fixed', name: 'f', issue: 1, from: r('f', 'BROKEN', 'w'), to: r('f', 'FIXED') }], ctx), /Drafts are candidates/);
+  // The capped comment: no footer once the cap has left every draft out (PR #105 review, F1).
+  const capped = report([{ kind: 'fixed', name: 'f', issue: 1, from: r('f', 'BROKEN', 'w'), to: r('f', 'FIXED') }], ctx, { limit: 500 });
+  assert.match(capped, /1 draft\(s\) left out/); assert.doesNotMatch(capped, /Drafts are candidates/);
 });
 check('#101 V5: a failed replay keeps the head\'s strikes; a new head drops them; failed twice waits for a new head', () => {
   const E = [{ number: 4, head: B }];
