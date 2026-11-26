@@ -260,11 +260,13 @@ All notable changes to this project are recorded here. The format follows
   Dependabot advisories cover. The case is only indexed, never installed or run; nothing else reads the version.
 
 ### Fixed
-- `tag-fixtures` (#95): a fixture is tagged only when all its sources are TS/JS, Python (`.pyi`/`.pyw` too) or Go,
-  in one of those languages; a source in any other language (C#, Swift, a `.vue`, ...) leaves it untagged instead
-  of tagged from a `.js`, `.ts` or `.py` file it also ships. Manifests, docs, `.sh` scripts and `.sql` schemas
-  don't count, and neither does anything under `node_modules.fixture/`, `node_modules/` or `.codegraph/`; naming fixtures no longer restamps `known-shapes.json`'s `generated` date (back to 2026-11-21, the
-  full run at f72c9d2e); `pr-3262` also checks the test's three one-line calls, which must stay linked.
+- `tag-fixtures` (#95): a fixture is tagged only when every source is one the oracle reads, all in one of TS/JS,
+  Python or Go. A source in any other language (C#, Swift, a `.vue`, ...) or a second oracle language leaves it
+  untagged, instead of tagged from a `.js`, `.ts` or `.py` file it also ships. Manifests, docs, scripts, schemas,
+  web assets, `node_modules`, `__pycache__` and dot entries don't count.
+- `tag-fixtures`: naming fixtures no longer restamps `known-shapes.json`'s `generated` date (back to 2026-11-21,
+  the full run at f72c9d2e).
+- `pr-3262` also checks the test's three one-line calls, which must stay linked.
 - `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
   indexer, which failed it; such a fixture is listed untagged, like a Java one.
 - `bin/graph-assay` refuses a Node without unflagged type stripping, or 25+, with a message, instead of
