@@ -279,6 +279,13 @@ All notable changes to this project are recorded here. The format follows
   `changed` result whose edges move is reported again (a PR whose stored result is `changed` is reported
   once more after this change; no PR state has been stored yet); a test title, a duplicate import, and a
   test for a date `Date.parse` accepts but no calendar has.
+- codebase-memory-mcp adapter (#97, #100): a file is the Module named by its path. A TypeScript `namespace`,
+  which cbm 0.12.1 also stores as a Module, is now a `namespace` definition in its file (`NS::inner`), not a
+  second file node; a file whose only Module is a namespace gets #49's prefix rule (`Q::run`, `Z::zz`). A code
+  file's Module whose qname prefixes none of its definitions (`models#py` beside a `models/` directory) takes
+  the directory and stem candidates (`User::save`, not `save`). Snapshots of click, mux, express, requests and
+  ky, and every fixture verdict replayed with cbm, are unchanged. No published number moves (cbm has had no
+  oracle run).
 - codebase-memory-mcp adapter (#49): definitions in a file with only a File node (Go and Java files, and a
   file beside a same-stem file that took the Module) get their containers: `A::Inner::run`, not `run`;
   `Config::read_config` beside a top-level `read_config`; Go methods take the type their `parent_class`
