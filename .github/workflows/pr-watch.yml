@@ -75,6 +75,7 @@ jobs:
       state: ${{ steps.pick.outputs.state }}
       skipped: ${{ steps.pick.outputs.skipped }}
       errored: ${{ steps.pick.outputs.errored }}
+      date: ${{ steps.pick.outputs.date }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -91,6 +92,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           mkdir -p sel
+          # One day for the whole run: select and report must not read two clocks across midnight UTC (#101, V4).
+          day=$(date -u +%F)
           if [ "$EVENT" = pull_request ]; then PR=3454; fi
           dry=false
           if [ -n "$PR" ]; then
@@ -112,7 +115,7 @@ jobs:
             else echo "could not read the pr-watch-state branch (git ls-remote exit $rc)" >&2; exit 1; fi
           fi
           cap=$CAP; [ "$dry" = true ] && cap=1
-          node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --cap 1000 > sel/candidates.json
+          node tools/fixture-watch.ts pr-select --prs sel/prs.json --state sel/state.json --date "$day" --cap 1000 > sel/candidates.json
           # Each PR is compared with its merge base, not with the base branch's tip. The cap applies to PRs whose
           # merge base was found; one whose compare answers 404/422 (no such head, no common history) is skipped
           # and recorded as a failed check by the report job, so it can't hold a slot every day.
@@ -149,7 +152,8 @@ jobs:
           # A dry run that checks nothing would pass without testing anything.
           if [ "$dry" = true ] && [ "$n" -eq 0 ]; then echo "dry run: no PR could be checked" >&2; exit 1; fi
           { echo "prs=$(cat sel/checked.json)"; echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"; echo "dry=$dry"
-            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; echo "skipped=$(cat sel/skipped.json)"; echo "errored=$(cat sel/errored.json)"; } >> "$GITHUB_OUTPUT"
+            echo "state=$(sha256sum sel/state.json | cut -d' ' -f1)"; echo "skipped=$(cat sel/skipped.json)"; echo "errored=$(cat sel/errored.json)"
+            echo "date=$day"; } >> "$GITHUB_OUTPUT"
 
   replay:
     needs: select
@@ -223,10 +227,11 @@ jobs:
           GA_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           N: ${{ matrix.pr.number }}
           PR_JSON: ${{ toJSON(matrix.pr) }}
+          DAY: ${{ needs.select.outputs.date }}
         run: |
           printf '[%s]' "$PR_JSON" > out/this.json
           echo '[]' > out/open.json
-          node tools/fixture-watch.ts pr-report --prs out/this.json --dir out --graph-assay "$GA_SHA" --open out/open.json \
+          node tools/fixture-watch.ts pr-report --prs out/this.json --dir out --graph-assay "$GA_SHA" --open out/open.json --date "$DAY" \
             --fixtures fixtures/oracle-candidates --report-out out/capped.md --state-out out/unused.json --summary-out out/summary.md
           if [ -s out/summary.md ]; then cat out/summary.md; else echo "PR #$N: no fixture changes."; fi >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -257,6 +262,7 @@ jobs:
       STATE_SHA: ${{ needs.select.outputs.state }}
       SKIPPED: ${{ needs.select.outputs.skipped }}
       ERRORED: ${{ needs.select.outputs.errored }}
+      DAY: ${{ needs.select.outputs.date }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -298,7 +304,7 @@ jobs:
         run: |
           node tools/fixture-watch.ts pr-report --prs rep/prs.json --dir artifact --graph-assay "$GITHUB_SHA" --open rep/open.json \
             --state rep/state.json --skipped rep/skipped.json --errored rep/errored.json --issue-states rep/issue-states.json --fixtures fixtures/oracle-candidates \
-            --report-out rep/report.md --state-out rep/new-state.json --summary-out rep/full.md
+            --date "$DAY" --report-out rep/report.md --state-out rep/new-state.json --summary-out rep/full.md
           if [ -s rep/full.md ]; then cat rep/full.md; else echo "No PR result changed."; fi >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on the tracking issue
         run: |

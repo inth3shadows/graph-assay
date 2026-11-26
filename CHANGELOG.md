@@ -269,10 +269,15 @@ All notable changes to this project are recorded here. The format follows
 - `pr-3262` also checks the test's three one-line calls, which must stay linked.
 - `tag-fixtures` no longer sends a fixture with no TS/JS, Python or Go source (C#, Swift) to the TypeScript
   indexer, which failed it; such a fixture is listed untagged, like a Java one.
+- Fixture and PR watch (#101): the fixture watch report names each change left without a draft because its
+  issue lookup failed, since a later run will not draft it, and ends with the note on drafts only when it has
+  one. A failed replay no longer wipes the strikes on the same head. The PR watch takes the day once, in its
+  `select` job, so a run that crosses midnight UTC no longer selects by one day and reports by the next.
 - Fixture and PR watch (#91): a fixture whose `issue` is an upstream PR number is looked up as a PR. Its row
   says `PR, open`, `PR, merged` or `PR, closed unmerged` instead of `closed` (which an abandoned PR also
-  reads as), and it gets no "Confirmed fixed" draft, which is meant for an issue thread. A number whose
-  lookup failed (`state unknown`) gets no draft either, since it may be a PR.
+  reads as), and the fixture watch gives it no "Confirmed fixed" draft, which is meant for an issue thread.
+  A number whose lookup failed (`state unknown`) gets no draft either, since it may be a PR. The PR watch
+  still names such a fixture in its review comment, which is posted on the watched PR.
 - PR watch (#89): a strike counts at most once a day, so three runs in one outage day no longer set a PR
   aside; one date check (a real calendar day) for every stored and given date, `run --date` included; the
   set-aside list drops PRs whose 7 days have passed and gives the day each listed one is tried again; a

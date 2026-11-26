@@ -184,6 +184,10 @@ const fixtureLink = (c: Change, ctx: Ctx) =>
 const rerun = (c: Change) => `Rerun: \`node bin/graph-assay replay <codegraph build>/dist/bin/codegraph.js ${c.name}\``;
 const intro = (c: Change, ctx: Ctx) => `The ${fixtureLink(c, ctx)} in [graph-assay](https://github.com/${REPO}), which I maintain,`;
 
+const DRAFTABLE = new Set<Kind>(['fixed', 'regression', 'edges']);
+/** A change of a kind that is drafted, with an issue and a previous verdict (the PR watch drafts all of these). */
+const drafted = (c: Change) => DRAFTABLE.has(c.kind) && !!c.issue && !!c.from;
+
 /** A ready-to-paste upstream draft for one change, or null when the change needs a person first. */
 export function draft(c: Change, ctx: Ctx): string | null {
   // A draft is a comment for an issue thread. A PR (#91), or a number whose lookup failed (`unknown`: it may be a
@@ -244,10 +248,15 @@ export function report(changes: Change[], ctx: Ctx, opts: { baseline?: Record<st
     const d = draft(c, ctx);
     return d ? [['', `<details><summary>Draft for ${refHtml(c.issue)}: ${ADVICE[c.kind]}</summary>`, '', '````markdown', d.trimEnd(), '````', '', '</details>'].join('\n')] : [];
   });
-  const foot = '\nDrafts are candidates: re-check on current upstream `main`, then post by hand after approval.\n';
+  const foot = drafts.length ? '\nDrafts are candidates: re-check on current upstream `main`, then post by hand after approval.\n' : '';
+  // A change that would be drafted but for a failed issue lookup: the baseline moves on, so no later run drafts
+  // it, and the row alone does not say why it has none (#101, V1).
+  const lost = changes.filter((c) => drafted(c) && ctx.states[String(c.issue)] === 'unknown').map((c) => c.name);
+  const lostLine = lost.length ? [`No draft for ${lost.join(', ')}: the state of the upstream issue could not be read (it may be a PR). Check by hand: a later run will not draft ${lost.length > 1 ? 'these changes' : 'this change'}.`] : [];
   const build = (rowsShown: number, draftsShown: number) => {
     const lines = [title, '', '| fixture | upstream issue | was | now | change |', '|---|---|---|---|---|', ...changes.slice(0, rowsShown).map(row)];
     if (rowsShown < changes.length) lines.push('', `${changes.length - rowsShown} more change(s) left out to stay under GitHub's comment limit: the report job's summary lists them all.`);
+    if (lostLine.length) lines.push('', ...lostLine);
     lines.push(...drafts.slice(0, draftsShown));
     if (draftsShown < drafts.length) lines.push('', `${drafts.length - draftsShown} draft(s) left out to stay under GitHub's comment limit: the report job's summary has them.`);
     return lines.join('\n') + '\n' + foot;
@@ -285,9 +294,6 @@ export function prStateOf(st: any): PrState {
 /** A stable summary of a PR's confirmed result, so a PR is re-reported only when its result changes. */
 // Detail text only where it is the result (wrong or missing edges; `changed` too, #89); error text can hold temp paths and would churn (#87).
 export const signature = (changes: Change[]) => changes.map((c) => `${c.name}:${c.kind}:${c.to.verdict}${c.kind === 'edges' || c.kind === 'regression' || c.kind === 'changed' ? `:${c.to.detail}` : ''}`).sort().join('\n');
-
-const DRAFTABLE = new Set<Kind>(['fixed', 'regression', 'edges']);
-const drafted = (c: Change) => DRAFTABLE.has(c.kind) && !!c.issue && !!c.from;
 
 /** A review comment for the PR, in the posting skill's shape, or null when no change can be drafted. */
 export function reviewDraft(pr: number, changes: Change[], ctx: Ctx, allScored = true): string | null {
@@ -347,7 +353,8 @@ export function prSelect(prs: Pr[], state: PrState, cap: number, today = new Dat
     if (!e || e.head !== p.head) return true;
     // A head whose merge-base lookup kept failing with an unclear error is set aside after 3 strikes, one a day (#87, #89), and tried
     // again SET_ASIDE_DAYS after the last strike: an outage that struck it costs a delay, never the PR (R2-2).
-    if ((e.errored ?? 0) >= 3) return !setAside(e, today);
+    if (setAside(e, today)) return false;
+    // A failed replay on this head is retried once, strikes or not (#101, V5); a struck head is tried again.
     return e.failed !== undefined ? e.failed < 2 : e.errored !== undefined;
   }).slice(0, cap);
 }
@@ -364,7 +371,9 @@ export function prState(state: PrState, open: number[], checked: Array<{ number:
   for (const f of failed) {
     const k = String(f.number); if (!keep.has(k)) continue;
     const old = prs[k];
-    prs[k] = { head: f.head, sig: old?.sig ?? '', failed: old?.head === f.head && old.failed ? old.failed + 1 : 1 };
+    const sameHead = old?.head === f.head;
+    // The head's strikes stay with it, as a strike keeps the head's failures (#101, V5).
+    prs[k] = { head: f.head, sig: old?.sig ?? '', failed: sameHead && old.failed ? old.failed + 1 : 1, ...(sameHead && old.errored ? { errored: old.errored, erroredAt: old.erroredAt } : {}) };
   }
   // A strike counts once per day: several runs during one outage day are one strike (#89).
   for (const f of errored) {
@@ -473,7 +482,7 @@ function main(argv: string[]) {
       else quiet.push(entry);
     }
     // PRs select could not compare (no merge base) count as failed checks of their head (Q4).
-    // PRs whose merge-base lookup failed with an unclear API error: counted, set aside after 3 runs (#87).
+    // PRs whose merge-base lookup failed with an unclear API error: a strike, at most one a day; set aside after 3 (#87, #89).
     const erroredFile = opt(args, '--errored');
     const errored: Array<{ number: number; head: string }> = [];
     if (erroredFile) {
