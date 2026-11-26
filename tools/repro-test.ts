@@ -223,7 +223,7 @@ try{
   const go2=(o)=>spawnSync(process.execPath,[path.join(ctx2,'tools/repro.ts'),'--repo','ky','--out',o],{cwd:ctx2,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
   // PR #107 review: F1 an empty packages map, F4 a v1 lock (named versions), F3 the reason in the message.
   for(const [why,body,msg] of [['empty','',/is not JSON/],['truncated',good.slice(0,good.length>>1),/is not JSON/],['not a lock','{"name":"x"}',/not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map/],
-    ['empty packages','{"lockfileVersion":3,"packages":{}}',/non-empty packages map/],['v1','{"lockfileVersion":1,"dependencies":{"a":{}}}',/lockfileVersion 2 or 3/],['packages array','{"lockfileVersion":3,"packages":[1]}',/non-empty packages map/]] as [string,string,RegExp][]){
+    ['empty packages','{"lockfileVersion":3,"packages":{}}',/non-empty packages map/],['v1','{"lockfileVersion":1,"dependencies":{"a":{}}}',/lockfileVersion 2 or 3/],['packages array','{"lockfileVersion":3,"packages":[1]}',/non-empty packages map/],['root entry only','{"lockfileVersion":3,"packages":{"":{"name":"ky"}}}',/non-empty packages map/]] as [string,string,RegExp][]){
    fs.rmSync(lock,{recursive:true,force:true});fs.writeFileSync(lock,body);const o=path.join(tmp,`badlock-out`);const r=go2(o);
    assert.notEqual(r.status,0,why);assert.match(r.stderr,/frozen npm lock for ky /,why);assert.match(r.stderr,msg,why);assert(!fs.existsSync(o),`${why}: a refused run must not create its output`);}
   {fs.rmSync(lock,{force:true});fs.mkdirSync(lock);const o=path.join(tmp,'badlock-dir');const r=go2(o);assert.match(r.stderr,/frozen npm lock for ky cannot be read/);assert(!fs.existsSync(o));fs.rmSync(lock,{recursive:true});}

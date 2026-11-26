@@ -43,9 +43,10 @@ for (const r of repos.filter((x) => x.setup === 'npm')) {
   const f = `docker/${r.name}-package-lock.json`;
   let text; try { text = fs.readFileSync(lockOf(r), 'utf8'); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} cannot be read (${e.code ?? e.message}): ${f}`); }
   let lock; try { lock = JSON.parse(text.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} is not JSON (${e.message}): ${f}`); }
-  // npm ci installs a v2 or v3 lock from its packages map; an empty map would install nothing (PR #107 review F1, F4).
+  // npm ci installs a v2 or v3 lock from its packages map. A map with no entry beyond the root ("") installs
+  // nothing, which no npm-setup repo means (PR #107 review F1, F4, round 2).
   const pk = lock?.packages;
-  if (![2, 3].includes(lock?.lockfileVersion) || typeof pk !== 'object' || pk === null || Array.isArray(pk) || !Object.keys(pk).length)
+  if (![2, 3].includes(lock?.lockfileVersion) || typeof pk !== 'object' || pk === null || Array.isArray(pk) || !Object.keys(pk).some((k) => k !== ''))
     throw new Error(`The frozen npm lock for ${r.name} is not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map: ${f}`);
 }
 const out = path.resolve(opts['--out']);
