@@ -333,7 +333,9 @@ the existing oracle, replay, PyCG and `bench/tables.ts`. The image supports
 Linux amd64; Python wheel hashes and SCIP binary checksums deliberately target
 that platform. No new harness runtime dependencies are added. `rsync` is needed by
 the Python oracle wrapper, GNU `time` supplies resource columns, and `util-linux`
-supplies the adapter's existing `unshare` isolation.
+supplies the adapter's existing `unshare` isolation. Every npm repo is set up before any repo is
+indexed, and a frozen lock that is not a valid package-lock is refused before anything runs. The
+labelled sample is all dev repos, so a held-out run's `tables.md`, manifest and log say its oracle-noise rates come from it.
 
 | Component | Pin | Source / rationale |
 |---|---|---|

@@ -12,14 +12,19 @@ import { CORPUS, readRepos, fetchRepos } from '../differential/builds.ts';
 
 const qa = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
-const usage = `usage: tools/repro.ts [--split dev | --split heldout --publish] [--repo ${[...new Set(readRepos(CORPUS).map((r) => r.name))].join('|')}] [--out /results]\n  --split heldout is refused without --publish (held-out repos are indexed only for published tables, SPEC §9),\n  and --publish without it (a dev run is never a publication run)`;
+// The corpus is read once: the usage and the selection come from the same rows.
+const corpusRepos = readRepos(CORPUS);
+// --help says which split each repo is in (#58).
+const names = (sp: string) => [...new Set(corpusRepos.filter((r) => r.split === sp).map((r) => r.name))].join('|');
+const usage = `usage: tools/repro.ts [--split dev | --split heldout --publish] [--repo dev: ${names('dev')}; heldout: ${names('heldout')}] [--out /results]\n  --split heldout is refused without --publish (held-out repos are indexed only for published tables, SPEC §9),\n  and --publish without it (a dev run is never a publication run)`;
 if (args.includes('--help')) { console.log(usage); process.exit(0); }
 const opts = { '--split': 'dev', '--out': '/results' };
-// --publish is a bare flag (no value); take it out before the key/value pairs are read.
-const publish = args.includes('--publish');
-for (let i = args.indexOf('--publish'); i >= 0; i = args.indexOf('--publish')) args.splice(i, 1);
+// --publish is a bare flag (no value), read in place, so it never stands in for another option's value (#58).
+let publish = false;
 while (args.length) {
-  const k = args.shift(); const v = args.shift();
+  const k = args.shift();
+  if (k === '--publish') { publish = true; continue; }
+  const v = args.shift();
   if (!['--split', '--repo', '--out'].includes(k) || !v || v.startsWith('--')) throw new Error(usage);
   opts[k] = v;
 }
@@ -27,11 +32,23 @@ const split = opts['--split'];
 if (!['dev', 'heldout'].includes(split)) throw new Error(`Unknown split: ${split} (use dev or heldout)`);
 if (split === 'heldout' && !publish) throw new Error('The heldout split is reserved for publication: pass --publish together with --split heldout.');
 if (publish && split !== 'heldout') throw new Error('--publish applies only to --split heldout: a dev run is never a publication run.');
-const repos = readRepos(CORPUS, split).filter((r) => !opts['--repo'] || r.name === opts['--repo']);
+const repos = corpusRepos.filter((r) => r.split === split && (!opts['--repo'] || r.name === opts['--repo']));
 if (!repos.length) throw new Error(`Unknown ${split} repo: ${opts['--repo']}`);
 // An npm entry installs from its frozen lock (docker/<name>-package-lock.json); fail before fetching or indexing anything.
-const noLock = repos.filter((r) => r.setup === 'npm' && !fs.existsSync(path.join(qa, 'docker', `${r.name}-package-lock.json`))).map((r) => r.name);
+const lockOf = (r) => path.join(qa, 'docker', `${r.name}-package-lock.json`);
+const noLock = repos.filter((r) => r.setup === 'npm' && !fs.existsSync(lockOf(r))).map((r) => r.name);
 if (noLock.length) throw new Error(`No frozen npm lock for ${noLock.join(', ')}: add docker/<name>-package-lock.json`);
+// An empty or truncated lock is refused too, not handed to npm mid-run (#58).
+for (const r of repos.filter((x) => x.setup === 'npm')) {
+  const f = `docker/${r.name}-package-lock.json`;
+  let text; try { text = fs.readFileSync(lockOf(r), 'utf8'); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} cannot be read (${e.code ?? e.message}): ${f}`); }
+  let lock; try { lock = JSON.parse(text.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} is not JSON (${e.message}): ${f}`); }
+  // npm ci installs a v2 or v3 lock from its packages map. A map with no entry beyond the root ("") installs
+  // nothing, which no npm-setup repo means (PR #107 review F1, F4, round 2).
+  const pk = lock?.packages;
+  if (![2, 3].includes(lock?.lockfileVersion) || typeof pk !== 'object' || pk === null || Array.isArray(pk) || !Object.keys(pk).some((k) => k !== ''))
+    throw new Error(`The frozen npm lock for ${r.name} is not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map: ${f}`);
+}
 const out = path.resolve(opts['--out']);
 if (fs.existsSync(out) && fs.readdirSync(out).length) throw new Error(`Output must be empty (prevents mixing runs): ${out}`);
 fs.mkdirSync(out, { recursive: true });
@@ -56,7 +73,8 @@ function run(cmd, argv, label, { cwd = qa, extra = {}, allowedExitCodes = [0] } 
   if (last) console.log(last);
 }
 const hash = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const note = 'Oracle noise is recomputed from the committed labels snapshot (labels/data/); no labeller runs here, and it covers the whole labelled sample whatever --repo selects.';
+// Every labelled item is from a dev repo, so a held-out table carries the dev sample's noise rates; it says so (#58).
+const note = `Oracle noise is recomputed from the committed labels snapshot (labels/data/); no labeller runs here, and it covers the whole labelled sample whatever --repo selects.${split === 'heldout' ? ' The labelled sample is drawn from the dev split only: these held-out tables carry its noise rates.' : ''}`;
 // SPEC §10 run identity beyond the per-file hashes: corpus version, effective subject timeout,
 // expectation schema and labelling protocol (each oracle output records its position encodings).
 const manifest: Record<string, any> = { schema: 'graph-assay/repro@1', spec: SPEC_VERSION, snapshotSchema: 'graph-assay/snapshot@1', expectationSchema: 'graph-assay/expect@1',
@@ -86,11 +104,13 @@ try {
   manifest.versions = JSON.parse(fs.readFileSync(path.join(out, 'logs/versions.log'), 'utf8'));
   console.log(`repro: fetch pinned ${split} corpus`);
   const dirs = fetchRepos(path.join(out, 'repos'), repos);
+  // Every repo is set up before any is indexed, so a failed npm ci stops the run before it indexes anything (#58).
   for (const [i, r] of repos.entries()) {
-    if (r.setup === 'npm') {
-      fs.copyFileSync(path.join(qa, 'docker', `${r.name}-package-lock.json`), path.join(dirs[i], 'package-lock.json'));
-      run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], `setup-${r.name}`, { cwd: dirs[i] });
-    }
+    if (r.setup !== 'npm') continue;
+    fs.copyFileSync(lockOf(r), path.join(dirs[i], 'package-lock.json'));
+    run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], `setup-${r.name}`, { cwd: dirs[i] });
+  }
+  for (const [i, r] of repos.entries()) {
     for (const subj of ['codegraph', 'code-graph-rag']) {
       run('bash', ['oracle/run.sh', r.name, dirs[i], { python: 'python', go: 'go', typescript: 'ts', javascript: 'ts' }[r.language]],
         `oracle-${r.name}-${subj}`, { extra: { CGQA_SUBJECT: subj, ORACLE_EXCLUDE: r.exclude.join(',') } });
@@ -110,7 +130,7 @@ try {
     run('node', ['metamorphic/run.ts', '--subject', subj, 'default', 'fixtures', '--relations', 'decoy,shift,repeat', '--json', path.join(out, 't3', `meta-${tag}.json`)],
       `t3-${tag}`, { allowedExitCodes: [0, 1] });
   }
-  // A subset gets its own corpus, so it cannot masquerade as the full dev table.
+  // The corpus file lists only the repos this run indexed, so a --repo subset's tables cover that subset, never the whole split.
   const corpus = path.join(out, 'corpus.txt');
   fs.writeFileSync(corpus, repos.map((r) => [r.name, r.url, r.sha, r.language, r.license, r.split, r.category, r.setup, r.exclude.length ? r.exclude.join(',') : '-'].join(' ')).join('\n') + '\n');
   const data = path.join(qa, 'labels', 'data');

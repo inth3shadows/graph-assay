@@ -70,7 +70,7 @@ function dockerMatcher(rules){
 }
 const write=(f,s)=>{fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,s);};
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
-const baseEnv={...process.env,XDG_CONFIG_HOME:tmp,XDG_CACHE_HOME:tmp,NODE_NO_WARNINGS:'1',CGQA_TEST_SPEC:SPEC_VERSION};
+const baseEnv: Record<string, string | undefined>={...process.env,XDG_CONFIG_HOME:tmp,XDG_CACHE_HOME:tmp,NODE_NO_WARNINGS:'1',CGQA_TEST_SPEC:SPEC_VERSION};
 try{
  const rules=fs.readFileSync(path.join(qa,'.dockerignore'),'utf8').split('\n').filter(s=>s.trim()&&!s.startsWith('#'));
  {const bad=rules.map((r)=>[r,unsupportedRule(r)]).filter(([,why])=>why);
@@ -166,11 +166,17 @@ try{
   // --publish without --split heldout is refused, so a dev manifest never claims a publication run (#53 review L1).
   for(const argv of [['--split','dev','--repo','mux','--publish'],['--publish','--repo','mux']]){const o=path.join(tmp,'dev-pub');const r=go([...argv,'--out',o]);
    assert.notEqual(r.status,0);assert.match(r.stderr,/--publish applies only to --split heldout/,argv.join(' '));assert(!fs.existsSync(o),'a refused run must not create its output');}
-  const devPlain=path.join(tmp,'dev-plain');go(['--repo','mux','--out',devPlain]);const dm=read(path.join(devPlain,'manifest.json'));assert.equal(dm.split,'dev');assert.equal(dm.publish,false);
-  assert.match(go(['--split','bogus']).stderr,/Unknown split/);
+  const devPlain=path.join(tmp,'dev-plain');const dp=go(['--repo','mux','--out',devPlain]);assert.equal(dp.status,1,dp.stdout+dp.stderr);const dm=read(path.join(devPlain,'manifest.json'));assert.equal(dm.split,'dev');assert.equal(dm.publish,false);
+  {const b=go(['--split','bogus']);assert.notEqual(b.status,0);assert.match(b.stderr,/Unknown split/);}
+  // #58: a bare flag never stands in for a value, so `--split --publish heldout` is refused, not read as a held-out publish run.
+  {const o=path.join(tmp,'flag-as-value');const r=go(['--split','--publish','heldout','--repo','httpx','--out',o]);
+   assert.notEqual(r.status,0);assert.match(r.stderr,/usage: tools\/repro\.ts/);assert(!fs.existsSync(o),'a refused run must not create its output');}
   // Every npm corpus entry has the frozen lock the image installs from, and a missing one fails before anything is fetched (#53 review H1).
   for(const r of readRepos(CORPUS).filter(r=>r.setup==='npm'))assert(fs.existsSync(path.join(qa,'docker',`${r.name}-package-lock.json`)),`docker/${r.name}-package-lock.json missing`);
     const help=go(['--help']);assert.equal(help.status,0);for(const name of ['mux','requests','httpx','cobra','got'])assert.match(help.stdout,new RegExp(name),`usage lacks ${name}`);
+  // #58: --help says which split each repo is in.
+  for(const sp of ['dev','heldout']){const line=new RegExp(`${sp}: ([^;\\]\\n]*)`).exec(help.stdout)?.[1]??'';
+   assert.deepEqual(line.split('|').sort(),readRepos(CORPUS,sp).map(r=>r.name).sort(),`--help ${sp} list`);}
  });
  shim('unshare','process.exit(0);');
  shim('git',`const fs=require('node:fs');if(process.argv[2]==='init')fs.mkdirSync('.git',{recursive:true});`);
@@ -186,7 +192,11 @@ try{
  else if(script==='metamorphic/run.ts'){const status=Number(process.env.CGQA_T3_REPRO_STATUS??1);data=['decoy','shift','repeat'].map(relation=>({seed:'f',relation,subject,adapterSha256:'a'.repeat(64),challengeSha256:'b'.repeat(64),byteIdentical:relation==='repeat'?true:undefined,diffs:{LOST:status===1&&relation==='decoy'?['changed']:[]},...(status===2?{error:'synthetic index failure'}:{})}));fs.writeFileSync(output,JSON.stringify(data));process.exit(status);}
  else if(script==='labels/noise.ts')data={table:{},labellers:[],protocol:a.includes('--protocol')?{sha256:'0'.repeat(64),name:'test',promptTemplateSha256:'0'.repeat(64),labellers:{}}:null};else process.exit(9);
  fs.writeFileSync(output,JSON.stringify(data));`);
- shim('npm',`const fs=require('node:fs');if(process.argv[2]!=='ci'||!fs.existsSync('package-lock.json'))process.exit(9);`);
+ // #58: npm ci gets exactly the frozen lock for its repo; CGQA_NPM_FAIL makes it fail.
+ baseEnv.CGQA_TEST_LOCKS=path.join(context,'docker');
+ shim('npm',`const fs=require('node:fs'),path=require('node:path');if(process.env.CGQA_NPM_FAIL)process.exit(1);
+ const frozen=path.join(process.env.CGQA_TEST_LOCKS,path.basename(process.cwd())+'-package-lock.json');
+ if(process.argv[2]!=='ci'||!fs.existsSync('package-lock.json')||!fs.readFileSync('package-lock.json').equals(fs.readFileSync(frozen)))process.exit(9);`);
  check('a held-out publish run fetches, sets up and tables the held-out split, never dev',()=>{
   // The split reaches the fetch, the npm setup (got's lock) and bench/tables.ts --split (#53 review M2, H1).
   const out=path.join(tmp,'heldout');const held=readRepos(CORPUS,'heldout').map(r=>r.name).sort();
@@ -195,10 +205,35 @@ try{
   assert.deepEqual(fs.readdirSync(path.join(out,'repos')).sort(),held,'fetched repos are not the held-out split');
   for(const n of held.filter(n=>readRepos(CORPUS,'heldout').find(r=>r.name===n).setup==='npm'))assert(fs.existsSync(path.join(out,'logs',`setup-${n}.log`)),`no npm setup for ${n}`);
   const t=read(path.join(out,'tables.json'));assert.equal(t.split,'heldout');assert.deepEqual([...t.repos].sort(),held,'tables do not cover the held-out split');
+  // #58: a held-out table says its oracle-noise rates come from the dev-labelled sample.
+  for(const txt of [fs.readFileSync(path.join(out,'tables.md'),'utf8'),read(path.join(out,'manifest.json')).noise,r.stdout])assert.match(txt,/labelled sample is drawn from the dev split only/);
+  // PR #107 review F5: the sentence is true only while every labelled item is from a dev repo; this fails when one is not.
+  {const dev=new Set(readRepos(CORPUS,'dev').map(x=>x.name));const d=path.join(qa,'labels','data');
+   const labelled=new Set(fs.readdirSync(d).flatMap(x=>fs.readFileSync(path.join(d,x,'items.jsonl'),'utf8').split('\n').filter(Boolean).map(l=>JSON.parse(l).repo)));
+   const name=(rp)=>/^w-(?:pub-)?([^/]+)\//.exec(rp)?.[1];
+   assert(labelled.size>0);for(const rp of labelled)assert(dev.has(name(rp)),`labelled repo ${rp} is not a dev repo: tools/repro.ts's held-out noise note says the sample is all dev`);}
+ });
+ check('#58: every npm repo is set up before any repo is indexed; a failed npm ci indexes nothing',()=>{
+  const out=path.join(tmp,'npm-fails');const r=spawnSync(process.execPath,[path.join(context,'tools/repro.ts'),'--out',out],{cwd:context,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`,CGQA_NPM_FAIL:'1'}});
+  assert.equal(r.status,1,r.stdout+r.stderr);const m=read(path.join(out,'manifest.json'));assert.equal(m.status,'failed');assert.match(m.error,/^setup-ky:/);
+  assert.deepEqual(fs.readdirSync(path.join(out,'logs')).filter(f=>f.startsWith('oracle-')),[],'a repo was indexed before every setup passed');
+ });
+ check('#58: an empty, truncated or non-lock frozen lock is refused before anything is created',()=>{
+  const ctx2=path.join(tmp,'context-badlock');fs.cpSync(context,ctx2,{recursive:true});const lock=path.join(ctx2,'docker','ky-package-lock.json');const good=fs.readFileSync(lock,'utf8');
+  const go2=(o)=>spawnSync(process.execPath,[path.join(ctx2,'tools/repro.ts'),'--repo','ky','--out',o],{cwd:ctx2,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
+  // PR #107 review: F1 an empty packages map, F4 a v1 lock (named versions), F3 the reason in the message.
+  for(const [why,body,msg] of [['empty','',/is not JSON/],['truncated',good.slice(0,good.length>>1),/is not JSON/],['not a lock','{"name":"x"}',/not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map/],
+    ['empty packages','{"lockfileVersion":3,"packages":{}}',/non-empty packages map/],['v1','{"lockfileVersion":1,"dependencies":{"a":{}}}',/lockfileVersion 2 or 3/],['packages array','{"lockfileVersion":3,"packages":[1]}',/non-empty packages map/],['root entry only','{"lockfileVersion":3,"packages":{"":{"name":"ky"}}}',/non-empty packages map/]] as [string,string,RegExp][]){
+   fs.rmSync(lock,{recursive:true,force:true});fs.writeFileSync(lock,body);const o=path.join(tmp,`badlock-out`);const r=go2(o);
+   assert.notEqual(r.status,0,why);assert.match(r.stderr,/frozen npm lock for ky /,why);assert.match(r.stderr,msg,why);assert(!fs.existsSync(o),`${why}: a refused run must not create its output`);}
+  {fs.rmSync(lock,{force:true});fs.mkdirSync(lock);const o=path.join(tmp,'badlock-dir');const r=go2(o);assert.match(r.stderr,/frozen npm lock for ky cannot be read/);assert(!fs.existsSync(o));fs.rmSync(lock,{recursive:true});}
+  // F2: a byte-order mark before a good lock passes the check (npm ci then gets it; the shim refuses any lock that is not the frozen bytes).
+  {fs.writeFileSync(lock,'\uFEFF'+good);const o=path.join(tmp,'bom');const r=go2(o);assert.doesNotMatch(r.stderr,/frozen npm lock for ky/);assert.match(read(path.join(o,'manifest.json')).error,/^setup-ky:/);}
  });
  check('canonical orchestrator records exit1 findings and runs actual T1/T2/T3 table code',()=>{
   const out=path.join(tmp,'findings');const r=run(context,out,{CGQA_T3_REPRO_STATUS:'1'});assert.equal(r.status,0,r.stdout+r.stderr);
   const m=read(path.join(out,'manifest.json'));assert.equal(m.status,'complete');assert(m.files['differential/modes.ts']);
+  assert.doesNotMatch(m.noise,/drawn from the dev split/);assert.doesNotMatch(fs.readFileSync(path.join(out,'tables.md'),'utf8'),/drawn from the dev split/); // #58: only a held-out run says it
   const t=read(path.join(out,'tables.json'));assert.equal(t.t3Comparison.matched.length,3);assert.equal(t.subjects.codegraph.robustness.relations.decoy.changed,1);assert.equal(t.missingRuns.length,0);
  });
  check('canonical index error exit2 retains failed manifest and logs, without success table',()=>{
