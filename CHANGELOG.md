@@ -283,7 +283,9 @@ All notable changes to this project are recorded here. The format follows
   which cbm 0.12.1 also stores as a Module, is now a `namespace` definition in its file (`NS::inner`), not a
   second file node; a file whose only Module is a namespace gets #49's prefix rule (`Q::run`, `Z::zz`). A code
   file's Module whose qname prefixes none of its definitions (`models#py` beside a `models/` directory) takes
-  the directory and stem candidates (`User::save`, not `save`). Snapshots of click, mux, express, requests and
+  the directory and stem candidates (`User::save`, not `save`); so does a TypeScript file cbm names from its
+  directory (`src/models/index.ts`: `Other::go`, not `go`). A second Module named by the same path is folded
+  into the first, and a non-code file none of whose Modules is named by its path still takes one as its file. Snapshots of click, mux, express, requests and
   ky, and every fixture verdict replayed with cbm, are unchanged. No published number moves (cbm has had no
   oracle run).
 - codebase-memory-mcp adapter (#49): definitions in a file with only a File node (Go and Java files, and a

@@ -214,6 +214,31 @@ check('codebase-memory-mcp #100: a Module whose qname prefixes none of its defin
     new Map([['docs/index.md', { id: 1, label: 'File', qname: 'graph-assay.docs.index.md.__file__' }]])).has('docs/index.md'), false);
   assert.equal(cbm.filePrefixes(new Map([['models.py', mod]]), [{ file: 'models.py', qname: 'graph-assay.models.Gone.run' }], new Map([['models.py', file]])).has('models.py'), false);
 });
+check('codebase-memory-mcp #103 review (S1, A3): one file node per path, whichever Modules cbm wrote', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cgqa-cbm-modules-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.graph-assay'));
+    const db = new DatabaseSync(path.join(tmp, '.graph-assay', 'cbm.db'));
+    db.exec(`CREATE TABLE nodes (id, label, name, qualified_name, file_path, start_line, end_line, properties);
+      CREATE TABLE edges (id, source_id, target_id, type, properties);`);
+    const node = db.prepare('INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const r of [
+      // S1: a non-code file whose only Module is not named by its path is still a file, as before #103.
+      [1, 'File', 'a.ini', 'graph-assay.a.ini.__file__', 'a.ini', 0, 0], [2, 'Module', 'settings', 'graph-assay.a', 'a.ini', 1, 3],
+      [3, 'Section', 'core', 'graph-assay.a.core', 'a.ini', 1, 2],
+      // A3: two Modules named by the same path are one file; the second's edges are the first's.
+      [4, 'File', 'b.ts', 'graph-assay.b.ts.__file__', 'b.ts', 0, 0], [5, 'Module', 'b.ts', 'graph-assay.b', 'b.ts', 1, 4],
+      [6, 'Module', 'b.ts', 'graph-assay.b', 'b.ts', 1, 4], [7, 'Class', 'C', 'graph-assay.b.C', 'b.ts', 2, 3]]) node.run(...r, '{}');
+    const edge = db.prepare('INSERT INTO edges VALUES (?, ?, ?, ?, ?)');
+    edge.run(1, 1, 2, 'DEFINES', '{}'); edge.run(2, 6, 7, 'DEFINES', '{}'); edge.run(3, 4, 6, 'DEFINES', '{}');
+    db.close();
+    const snap = cbm.snapshot(tmp);
+    assert.deepEqual(validateSnapshot(snap), []);
+    assert.deepEqual(snap.nodes.filter((n) => n.kind === 'file').map((n) => `${n.id} ${n.file}`).sort(), ['2 a.ini', '5 b.ts']);
+    assert.deepEqual(snap.nodes.filter((n) => n.kind !== 'file').map((n) => `${n.file} ${n.qname}`).sort(), ['a.ini core', 'b.ts C']);
+    assert.deepEqual(snap.edges.map((e) => `${e.kind} ${e.src} ${e.dst}`), ['contains 5 7']);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
 check('codebase-memory-mcp #97: a TypeScript namespace is a definition in its file, not the file', () => {
   // cbm 0.12.1 stores `namespace NS` as a Module whose name is `NS`; the file's own Module is named by its path.
   const { snap, names, contains } = fileOnly('ts-ns');
@@ -221,7 +246,7 @@ check('codebase-memory-mcp #97: a TypeScript namespace is a definition in its fi
   assert.deepEqual(files, ['src/nested.ts', 'src/onlyns.json', 'src/onlyns.ts', 'src/solo.ts']);
   assert.deepEqual(names('src/solo.ts'), ['A', 'A::run', 'B', 'B::run', 'NS', 'NS::inner']);
   assert.equal(snap.nodes.find((n) => n.qname === 'NS').kind, 'namespace');
-  // onlyns.json took the stem's Module, so onlyns.ts has only a File node and a namespace: #96's prefix rule.
+  // onlyns.json took the stem's Module, so onlyns.ts has only a File node and a namespace: #49's prefix rule (PR #96).
   assert.deepEqual(names('src/onlyns.ts'), ['Q', 'Q::run', 'Z', 'Z::zz']);
   assert.deepEqual(names('src/nested.ts'), ['Outer', 'Outer::Inner', 'Outer::Inner::f', 'Outer::g', 'top']);
   const q = new Map(snap.nodes.map((n) => [n.id, n.qname]));

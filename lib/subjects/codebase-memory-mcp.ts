@@ -166,11 +166,19 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     // Any other Module is a TypeScript namespace (`NS` in `src/solo.ts`), a definition in the file (#97).
     // cbm 0.12.1 writes no Module for some files, only a File node: Go and Java files, and a file whose
     // extensionless path another file's Module already took (`aliases.py` next to `aliases.ini`). There the
-    // File node of a code file (a known extension) is the file.
+    // File node of a code file (a known extension) is the file. One file node per path: a second Module named
+    // by the same path is folded into the first (#103 review, A3). A non-code file none of whose Modules is
+    // named by its path takes a Module, as before #103 (S1): no Module of the ~30 non-code formats probed was.
     const fileModule = (n: Row) => n.label === 'Module' && n.name === n.file;
     const moduleOf = new Map<string, Row>();
-    for (const n of rows) if (fileModule(n) && n.file && !n.file.startsWith(`${OUT}/`)) moduleOf.set(n.file, n);
     const alias = new Map<number, number>();
+    for (const n of rows) {
+      if (!fileModule(n) || !n.file || n.file.startsWith(`${OUT}/`)) continue;
+      if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id); else moduleOf.set(n.file, n);
+    }
+    for (const n of rows) {
+      if (n.label === 'Module' && n.file && !n.file.startsWith(`${OUT}/`) && !lang(n.file) && !moduleOf.has(n.file)) moduleOf.set(n.file, n);
+    }
     const fileNodes = new Map<string, Row>();
     for (const n of rows) {
       if (n.label !== 'File' || !n.file || n.file.startsWith(`${OUT}/`)) continue;
@@ -222,7 +230,8 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     for (const n of rows) {
       // no file: injected builtins (`builtins.len`), routes, the project and branch nodes
       const mod = n.file ? moduleOf.get(n.file) : null;
-      const isFile = fileModule(n) || mod?.id === n.id;
+      const isFile = mod?.id === n.id;
+      if (alias.has(n.id)) continue; // a File node, or a second Module of the file: folded into the file
       if (!n.file || (SKIP.has(n.label) && !isFile) || n.file.startsWith(`${OUT}/`)) continue;
       if (!mod) continue;
       if (isFile) {
