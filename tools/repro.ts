@@ -40,9 +40,13 @@ const noLock = repos.filter((r) => r.setup === 'npm' && !fs.existsSync(lockOf(r)
 if (noLock.length) throw new Error(`No frozen npm lock for ${noLock.join(', ')}: add docker/<name>-package-lock.json`);
 // An empty or truncated lock is refused too, not handed to npm mid-run (#58).
 for (const r of repos.filter((x) => x.setup === 'npm')) {
-  let lock; try { lock = JSON.parse(fs.readFileSync(lockOf(r), 'utf8')); } catch { lock = null; }
-  if (!Number.isInteger(lock?.lockfileVersion) || typeof lock.packages !== 'object' || lock.packages === null || Array.isArray(lock.packages))
-    throw new Error(`The frozen npm lock for ${r.name} is not a valid package-lock (lockfileVersion and packages): docker/${r.name}-package-lock.json`);
+  const f = `docker/${r.name}-package-lock.json`;
+  let text; try { text = fs.readFileSync(lockOf(r), 'utf8'); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} cannot be read (${e.code ?? e.message}): ${f}`); }
+  let lock; try { lock = JSON.parse(text.replace(/^\uFEFF/, '')); } catch (e) { throw new Error(`The frozen npm lock for ${r.name} is not JSON (${e.message}): ${f}`); }
+  // npm ci installs a v2 or v3 lock from its packages map; an empty map would install nothing (PR #107 review F1, F4).
+  const pk = lock?.packages;
+  if (![2, 3].includes(lock?.lockfileVersion) || typeof pk !== 'object' || pk === null || Array.isArray(pk) || !Object.keys(pk).length)
+    throw new Error(`The frozen npm lock for ${r.name} is not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map: ${f}`);
 }
 const out = path.resolve(opts['--out']);
 if (fs.existsSync(out) && fs.readdirSync(out).length) throw new Error(`Output must be empty (prevents mixing runs): ${out}`);

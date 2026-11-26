@@ -264,7 +264,7 @@ All notable changes to this project are recorded here. The format follows
   no longer stops a run after earlier repos were indexed. An empty, truncated or otherwise invalid frozen
   lock is refused before anything runs. `--publish` is read in place, so `--split --publish heldout` is
   refused instead of passing as a held-out publish run. `--help` groups the repos by split. A held-out
-  run's tables, manifest and log say the oracle-noise rates come from the dev-labelled sample.
+  run's `tables.md`, manifest and log say the oracle-noise rates come from the dev-labelled sample.
 - `tag-fixtures` (#95): a fixture is tagged only when every source is one the oracle reads, all in one of TS/JS,
   Python or Go. A source in any other language (C#, Swift, a `.vue`, ...) or a second oracle language leaves it
   untagged, instead of tagged from a `.js`, `.ts` or `.py` file it also ships. Manifests, docs, scripts, schemas,

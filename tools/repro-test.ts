@@ -207,6 +207,11 @@ try{
   const t=read(path.join(out,'tables.json'));assert.equal(t.split,'heldout');assert.deepEqual([...t.repos].sort(),held,'tables do not cover the held-out split');
   // #58: a held-out table says its oracle-noise rates come from the dev-labelled sample.
   for(const txt of [fs.readFileSync(path.join(out,'tables.md'),'utf8'),read(path.join(out,'manifest.json')).noise,r.stdout])assert.match(txt,/labelled sample is drawn from the dev split only/);
+  // PR #107 review F5: the sentence is true only while every labelled item is from a dev repo; this fails when one is not.
+  {const dev=new Set(readRepos(CORPUS,'dev').map(x=>x.name));const d=path.join(qa,'labels','data');
+   const labelled=new Set(fs.readdirSync(d).flatMap(x=>fs.readFileSync(path.join(d,x,'items.jsonl'),'utf8').split('\n').filter(Boolean).map(l=>JSON.parse(l).repo)));
+   const name=(rp)=>/^w-(?:pub-)?([^/]+)\//.exec(rp)?.[1];
+   assert(labelled.size>0);for(const rp of labelled)assert(dev.has(name(rp)),`labelled repo ${rp} is not a dev repo: tools/repro.ts's held-out noise note says the sample is all dev`);}
  });
  check('#58: every npm repo is set up before any repo is indexed; a failed npm ci indexes nothing',()=>{
   const out=path.join(tmp,'npm-fails');const r=spawnSync(process.execPath,[path.join(context,'tools/repro.ts'),'--out',out],{cwd:context,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`,CGQA_NPM_FAIL:'1'}});
@@ -215,10 +220,15 @@ try{
  });
  check('#58: an empty, truncated or non-lock frozen lock is refused before anything is created',()=>{
   const ctx2=path.join(tmp,'context-badlock');fs.cpSync(context,ctx2,{recursive:true});const lock=path.join(ctx2,'docker','ky-package-lock.json');const good=fs.readFileSync(lock,'utf8');
-  for(const [why,body] of [['empty',''],['truncated',good.slice(0,good.length>>1)],['not a lock','{"name":"x"}']]){
-   fs.writeFileSync(lock,body);const o=path.join(tmp,`badlock-out`);
-   const r=spawnSync(process.execPath,[path.join(ctx2,'tools/repro.ts'),'--repo','ky','--out',o],{cwd:ctx2,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
-   assert.notEqual(r.status,0,why);assert.match(r.stderr,/frozen npm lock for ky is not a valid package-lock/,why);assert(!fs.existsSync(o),`${why}: a refused run must not create its output`);}
+  const go2=(o)=>spawnSync(process.execPath,[path.join(ctx2,'tools/repro.ts'),'--repo','ky','--out',o],{cwd:ctx2,encoding:'utf8',env:{...baseEnv,PATH:`${bin}:${process.env.PATH}`}});
+  // PR #107 review: F1 an empty packages map, F4 a v1 lock (named versions), F3 the reason in the message.
+  for(const [why,body,msg] of [['empty','',/is not JSON/],['truncated',good.slice(0,good.length>>1),/is not JSON/],['not a lock','{"name":"x"}',/not a valid package-lock: it needs lockfileVersion 2 or 3 and a non-empty packages map/],
+    ['empty packages','{"lockfileVersion":3,"packages":{}}',/non-empty packages map/],['v1','{"lockfileVersion":1,"dependencies":{"a":{}}}',/lockfileVersion 2 or 3/],['packages array','{"lockfileVersion":3,"packages":[1]}',/non-empty packages map/]]){
+   fs.rmSync(lock,{recursive:true,force:true});fs.writeFileSync(lock,body);const o=path.join(tmp,`badlock-out`);const r=go2(o);
+   assert.notEqual(r.status,0,why);assert.match(r.stderr,/frozen npm lock for ky /,why);assert.match(r.stderr,msg as RegExp,why);assert(!fs.existsSync(o),`${why}: a refused run must not create its output`);}
+  {fs.rmSync(lock,{force:true});fs.mkdirSync(lock);const o=path.join(tmp,'badlock-dir');const r=go2(o);assert.match(r.stderr,/frozen npm lock for ky cannot be read/);assert(!fs.existsSync(o));fs.rmSync(lock,{recursive:true});}
+  // F2: a byte-order mark before a good lock passes the check (npm ci then gets it; the shim refuses any lock that is not the frozen bytes).
+  {fs.writeFileSync(lock,'\uFEFF'+good);const o=path.join(tmp,'bom');const r=go2(o);assert.doesNotMatch(r.stderr,/frozen npm lock for ky/);assert.match(read(path.join(o,'manifest.json')).error,/^setup-ky:/);}
  });
  check('canonical orchestrator records exit1 findings and runs actual T1/T2/T3 table code',()=>{
   const out=path.join(tmp,'findings');const r=run(context,out,{CGQA_T3_REPRO_STATUS:'1'});assert.equal(r.status,0,r.stdout+r.stderr);
