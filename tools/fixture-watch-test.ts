@@ -719,4 +719,52 @@ check('W4: run refuses a --date that is not a calendar day (it is stored and dat
     for (const d of ['2026-02-30', 'garbage']) { const p = run(d); assert.equal(p.status, 2, d); assert.match(p.stderr, /bad date/); }
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
+// ---- #101: follow-ups from #93's verify rounds ----
+check('#101 V1: a draftable change whose issue lookup failed is named as having no draft; others are not', () => {
+  const ch = (issue: number, kind: Change['kind'] = 'fixed'): Change => ({ kind, name: `issue-${issue}`, issue, from: r('x', 'BROKEN', 'w', issue), to: r('x', kind === 'edges' ? 'BROKEN' : 'FIXED', kind === 'edges' ? 'v' : '', issue) });
+  const c1 = { ...ctx, states: { 7: 'unknown', 9: 'unknown', 1: 'closed', 2: 'open', 3: 'pr-merged' } as Record<string, string> };
+  const out = report([ch(7), ch(9, 'edges'), ch(1), ch(2), ch(3), ch(5)], c1);
+  assert.match(out, /No draft for issue-7, issue-9: the state of the upstream issue could not be read \(it may be a PR\)\. Check by hand: a later run will not draft these changes\./);
+  for (const k of [1, 2, 3, 5]) assert.doesNotMatch(out.match(/No draft for [^\n]*/)![0], new RegExp(`issue-${k}\\b`));
+  assert.doesNotMatch(report([ch(1)], c1), /No draft for/);
+  // A change that never gets a draft (new, changed, error) is not named: its row already says so.
+  assert.doesNotMatch(report([{ ...ch(7), kind: 'changed' }], c1), /No draft for/);
+  // The line survives capping (it is short and comes before the drafts).
+  assert.match(report([ch(7), ch(1)], c1, { limit: 900 }), /No draft for issue-7/);
+});
+check('#101 footer: "Drafts are candidates" only when the report has a draft', () => {
+  assert.doesNotMatch(report([{ kind: 'new', name: 'n', issue: 1, from: null, to: r('n', 'BROKEN') }], ctx), /Drafts are candidates/);
+  assert.match(report([{ kind: 'fixed', name: 'f', issue: 1, from: r('f', 'BROKEN', 'w'), to: r('f', 'FIXED') }], ctx), /Drafts are candidates/);
+  // The capped comment: no footer once the cap has left every draft out (PR #105 review, F1).
+  const capped = report([{ kind: 'fixed', name: 'f', issue: 1, from: r('f', 'BROKEN', 'w'), to: r('f', 'FIXED') }], ctx, { limit: 500 });
+  assert.match(capped, /1 draft\(s\) left out/); assert.doesNotMatch(capped, /Drafts are candidates/);
+});
+check('#101 V5: a failed replay keeps the head\'s strikes; a new head drops them; failed twice waits for a new head', () => {
+  const E = [{ number: 4, head: B }];
+  let st = prState({ prs: {} }, [4], [], [], E, '2026-11-01'); st = prState(st, [4], [], [], E, '2026-11-02');
+  st = prState(st, [4], [], [{ number: 4, head: B }], [], '2026-11-03');
+  assert.deepEqual(st.prs['4'], { head: B, sig: '', failed: 1, errored: 2, erroredAt: '2026-11-02' });
+  assert.deepEqual(prState(st, [4], [], [{ number: 4, head: A }], [], '2026-11-03').prs['4'], { head: A, sig: '', failed: 1 });
+  // Three strikes long past, and the replay then failed twice on that head: it waits for a new head.
+  const old = { prs: { 4: { head: B, sig: '', failed: 2, errored: 3, erroredAt: '2026-10-01' } } };
+  assert.deepEqual(prSelect([{ number: 4, head: B, base: A }], old, 6, '2026-11-20'), []);
+  assert.equal(prSelect([{ number: 4, head: A, base: A }], old, 6, '2026-11-20').length, 1);
+  // Unchanged: three strikes within their 7 days: set aside; past them, with no failure: tried again.
+  const aside = { prs: { 4: { head: B, sig: '', errored: 3, erroredAt: '2026-11-15' } } };
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], aside, 6, '2026-11-20').length, 0);
+  assert.equal(prSelect([{ number: 4, head: B, base: A }], aside, 6, '2026-11-22').length, 1);
+});
+check('#101 V4: the PR watch takes the date once, in select, and hands it to pr-select and both pr-report calls', () => {
+  const wf = fs.readFileSync(path.join(here, '..', '.github/workflows/pr-watch.yml'), 'utf8');
+  const jobs = wf.split(/\n  (?=select:|replay:|report:)/);
+  const [select, replay, rep] = ['select:', 'replay:', 'report:'].map((k) => jobs.find((j) => j.startsWith(k)) ?? '');
+  assert.match(select, /\n {6}date: \$\{\{ steps\.pick\.outputs\.date \}\}/);
+  assert.match(select, /day=\$\(date -u \+%F\)/);
+  assert.match(select, /pr-select --prs sel\/prs\.json --state sel\/state\.json --date "\$day"/);
+  assert.match(select, /echo "date=\$day"/);
+  for (const j of [replay, rep]) {
+    assert.match(j, /DAY: \$\{\{ needs\.select\.outputs\.date \}\}/);
+    assert.match(j, /pr-report /); assert.match(j, /--date "\$DAY"/);
+  }
+});
 console.log(`fixture-watch: ${n}/${n} checks`);
