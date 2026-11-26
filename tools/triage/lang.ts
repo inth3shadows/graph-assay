@@ -3,7 +3,7 @@
 // indexes, and a .sh helper or a .sql schema is no reason to untag a fixture.
 // - Installed packages, codegraph's own data and local junk (node_modules.fixture/, node_modules/, __pycache__/,
 //   and any dot entry: .codegraph/, .venv/, .git/, .DS_Store, .gitignore) are not the fixture's sources: ignored.
-//   The oracle's own directory walk leaves dot entries out too.
+//   tag-fixtures still copies them, so the oracle would read sources in a dot directory; no fixture has one.
 // - Neutral files (manifests, docs, lockfiles, scripts, schemas, web assets) say nothing about the language: ignored.
 // - Every other file must be a Go, Python or TS/JS source, by the oracle's own filter (oracle/sources.ts, so
 //   case-sensitive, and no .pyw). Any other file (a .java, a .vue, a Makefile) means untagged: tagging from a
