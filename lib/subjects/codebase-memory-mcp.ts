@@ -112,7 +112,10 @@ const SKIP = new Set(['File', 'Folder', 'Project', 'Branch', 'Route']);
 type FileRow = { id: number; label: string; qname: string };
 
 /**
- * The qname prefix of each file's definitions. A Module node's own qname. A file with only a File node
+ * The qname prefix of each file's definitions. A Module node's own qname, when the file has no definitions or
+ * one sits under it. A Module none sits under (`graph-assay.models#py`: cbm renames the Module of `models.py`
+ * beside a `models/` directory but names its definitions `graph-assay.models.User`, #100) takes the candidates
+ * of a file with only a File node, read from the file's File node (`fileNodes`), if it is a code file. A file with only a File node
  * (`<project>.<path with / as .>.__file__`) has none, and cbm 0.12.1 names its definitions from the
  * directory (Java `src.A.Inner.run`, Go `Match`) or from the directory and the file's stem (Python
  * `pkg.aliases.Config.read_config` beside an `aliases.ini` that took the Module). The shorter candidate
@@ -121,16 +124,19 @@ type FileRow = { id: number; label: string; qname: string };
  * Otherwise the longer one; neither holds: no prefix (bare names). #47 tried the stem first and stripped
  * a class named like its file (`Svc.java`: `Svc.run` became `run`).
  */
-export function filePrefixes(moduleOf: Map<string, FileRow>, defs: { file: string; qname: string }[]): Map<string, string> {
+export function filePrefixes(moduleOf: Map<string, FileRow>, defs: { file: string; qname: string }[],
+  fileNodes: Map<string, FileRow> = new Map()): Map<string, string> {
   const byFile = new Map<string, string[]>();
   for (const d of defs) (byFile.get(d.file) ?? byFile.set(d.file, []).get(d.file)).push(d.qname);
   const out = new Map<string, string>();
-  for (const [file, m] of moduleOf) {
-    if (m.label === 'Module') { out.set(file, m.qname); continue; }
-    const base = path.posix.basename(file); const tail = `.${base}.__file__`;
-    if (!m.qname.endsWith(tail)) continue;
-    const dir = m.qname.slice(0, -tail.length);
+  for (const [file, mod] of moduleOf) {
     const qs = byFile.get(file) ?? [];
+    if (mod.label === 'Module' && (!qs.length || qs.some((q) => q.startsWith(`${mod.qname}.`)))) { out.set(file, mod.qname); continue; }
+    // Only a code file's Module: a doc's sections (`docs/index.md`) keep their names, as File-only files are only code files.
+    const m = mod.label !== 'Module' ? mod : lang(file) ? fileNodes.get(file) : undefined;
+    const base = path.posix.basename(file); const tail = `.${base}.__file__`;
+    if (!m?.qname.endsWith(tail)) continue;
+    const dir = m.qname.slice(0, -tail.length);
     const holds = (p: string) => {
       if (!qs.every((q) => q.startsWith(`${p}.`))) return false;
       const locals = new Set(qs.map((q) => q.slice(p.length + 1)));
@@ -156,15 +162,27 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
                              FROM nodes ORDER BY id`).all() as unknown as Row[];
     const er = db.prepare('SELECT source_id AS src, target_id AS dst, type, properties FROM edges ORDER BY id').all() as unknown as
       { src: number; dst: number; type: string; properties: string }[];
-    // A file is its Module node; File nodes (the same file) are folded into it. cbm 0.12.1 writes no
-    // Module for some files, only a File node: Go and Java files, and a file whose extensionless path
-    // another file's Module already took (`aliases.py` next to `aliases.ini`). There the File node of a
-    // code file (a known extension) is the file.
+    // A file is its Module node, the one named by its path; File nodes (the same file) are folded into it.
+    // Any other Module is a TypeScript namespace (`NS` in `src/solo.ts`), a definition in the file (#97).
+    // cbm 0.12.1 writes no Module for some files, only a File node: Go and Java files, and a file whose
+    // extensionless path another file's Module already took (`aliases.py` next to `aliases.ini`). There the
+    // File node of a code file (a known extension) is the file. One file node per path: a second Module named
+    // by the same path is folded into the first (#103 review, A3). A non-code file none of whose Modules is
+    // named by its path takes a Module, as before #103 (S1): no Module of the ~30 non-code formats probed was.
+    const fileModule = (n: Row) => n.label === 'Module' && n.name === n.file;
     const moduleOf = new Map<string, Row>();
-    for (const n of rows) if (n.label === 'Module' && n.file && !n.file.startsWith(`${OUT}/`)) moduleOf.set(n.file, n);
     const alias = new Map<number, number>();
     for (const n of rows) {
+      if (!fileModule(n) || !n.file || n.file.startsWith(`${OUT}/`)) continue;
+      if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id); else moduleOf.set(n.file, n);
+    }
+    for (const n of rows) {
+      if (n.label === 'Module' && n.file && !n.file.startsWith(`${OUT}/`) && !lang(n.file) && !moduleOf.has(n.file)) moduleOf.set(n.file, n);
+    }
+    const fileNodes = new Map<string, Row>();
+    for (const n of rows) {
       if (n.label !== 'File' || !n.file || n.file.startsWith(`${OUT}/`)) continue;
+      fileNodes.set(n.file, n);
       if (moduleOf.has(n.file)) alias.set(n.id, moduleOf.get(n.file).id);
       else if (lang(n.file)) moduleOf.set(n.file, n);
     }
@@ -181,9 +199,9 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
       return c.length === 1 ? c[0] : null;
     };
     const rowById = new Map(rows.map((n) => [n.id, n]));
-    const defs = rows.filter((n) => n.file && moduleOf.has(n.file) && n.label !== 'Module' && moduleOf.get(n.file).id !== n.id
+    const defs = rows.filter((n) => n.file && moduleOf.has(n.file) && !fileModule(n) && moduleOf.get(n.file).id !== n.id
       && !SKIP.has(n.label) && !n.file.startsWith(`${OUT}/`));
-    const prefixOf = filePrefixes(moduleOf, defs);
+    const prefixOf = filePrefixes(moduleOf, defs, fileNodes);
     const local = new Map<number, string>();
     // `<project>.<dir>.<module>.<Class>.<member>`: the local part is what follows the file's prefix
     // (filePrefixes). Without one, a definition keeps cbm's bare name.
@@ -212,14 +230,15 @@ export function snapshot(dir: string, { build = null as string | null } = {}): S
     for (const n of rows) {
       // no file: injected builtins (`builtins.len`), routes, the project and branch nodes
       const mod = n.file ? moduleOf.get(n.file) : null;
-      const isFile = n.label === 'Module' || mod?.id === n.id;
+      const isFile = mod?.id === n.id;
+      if (alias.has(n.id)) continue; // a File node, or a second Module of the file: folded into the file
       if (!n.file || (SKIP.has(n.label) && !isFile) || n.file.startsWith(`${OUT}/`)) continue;
       if (!mod) continue;
       if (isFile) {
         nodes.push({ id: String(n.id), kind: 'file', name: n.file, qname: n.file, file: n.file, language: lang(n.file), start: 1, end: Math.max(1, n.end) });
         continue;
       }
-      nodes.push({ id: String(n.id), kind: n.label.toLowerCase(), name: n.name, qname: local.get(n.id).split('.').join('::'), file: n.file,
+      nodes.push({ id: String(n.id), kind: n.label === 'Module' ? 'namespace' : n.label.toLowerCase(), name: n.name, qname: local.get(n.id).split('.').join('::'), file: n.file,
         language: lang(n.file), start: n.start, end: Math.max(n.start, n.end) });
     }
     const keep = new Set(nodes.map((n) => n.id));

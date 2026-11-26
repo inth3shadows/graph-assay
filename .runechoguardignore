@@ -6,3 +6,5 @@ HTMLCanvasElement
 Infinity
 # A function issue-3429's repro only declares (fixtures/oracle-candidates/issue-3429/src/index.ts).
 createInstance
+# A function declared inside a namespace in the #97 frozen store (lib/test/adapters/codebase-memory-mcp-file-only/ts-ns/src/onlyns.ts).
+zz

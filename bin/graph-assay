@@ -56,9 +56,9 @@ if (cmd === 'check') {
     'oracle/ts-cover-test.ts', 'lib/scores-test.ts', 'lib/spec-test.ts', 'lib/anti-gaming-test.ts', 'bench/robustness-test.ts',
     'bench/tables-test.ts', 'bench/triage-test.ts', 'tools/repro-test.ts'];
   // A new *-test.mjs, or *-test.ts among the TypeScript scripts, runs without anyone remembering to list
-  // it. Only these .ts are scripts (the same set as tsconfig.json's include): elsewhere (oracle/test/<case>/,
-  // conformance, fixtures) a .ts is an indexed test source.
-  const scriptTs = (f) => f.endsWith('.ts') && (f.startsWith('lib/') || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?)[^/]+\.ts$/.test(f));
+  // it. Only these .ts are scripts (the same set as tsconfig.json's include and exclude): elsewhere (oracle/test/<case>/,
+  // conformance, fixtures, the frozen adapter inputs in lib/test/adapters/) a .ts is an indexed test source.
+  const scriptTs = (f) => f.endsWith('.ts') && ((f.startsWith('lib/') && !f.startsWith('lib/test/adapters/')) || /^(oracle\/(test\/)?|bench\/|metamorphic\/|benchmarks\/|differential\/|labels\/|tools\/(triage\/)?)[^/]+\.ts$/.test(f));
   const discovered = files.filter((f) => (f.endsWith('-test.mjs') || (scriptTs(f) && f.endsWith('-test.ts'))) && !listed.includes(f));
   const steps = [
     // .mjs only: node --check parses a .ts file as plain JS. The .ts scripts get their syntax check from tsc,
