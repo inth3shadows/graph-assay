@@ -6,6 +6,7 @@ import { loadScip } from '../lib/scip.ts';
 import { loadSnapshot, joinedEdges } from '../lib/snapshot.ts';
 import * as codegraph from '../lib/subjects/codegraph.ts';
 import { braces } from './braces.ts';
+import { SOURCES } from './sources.ts';
 import { CTOR, defName, rangeOf, reLit, scipKind, segs } from './symbols.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -130,7 +131,7 @@ export function createContext(opts: Options) {
   // SPEC §7 file steps: files in corpus (minus exclusions) -> in a supported language -> indexed by the
   // subject -> indexed by the oracle. A Git checkout lists tracked files; any other directory is walked
   // (dot entries, node_modules and symlinks left out).
-  const SUPPORTED = { python: /\.pyi?$/, go: /\.go$/, jvm: /\.(java|kt)$/ }[lang] ?? /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+  const SUPPORTED = ({ python: SOURCES.python, go: SOURCES.go, jvm: SOURCES.jvm } as Record<string, RegExp>)[lang] ?? SOURCES.ts;
   const waterfall = () => {
     const all = repoFiles(repo); const kept = all.filter((f) => !excluded(f)); const supported = kept.filter((f) => SUPPORTED.test(f));
     const bySubject = new Set(snap.nodes.filter((n) => LANGS.has(n.language)).map((n) => n.file));
