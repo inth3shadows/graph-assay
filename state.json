@@ -1,7 +1,7 @@
 {
- "codegraph": "73c6cff66e525a92bff65675b6b0c46687e91ef1",
- "recordedAt": "2026-11-24",
- "graphAssay": "acad04eac1ba4222f62f633a84e0f8d33e7e3d07",
+ "codegraph": "3c230869878559f3f96bf5580b2d2c66dcf138e7",
+ "recordedAt": "2026-11-27",
+ "graphAssay": "064e4ec885450083944eab283c414810c10c0359",
  "erroring": [],
  "results": [
   {
@@ -155,6 +155,24 @@
    "detail": ""
   },
   {
+   "name": "issue-3422",
+   "issue": 3422,
+   "verdict": "BROKEN",
+   "detail": "missing viaClass -calls-> src/shapes.ts:Shape::area; viaInterface -calls-> src/shapes.ts:Shape::area; viaProperty -calls-> src/shapes.ts:Shape::area"
+  },
+  {
+   "name": "issue-3429",
+   "issue": 3429,
+   "verdict": "BROKEN",
+   "detail": "selfImport -calls-> src/core.ts:Ky::create; dynamicImport -calls-> src/core.ts:Ky::create"
+  },
+  {
+   "name": "issue-3430",
+   "issue": 3430,
+   "verdict": "BROKEN",
+   "detail": "Option::__init__ -references-> pkg/termui.py:prompt"
+  },
+  {
    "name": "issue-3443",
    "issue": 3443,
    "verdict": "BROKEN",
@@ -189,6 +207,18 @@
    "issue": 3448,
    "verdict": "BROKEN",
    "detail": "closureSameName -calls-> route.go:Route::Path"
+  },
+  {
+   "name": "issue-3470",
+   "issue": 3470,
+   "verdict": "BROKEN",
+   "detail": "missing test_attr -calls-> server/helpers.py:check; test_name -calls-> server/helpers.py:check"
+  },
+  {
+   "name": "issue-3473",
+   "issue": 3473,
+   "verdict": "BROKEN",
+   "detail": "missing app.ts::GET:/health -references-> app.ts:health; orders.ts::GET:/ -references-> orders.ts:listOrders"
   },
   {
    "name": "j1-java-overload",
@@ -297,6 +327,36 @@
    "issue": 3239,
    "verdict": "FIXED",
    "detail": ""
+  },
+  {
+   "name": "pr-2754",
+   "issue": 2754,
+   "verdict": "BROKEN",
+   "detail": "show -calls-> forwarded-import/a-decoy/lib.ts:presentUser; start -calls-> forwarded-default/a-decoy/lib.ts:makeAvatar; work -calls-> new-instance/app/logger.ts:Logger::info; work -calls-> new-instance/app/logger.ts:Logger::warn; start -calls-> wrapper/provisioner.ts:helperFirst; start -calls-> wrapper/job.ts:helperFirst; start -calls-> wrapper/svc.ts:first"
+  },
+  {
+   "name": "pr-2800",
+   "issue": 2800,
+   "verdict": "BROKEN",
+   "detail": "make -instantiates-> lib/utils.ts:resolveTestEnvironment; keep -references-> lib/utils.ts:resolveTestEnvironment"
+  },
+  {
+   "name": "pr-3132",
+   "issue": 3132,
+   "verdict": "BROKEN",
+   "detail": "app::KLoader::run -calls-> src/main/kotlin/app/KUtil.kt:app::KUtil::load@4"
+  },
+  {
+   "name": "pr-3206",
+   "issue": 3206,
+   "verdict": "BROKEN",
+   "detail": "useMain -calls-> Sources/App/Use.swift:Other::main"
+  },
+  {
+   "name": "pr-3262",
+   "issue": 3262,
+   "verdict": "BROKEN",
+   "detail": "missing Demo::Consumer::Split -calls-> Values.cs:Demo::Extensions::InstallEntries; Demo::Wrapped::ReadWrapped -calls-> Reader.cs:Tools::Reader::Parse"
   },
   {
    "name": "t1-ts-global-builtin",
