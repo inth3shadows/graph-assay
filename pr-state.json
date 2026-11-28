@@ -28,6 +28,10 @@
    "head": "bc8310eac83b0007856b62a4e0cfe3ef7df4304e",
    "sig": "m1-py-super:fixed:FIXED"
   },
+  "3225": {
+   "head": "e9c83650847afa9fb58de039cde1ee6b5846f63b",
+   "sig": ""
+  },
   "3262": {
    "head": "8e64853a715a25002c28178e8bce6335a83233c5",
    "sig": "pr-3262:fixed:FIXED"
@@ -60,6 +64,14 @@
    "head": "bdb46fdaf776a299a3bd4ff80cc3d8f0a5070897",
    "sig": "issue-3448:fixed:FIXED"
   },
+  "3487": {
+   "head": "b15826456acedb3c85a94b62daa15b22339c8e39",
+   "sig": ""
+  },
+  "3488": {
+   "head": "02d2d4e689364728e613ec3cbcd505b26bb7bd11",
+   "sig": ""
+  },
   "3496": {
    "head": "9e729910de6295f4fae5d8153b07b28c0531bdad",
    "sig": ""
@@ -67,6 +79,18 @@
   "3499": {
    "head": "c9761d901aecfeddd71271b18b10766ec7aabca7",
    "sig": "issue-3444:fixed:FIXED"
+  },
+  "3500": {
+   "head": "46c328b2bd2199b308603cc65269d27e1478dd79",
+   "sig": "issue-3443:changed:CHANGED:missing destructured -calls-> scene.ts:Scene::mutateElement; plain -calls-> scene.ts:Scene::mutateElement"
+  },
+  "3509": {
+   "head": "99260c9b405624e2c443e45809a1e31d123eeaa2",
+   "sig": ""
+  },
+  "3510": {
+   "head": "f9ad02feb0890318953a4729adeb89085bdec1c7",
+   "sig": ""
   }
  }
 }
